@@ -57,6 +57,7 @@ export class ChiefStrategyAgent {
 
         for await (const event of eventStream) {
             console.log(`[Event Received] Session: ${sessionId}, Author: ${event.author}`);
+            console.log(`[Event Payload] ${JSON.stringify(event, null, 2)}`);
 
             // We capture content from the agent directly instead of relying solely on isFinalResponse
             if (event.author === this.agent.name || isFinalResponse(event)) {
