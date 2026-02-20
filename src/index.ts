@@ -11,6 +11,8 @@ const port = Number(process.env.PORT) || 8080;
 
 app.use(express.json());
 
+const chief = new ChiefStrategyAgent();
+
 app.post('/analyze', async (req, res) => {
     const { business_context } = req.body;
 
@@ -19,7 +21,6 @@ app.post('/analyze', async (req, res) => {
     }
 
     try {
-        const chief = new ChiefStrategyAgent();
         const report = await chief.analyze(business_context);
 
         // Save to Firestore
