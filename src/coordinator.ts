@@ -1,4 +1,5 @@
-import { LlmAgent } from '@google/adk';
+import { LlmAgent, InMemoryRunner, isFinalResponse, stringifyContent } from '@google/adk';
+import { randomUUID } from 'crypto';
 import { specialists } from './specialists.js';
 
 export class ChiefStrategyAgent {
@@ -27,17 +28,42 @@ export class ChiefStrategyAgent {
         });
     }
 
-    async analyze(businessContext: string): Promise<any> {
-        // LlmAgent requires an InvocationContext or is run through a root context.
-        // For a standalone execution, we likely need to use a helper or the correct run method.
-        // Given the ADK structure, agents usually run within a Session.
+    async analyze(businessContext: string): Promise<string> {
+        console.log("Starting analysis for:", businessContext);
 
-        // However, looking at the error "Property 'run' does not exist on type 'LlmAgent'",
-        // and standard ADK usage, we might need a different approach.
-        // I will assume for now a simplified 'run' if it was intended, but 'runAsync' is the actual method.
+        const runner = new InMemoryRunner({
+            agent: this.agent,
+            appName: 'velocity_cso',
+        });
 
-        console.log("Analyzing business context:", businessContext);
-        // This is a placeholder for the actual ADK execution logic which typically involves Events.
-        return "Strategic analysis for: " + businessContext;
+        const sessionId = randomUUID();
+        const userId = 'api_user';
+
+        // The InMemoryRunner expects the session to exist in its session service
+        // before runAsync is called in some configurations, or we must pass it explicitly.
+        await runner.sessionService.createSession({
+            appName: 'velocity_cso',
+            userId: userId,
+            sessionId: sessionId
+        });
+
+        const eventStream = runner.runAsync({
+            userId: userId,
+            sessionId: sessionId,
+            newMessage: { role: 'user', parts: [{ text: businessContext }] }
+        });
+
+        let finalReport = "";
+
+        for await (const event of eventStream) {
+            console.log(`[Event Received] Session: ${sessionId}, Author: ${event.author}`);
+
+            if (isFinalResponse(event)) {
+                finalReport += stringifyContent(event);
+            }
+        }
+
+        console.log("Analysis complete.");
+        return finalReport || "Strategic analysis failed. No final response generated.";
     }
 }

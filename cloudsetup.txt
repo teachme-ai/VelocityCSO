@@ -90,3 +90,9 @@ SA_EMAIL: velocity-cso-sa@velocitycso.iam.gserviceaccount.com
 reachirfan@cloudshell:~ (velocitycso)$ gcloud iam workload-identity-pools providers describe "github-provider" --project="${PROJECT_ID}" --location="global" --workload-identity-pool="velocity-cso-pool" --format="value(name)"
 projects/845313668818/locations/global/workloadIdentityPools/velocity-cso-pool/providers/github-provider
 reachirfan@cloudshell:~ (velocitycso)$ 
+
+
+gcloud firestore databases create --location=us-central1 --project=velocitycso --type=firestore-native
+
+
+
