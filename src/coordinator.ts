@@ -8,7 +8,7 @@ export class ChiefStrategyAgent {
     constructor() {
         this.agent = new LlmAgent({
             name: 'chief_strategy_agent',
-            model: 'gemini-1.5-pro',
+            model: 'gemini-2.5-pro',
             description: 'Enterprise-grade Chief Strategy Officer (CSO) responsible for synthesizing business analysis.',
             instruction: `
         You are a McKinsey-level Chief Strategy Officer. 
