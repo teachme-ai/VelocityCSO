@@ -1,10 +1,10 @@
 import { LlmAgent } from '@google/adk';
 
 export const marketAnalyst = new LlmAgent({
-    name: 'Market & Trends Analyst',
-    model: 'gemini-1.5-flash',
-    description: 'Expert in Market Analysis, TAM/SAM/SOM, and Industry Trends.',
-    instructions: `
+  name: 'Market & Trends Analyst',
+  model: 'gemini-1.5-flash',
+  description: 'Expert in Market Analysis, TAM/SAM/SOM, and Industry Trends.',
+  instruction: `
     Analyze the provided business context focusing on:
     - Total Addressable Market (TAM), SAM, and SOM.
     - Detailed Customer Personas.
@@ -14,10 +14,10 @@ export const marketAnalyst = new LlmAgent({
 });
 
 export const innovationAnalyst = new LlmAgent({
-    name: 'Strategy & Innovation Analyst',
-    model: 'gemini-1.5-flash',
-    description: "Expert in Competitive Landscape, SWOT, Porter's Five Forces, and Three Horizons of Growth.",
-    instructions: `
+  name: 'Strategy & Innovation Analyst',
+  model: 'gemini-1.5-flash',
+  description: "Expert in Competitive Landscape, SWOT, Porter's Five Forces, and Three Horizons of Growth.",
+  instruction: `
     Analyze the provided business context focusing on:
     - Competitive Landscape and Benchmarking.
     - SWOT Analysis and Porter's Five Forces.
@@ -27,10 +27,10 @@ export const innovationAnalyst = new LlmAgent({
 });
 
 export const commercialAnalyst = new LlmAgent({
-    name: 'Commercial Strategy Analyst',
-    model: 'gemini-1.5-flash',
-    description: 'Expert in Pricing Strategy, Go-To-Market (GTM), and Market Entry.',
-    instructions: `
+  name: 'Commercial Strategy Analyst',
+  model: 'gemini-1.5-flash',
+  description: 'Expert in Pricing Strategy, Go-To-Market (GTM), and Market Entry.',
+  instruction: `
     Analyze the provided business context focusing on:
     - Pricing Strategy and Revenue Models.
     - Go-To-Market (GTM) Strategy.
@@ -40,10 +40,10 @@ export const commercialAnalyst = new LlmAgent({
 });
 
 export const operationsAnalyst = new LlmAgent({
-    name: 'Operations & Execution Analyst',
-    model: 'gemini-1.5-flash',
-    description: 'Expert in McKinsey 7S, Value Chain, AI Operating Model, and ESG.',
-    instructions: `
+  name: 'Operations & Execution Analyst',
+  model: 'gemini-1.5-flash',
+  description: 'Expert in McKinsey 7S, Value Chain, AI Operating Model, and ESG.',
+  instruction: `
     Analyze the provided business context focusing on:
     - McKinsey 7S Framework.
     - Value Chain Analysis and AI Operating Model Triangle readiness.
@@ -53,10 +53,10 @@ export const operationsAnalyst = new LlmAgent({
 });
 
 export const financeAnalyst = new LlmAgent({
-    name: 'Finance & Risk Analyst',
-    model: 'gemini-1.5-flash',
-    description: 'Expert in Financial Modeling, Risk Assessment, and M&A.',
-    instructions: `
+  name: 'Finance & Risk Analyst',
+  model: 'gemini-1.5-flash',
+  description: 'Expert in Financial Modeling, Risk Assessment, and M&A.',
+  instruction: `
     Analyze the provided business context focusing on:
     - High-level Financial Modeling and Unit Economics.
     - Comprehensive Risk Assessment and Mitigation.
@@ -66,9 +66,9 @@ export const financeAnalyst = new LlmAgent({
 });
 
 export const specialists = [
-    marketAnalyst,
-    innovationAnalyst,
-    commercialAnalyst,
-    operationsAnalyst,
-    financeAnalyst,
+  marketAnalyst,
+  innovationAnalyst,
+  commercialAnalyst,
+  operationsAnalyst,
+  financeAnalyst,
 ];
