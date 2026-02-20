@@ -60,7 +60,8 @@ export class ChiefStrategyAgent {
 
             // We capture content from the agent directly instead of relying solely on isFinalResponse
             if (event.author === this.agent.name || isFinalResponse(event)) {
-                const text = stringifyContent(event);
+                const parts = event.content?.parts || [];
+                const text = parts.map(p => p.text).filter(Boolean).join('\n');
                 if (text) {
                     finalReport += text;
                 }
