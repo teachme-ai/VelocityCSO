@@ -12,7 +12,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@genkit-ai/googleai": "^1.28.0",
     "@google/adk": "^0.3.0",

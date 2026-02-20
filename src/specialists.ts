@@ -1,7 +1,7 @@
 import { LlmAgent } from '@google/adk';
 
 export const marketAnalyst = new LlmAgent({
-  name: 'Market & Trends Analyst',
+  name: 'market_analyst',
   model: 'gemini-1.5-flash',
   description: 'Expert in Market Analysis, TAM/SAM/SOM, and Industry Trends.',
   instruction: `
@@ -14,7 +14,7 @@ export const marketAnalyst = new LlmAgent({
 });
 
 export const innovationAnalyst = new LlmAgent({
-  name: 'Strategy & Innovation Analyst',
+  name: 'innovation_analyst',
   model: 'gemini-1.5-flash',
   description: "Expert in Competitive Landscape, SWOT, Porter's Five Forces, and Three Horizons of Growth.",
   instruction: `
@@ -27,7 +27,7 @@ export const innovationAnalyst = new LlmAgent({
 });
 
 export const commercialAnalyst = new LlmAgent({
-  name: 'Commercial Strategy Analyst',
+  name: 'commercial_analyst',
   model: 'gemini-1.5-flash',
   description: 'Expert in Pricing Strategy, Go-To-Market (GTM), and Market Entry.',
   instruction: `
@@ -40,7 +40,7 @@ export const commercialAnalyst = new LlmAgent({
 });
 
 export const operationsAnalyst = new LlmAgent({
-  name: 'Operations & Execution Analyst',
+  name: 'operations_analyst',
   model: 'gemini-1.5-flash',
   description: 'Expert in McKinsey 7S, Value Chain, AI Operating Model, and ESG.',
   instruction: `
@@ -53,7 +53,7 @@ export const operationsAnalyst = new LlmAgent({
 });
 
 export const financeAnalyst = new LlmAgent({
-  name: 'Finance & Risk Analyst',
+  name: 'finance_analyst',
   model: 'gemini-1.5-flash',
   description: 'Expert in Financial Modeling, Risk Assessment, and M&A.',
   instruction: `

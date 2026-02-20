@@ -1,5 +1,5 @@
 import express from 'express';
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin';
 import { ChiefStrategyAgent } from './coordinator.js';
 
 // Initialize Firebase Admin
@@ -7,7 +7,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const app = express();
-const port = process.env.PORT || 8080;
+const port = Number(process.env.PORT) || 8080;
 
 app.use(express.json());
 
@@ -39,6 +39,6 @@ app.post('/analyze', async (req, res) => {
     }
 });
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
     console.log(`Server listening on port ${port}`);
 });

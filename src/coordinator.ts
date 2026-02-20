@@ -6,7 +6,7 @@ export class ChiefStrategyAgent {
 
     constructor() {
         this.agent = new LlmAgent({
-            name: 'Chief Strategy Agent',
+            name: 'chief_strategy_agent',
             model: 'gemini-1.5-pro',
             description: 'Enterprise-grade Chief Strategy Officer (CSO) responsible for synthesizing business analysis.',
             instruction: `
