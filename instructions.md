@@ -1,13 +1,13 @@
 # Setup Instructions: Google Cloud & GitHub Actions
 
-Follow these steps to configure your Google Cloud project `VelocityCSO` and connect it to GitHub.
+Follow these steps to configure your Google Cloud project `velocitycso` and connect it to GitHub.
 
 ## 1. Google Cloud Configuration
 
 ### Set Project Context
 First, ensure your local gcloud is using the correct project:
 ```bash
-gcloud config set project VelocityCSO
+gcloud config set project velocitycso
 ```
 
 ### Enable Necessary APIs
@@ -52,16 +52,16 @@ gcloud artifacts repositories create business-agent-repo \
    ```
 2. Bind the WIF provider to the service account:
    ```bash
-   gcloud iam service-accounts add-iam-policy-binding github-actions-sa@VelocityCSO.iam.gserviceaccount.com \
+   gcloud iam service-accounts add-iam-policy-binding github-actions-sa@velocitycso.iam.gserviceaccount.com \
      --role="roles/iam.workloadIdentityUser" \
-     --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe VelocityCSO --format='get(projectNumber)')/locations/global/workloadIdentityPools/github-pool/attribute.repository/teachme-ai/VelocityCSO"
+     --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe velocitycso --format='get(projectNumber)')/locations/global/workloadIdentityPools/github-pool/attribute.repository/teachme-ai/VelocityCSO"
    ```
 3. Grant necessary roles:
    ```bash
-   gcloud projects add-iam-policy-binding VelocityCSO --role="roles/artifactregistry.writer" --member="serviceAccount:github-actions-sa@VelocityCSO.iam.gserviceaccount.com"
-   gcloud projects add-iam-policy-binding VelocityCSO --role="roles/run.admin" --member="serviceAccount:github-actions-sa@VelocityCSO.iam.gserviceaccount.com"
-   gcloud projects add-iam-policy-binding VelocityCSO --role="roles/iam.serviceAccountUser" --member="serviceAccount:github-actions-sa@VelocityCSO.iam.gserviceaccount.com"
-   gcloud projects add-iam-policy-binding VelocityCSO --role="roles/datastore.user" --member="serviceAccount:github-actions-sa@VelocityCSO.iam.gserviceaccount.com"
+   gcloud projects add-iam-policy-binding velocitycso --role="roles/artifactregistry.writer" --member="serviceAccount:github-actions-sa@velocitycso.iam.gserviceaccount.com"
+   gcloud projects add-iam-policy-binding velocitycso --role="roles/run.admin" --member="serviceAccount:github-actions-sa@velocitycso.iam.gserviceaccount.com"
+   gcloud projects add-iam-policy-binding velocitycso --role="roles/iam.serviceAccountUser" --member="serviceAccount:github-actions-sa@velocitycso.iam.gserviceaccount.com"
+   gcloud projects add-iam-policy-binding velocitycso --role="roles/datastore.user" --member="serviceAccount:github-actions-sa@velocitycso.iam.gserviceaccount.com"
    ```
 
 ## 2. GitHub Secrets
@@ -69,9 +69,9 @@ Add these secrets to your GitHub repo (`teachme-ai/VelocityCSO`):
 
 | Secret Name | Value |
 | ----------- | ----- |
-| `GCP_PROJECT_ID` | `VelocityCSO` |
-| `GCP_WIF_PROVIDER` | `projects/$(gcloud projects describe VelocityCSO --format='get(projectNumber)')/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
-| `GCP_WIF_SERVICE_ACCOUNT` | `github-actions-sa@VelocityCSO.iam.gserviceaccount.com` |
+| `GCP_PROJECT_ID` | `velocitycso` |
+| `GCP_WIF_PROVIDER` | `projects/$(gcloud projects describe velocitycso --format='get(projectNumber)')/locations/global/workloadIdentityPools/github-pool/providers/github-provider` |
+| `GCP_WIF_SERVICE_ACCOUNT` | `github-actions-sa@velocitycso.iam.gserviceaccount.com` |
 
 ## 3. Firestore
 Initialize Firestore in **Native mode** if not already done. The app will use the `enterprise_strategy_reports` collection.
