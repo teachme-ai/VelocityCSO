@@ -31,7 +31,6 @@
   },
   "overrides": {
     "glob": "^11.0.0",
-    "node-domexception": "^1.0.0",
-    "@opentelemetry/exporter-jaeger": "npm:@opentelemetry/exporter-otlp-grpc@^0.57.0"
+    "node-domexception": "^1.0.0"
   }
 }
