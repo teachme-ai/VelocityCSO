@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-savvy-bg text-white antialiased min-h-screen;
+    background-image:
+      radial-gradient(circle at top right, rgba(168, 85, 247, 0.15), transparent 40%),
+      radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.15), transparent 40%);
+  }
+}
+
+.glass-panel {
+  @apply bg-savvy-glass backdrop-blur-md border border-savvy-border rounded-2xl shadow-xl;
+}
