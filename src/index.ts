@@ -63,7 +63,8 @@ app.post('/analyze', async (req, res) => {
 });
 
 // Catch-all route to serve the React SPA for any unhandled GET requests
-app.get('*', (req, res) => {
+// Note: Express v5 requires '/{*path}' syntax (bare '*' is no longer valid)
+app.get('/{*path}', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
