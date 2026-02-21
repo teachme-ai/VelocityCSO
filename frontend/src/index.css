@@ -1,16 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-savvy-bg text-white antialiased min-h-screen;
-    background-image:
-      radial-gradient(circle at top right, rgba(168, 85, 247, 0.15), transparent 40%),
-      radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.15), transparent 40%);
+    @apply antialiased;
+    font-family: 'Inter', sans-serif;
+    background: #050814;
+    color: #e8eaf0;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: 'Space Grotesk', sans-serif;
   }
 }
 
-.glass-panel {
-  @apply bg-savvy-glass backdrop-blur-md border border-savvy-border rounded-2xl shadow-xl;
+@layer components {
+  .glass-card {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.25), inset 0 0 40px rgba(139, 92, 246, 0.05);
+  }
+
+  .glow-gold {
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.25), inset 0 0 40px rgba(245, 158, 11, 0.05);
+  }
+
+  .text-gradient-main {
+    background: linear-gradient(135deg, #e8eaf0 0%, #a78bfa 50%, #34d399 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .btn-primary {
+    @apply px-8 py-4 font-semibold rounded-xl transition-all duration-300;
+    background: linear-gradient(135deg, #7c3aed, #059669);
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: 0.02em;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(124, 58, 237, 0.4);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
 }
