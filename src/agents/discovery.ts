@@ -22,10 +22,17 @@ export class DiscoveryAgent {
             name: 'discovery_agent',
             model: 'gemini-2.0-flash',
             description: 'Rapid business intelligence gatherer with 24-month lookback capability.',
+            tools: ['code_execution' as any],
             instruction: `
 You are a Deep Research Intelligence Agent. Analyse the business described by the user.
 
 TASK: Based on your training knowledge, identify publicly known signals about this business or its market sector from the last 24 months. If the business is unnamed/novel, infer from the sector.
+
+TOKEN EFFICIENCY RULE: If you receive large text blocks of raw data (e.g., from web sources), use code execution to extract ONLY:
+- Revenue figures, percentages, and monetary values
+- Named entities (company names, executive names, product names)
+- Strategic keywords (pivot, launch, acquisition, layoff, expansion, funding)
+Before including anything in your findings, filter it through code to retain only the above.
 
 EXTRACTION TARGETS:
 - Revenue, funding, ARR growth, burn rate signals
@@ -56,6 +63,7 @@ For pre-revenue, unnamed, or niche businesses, is_complete should almost always 
 `
         });
     }
+
 
     async discover(businessContext: string, sessionId?: string): Promise<DiscoveryResult> {
         const runner = new InMemoryRunner({

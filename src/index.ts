@@ -7,13 +7,13 @@ import admin from 'firebase-admin';
 import { ChiefStrategyAgent } from './coordinator.js';
 import { DiscoveryAgent } from './agents/discovery.js';
 import { saveSession, getSession, deleteSession } from './services/sessionService.js';
-import { log, logAuditCost, estimateCost } from './services/logger.js';
+import { log, createTraceLogger, logAuditCost, estimateCost } from './services/logger.js';
+import { saveAuditMemory, loadAuditMemory } from './services/memory.js';
 import type { StrategySession } from './services/sessionService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize Firebase Admin
 admin.initializeApp();
 
 const app = express();
@@ -31,6 +31,41 @@ function sseWrite(res: express.Response, data: object) {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+// ─── Helper: Parse dimension scores from the final report ───────────────────
+function extractDimensions(report: string): Record<string, number> {
+    const dimensions: Record<string, number> = {};
+    const dimNames = [
+        'TAM Viability', 'Target Precision', 'Trend Adoption',
+        'Competitive Defensibility', 'Model Innovation', 'Flywheel Potential',
+        'Pricing Power', 'CAC/LTV Ratio', 'Market Entry Speed',
+        'Execution Speed', 'Scalability', 'ESG Posture',
+        'ROI Projection', 'Risk Tolerance', 'Capital Efficiency'
+    ];
+    for (const dim of dimNames) {
+        const match = report.match(new RegExp(`${dim}[^0-9]*([0-9]{1,3})`, 'i'));
+        if (match) dimensions[dim] = Math.min(100, parseInt(match[1]));
+    }
+    return dimensions;
+}
+
+// ─── GET /report/:id ─────────────────────────────────────────────────────────
+// Restores the Radar Chart and report from Firestore without re-running.
+app.get('/report/:id', async (req, res) => {
+    const { id } = req.params;
+    const memory = await loadAuditMemory(id);
+    if (!memory) {
+        return res.status(404).json({ error: 'Report not found or expired.' });
+    }
+    res.json({
+        id,
+        report: memory.report,
+        dimensions: memory.dimensionScores,
+        grounded_context: memory.groundedContext,
+        business_context: memory.businessContext,
+        created_at: memory.createdAt,
+    });
+});
+
 // ─── POST /analyze ───────────────────────────────────────────────────────────
 app.post('/analyze', async (req, res) => {
     const { business_context, stress_test } = req.body;
@@ -46,16 +81,20 @@ app.post('/analyze', async (req, res) => {
     res.flushHeaders();
 
     const sessionId = randomUUID();
-    sseWrite(res, { type: 'SESSION_INIT', sessionId });
+    // Bind a trace-correlated logger to this request
+    const tlog = createTraceLogger(
+        req.headers['x-cloud-trace-context'] as string,
+    );
 
-    log({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, phase: 'discovery' });
+    sseWrite(res, { type: 'SESSION_INIT', sessionId });
+    tlog({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, phase: 'discovery' });
 
     try {
         // ── Phase 0: Discovery ────────────────────────────────────────────
         sseWrite(res, { type: 'DISCOVERY_START' });
         const discoveryResult = await discovery.discover(business_context, sessionId);
-
         const discoveryCost = estimateCost('gemini-2.0-flash', business_context.length, discoveryResult.findings.length);
+
         sseWrite(res, {
             type: 'DISCOVERY_COMPLETE',
             summary: discoveryResult.summary,
@@ -66,15 +105,12 @@ app.post('/analyze', async (req, res) => {
         const { proceed, gap } = await cso.evaluateCompleteness(discoveryResult, sessionId);
 
         if (!proceed && gap) {
-            // Persist to Firestore for cross-instance retrieval
             await saveSession(sessionId, {
                 enrichedContext: business_context,
                 discoveryFindings: discoveryResult.findings,
                 gaps: discoveryResult.gaps,
             });
-
-            log({ severity: 'WARNING', message: 'Clarification required — session saved to Firestore', session_id: sessionId });
-
+            tlog({ severity: 'WARNING', message: 'Clarification required — session saved', session_id: sessionId });
             sseWrite(res, {
                 type: 'NEED_CLARIFICATION',
                 sessionId,
@@ -90,7 +126,7 @@ app.post('/analyze', async (req, res) => {
         sseWrite(res, { type: 'ANALYSIS_START', phase: 'synthesizing' });
 
         const enrichedContext = discoveryResult.findings
-            ? `${business_context}\n\n--- DISCOVERY INTELLIGENCE (24-Month Lookback) ---\n${discoveryResult.findings}`
+            ? `${business_context}\n\n--- DISCOVERY INTELLIGENCE ---\n${discoveryResult.findings}`
             : business_context;
 
         const finalContext = stress_test
@@ -99,33 +135,43 @@ app.post('/analyze', async (req, res) => {
 
         const report = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
+        const dimensionScores = extractDimensions(report);
 
-        // Save report to Firestore
-        let docId = 'local-dev-id';
+        // Save to Firestore with structured memory
+        let docId = `local-${randomUUID()}`;
         try {
             const fingerprint = business_context.trim().slice(0, 80).toLowerCase();
             const docRef = await admin.firestore().collection('enterprise_strategy_reports').add({
                 business_context,
                 fingerprint,
                 report,
+                dimension_scores: dimensionScores,
                 discovery_findings: discoveryResult.findings,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
             });
             docId = docRef.id;
+
+            // Persist full memory for Radar reload
+            await saveAuditMemory(docId, {
+                reportId: docId,
+                businessContext: business_context,
+                groundedContext: discoveryResult.findings,
+                specialistOutputs: {},
+                dimensionScores,
+                report,
+                stressTest: !!stress_test,
+            });
         } catch (dbErr: any) {
-            log({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });
+            tlog({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });
         }
 
-        logAuditCost(sessionId, {
-            discovery: discoveryCost.usd,
-            synthesis: csoCost.usd,
-        });
+        logAuditCost(sessionId, { discovery: discoveryCost.usd, synthesis: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, report });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, report, dimensions: dimensionScores });
         res.end();
 
     } catch (error: any) {
-        log({ severity: 'ERROR', message: 'Analyze endpoint failed', error: error.message, session_id: sessionId });
+        tlog({ severity: 'ERROR', message: 'Analyze endpoint failed', error: error.message, session_id: sessionId });
         sseWrite(res, { type: 'ERROR', message: error.message });
         res.end();
     }
@@ -139,7 +185,6 @@ app.post('/analyze/clarify', async (req, res) => {
         return res.status(400).json({ error: 'sessionId and clarification are required' });
     }
 
-    // Load from Firestore (works across Cloud Run instances/restarts)
     const session: StrategySession | null = await getSession(sessionId);
     if (!session) {
         return res.status(404).json({ error: 'Session expired or not found. Please start a new audit.' });
@@ -151,28 +196,30 @@ app.post('/analyze/clarify', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
-    log({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId });
+    const tlog = createTraceLogger(req.headers['x-cloud-trace-context'] as string);
+    tlog({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId });
 
     try {
         const regroundedContext = `
 ${session.enrichedContext}
 
---- DISCOVERY INTELLIGENCE (24-Month Lookback) ---
+--- DISCOVERY INTELLIGENCE ---
 ${session.discoveryFindings}
 
---- USER CLARIFICATION (Gap Resolved) ---
+--- USER CLARIFICATION ---
 ${clarification}
         `.trim();
 
         const finalContext = stress_test
-            ? regroundedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
+            ? regroundedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST enabled. Score conservatively.'
             : regroundedContext;
 
         sseWrite(res, { type: 'ANALYSIS_START', phase: 'synthesizing' });
         const report = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
+        const dimensionScores = extractDimensions(report);
 
-        let docId = 'local-dev-id';
+        let docId = `local-${randomUUID()}`;
         try {
             const fingerprint = session.enrichedContext.trim().slice(0, 80).toLowerCase();
             const docRef = await admin.firestore().collection('enterprise_strategy_reports').add({
@@ -180,22 +227,32 @@ ${clarification}
                 fingerprint,
                 user_clarification: clarification,
                 report,
+                dimension_scores: dimensionScores,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
             });
             docId = docRef.id;
+
+            await saveAuditMemory(docId, {
+                reportId: docId,
+                businessContext: session.enrichedContext,
+                groundedContext: session.discoveryFindings,
+                specialistOutputs: {},
+                dimensionScores,
+                report,
+                stressTest: !!stress_test,
+            });
         } catch (dbErr: any) {
-            log({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });
+            tlog({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });
         }
 
         await deleteSession(sessionId);
-
         logAuditCost(sessionId, { synthesis_with_clarification: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, report });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, report, dimensions: dimensionScores });
         res.end();
 
     } catch (error: any) {
-        log({ severity: 'ERROR', message: 'Clarify endpoint failed', error: error.message, session_id: sessionId });
+        tlog({ severity: 'ERROR', message: 'Clarify endpoint failed', error: error.message, session_id: sessionId });
         sseWrite(res, { type: 'ERROR', message: error.message });
         res.end();
     }

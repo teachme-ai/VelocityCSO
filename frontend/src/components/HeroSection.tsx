@@ -1,8 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { AgentOrbs } from './AgentOrbs';
+import { AgentStatus } from './AgentStatus';
+import type { StatusEvent } from './AgentStatus';
 import { DiagnosticScorecard } from './DiagnosticScorecard';
 import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 
@@ -30,6 +32,8 @@ type ClarificationState = {
     gap: string;
     findings: string;
 };
+
+const LAST_REPORT_KEY = 'vcso_last_report_id';
 
 function StarField() {
     return (
@@ -73,7 +77,18 @@ export function HeroSection() {
     const [clarification, setClarification] = useState<ClarificationState | null>(null);
     const [clarificationInput, setClarificationInput] = useState('');
     const [error, setError] = useState('');
+    const [sseEvents, setSseEvents] = useState<StatusEvent[]>([]);
+    const [_lastReportId, setLastReportId] = useState<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+
+    // Restore last report ID from localStorage on mount
+    useEffect(() => {
+        const saved = localStorage.getItem(LAST_REPORT_KEY);
+        if (saved) setLastReportId(saved);
+    }, []);
+
+    const addEvent = (event: StatusEvent) =>
+        setSseEvents(prev => [...prev, event]);
 
     // Maps ADK status to AgentOrbs status prop
     const agentStatus = phase === 'analyzing' ? 'cso'
@@ -86,6 +101,7 @@ export function HeroSection() {
         if (!context.trim()) return;
 
         setResult(null); setError(''); setClarification(null);
+        setSseEvents([]);
         setPhase('discovery');
         setPhaseLabel('Scanning 24 months of public signals...');
 
@@ -97,6 +113,7 @@ export function HeroSection() {
             });
 
             for await (const event of readSSE(response)) {
+                addEvent(event as StatusEvent);
                 switch (event.type) {
                     case 'DISCOVERY_START':
                         setPhase('discovery');
@@ -124,6 +141,8 @@ export function HeroSection() {
                         break;
 
                     case 'REPORT_COMPLETE': {
+                        const reportId = event.id as string;
+                        const dims = event.dimensions as Record<string, number> | undefined;
                         let parsed: ReportData;
                         const raw = event.report as string;
                         try {
@@ -132,6 +151,11 @@ export function HeroSection() {
                                 : raw as ReportData;
                         } catch {
                             parsed = { analysis_markdown: raw };
+                        }
+                        if (dims) parsed.dimensions = dims;
+                        if (reportId) {
+                            setLastReportId(reportId);
+                            localStorage.setItem(LAST_REPORT_KEY, reportId);
                         }
                         setResult(parsed);
                         setPhase('done');
@@ -316,10 +340,11 @@ export function HeroSection() {
                         /* ── Processing State ── */
                         <motion.div key="processing"
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }} className="flex flex-col items-center gap-4"
+                            exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full max-w-2xl"
                         >
                             <AgentOrbs status={agentStatus} />
                             <p className="text-sm text-gray-400 animate-pulse">{phaseLabel}</p>
+                            <AgentStatus events={sseEvents} visible={sseEvents.length > 0} />
                         </motion.div>
                     )}
                 </AnimatePresence>

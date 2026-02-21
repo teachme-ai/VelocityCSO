@@ -17,6 +17,9 @@ interface LogEntry {
     agent_id?: string;
     phase?: string;
     session_id?: string;
+    /** GCP Cloud Trace fields — auto-assembled into waterfall in Trace Explorer */
+    'logging.googleapis.com/trace'?: string;
+    'logging.googleapis.com/spanId'?: string;
     /** Estimated token count for this agent call */
     token_estimate?: number;
     /** Estimated USD cost for this agent call */
@@ -27,8 +30,35 @@ interface LogEntry {
 
 export function log(entry: Omit<LogEntry, 'system'>): void {
     const payload: LogEntry = { system: 'velocity_cso', ...entry };
-    // Cloud Logging parses JSON lines written to stdout
     console.log(JSON.stringify(payload));
+}
+
+/**
+ * Creates a request-scoped logger bound to a Cloud Trace context.
+ * Pass the X-Cloud-Trace-Context header value from Express to correlate
+ * all agent logs for a single request into one trace waterfall.
+ *
+ * Header format: "<traceId>/<spanId>;o=1"
+ * GCP project: set via GOOGLE_CLOUD_PROJECT env var (auto-set on Cloud Run).
+ */
+export function createTraceLogger(traceHeader?: string, projectId?: string) {
+    const project = projectId || process.env.GOOGLE_CLOUD_PROJECT || '';
+    let traceField: string | undefined;
+    let spanField: string | undefined;
+
+    if (traceHeader) {
+        const [tracePart, spanPart] = traceHeader.split(';')[0].split('/');
+        if (tracePart && project) {
+            traceField = `projects/${project}/traces/${tracePart}`;
+        }
+        if (spanPart) spanField = spanPart;
+    }
+
+    return (entry: Omit<LogEntry, 'system'>) => log({
+        ...entry,
+        'logging.googleapis.com/trace': traceField,
+        'logging.googleapis.com/spanId': spanField,
+    });
 }
 
 // ─── Gemini Pricing (as of Feb 2026) ────────────────────────────────────────
