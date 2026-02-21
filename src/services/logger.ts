@@ -29,7 +29,7 @@ interface LogEntry {
 }
 
 export function log(entry: Omit<LogEntry, 'system'>): void {
-    const payload: LogEntry = { system: 'velocity_cso', ...entry };
+    const payload = { system: 'velocity_cso' as const, ...entry };
     console.log(JSON.stringify(payload));
 }
 
