@@ -3,28 +3,10 @@ import { randomUUID } from 'crypto';
 import { specialists } from './specialists.js';
 import { strategicCritic } from './critic.js';
 import { DiscoveryResult } from './agents/discovery.js';
+import { log, estimateCost } from './services/logger.js';
 
-// ─── In-Memory Session Store ────────────────────────────────────────────────
-export interface StrategySession {
-    enrichedContext: string;
-    discoveryFindings: string;
-    gaps: string[];
-    createdAt: number;
-}
-
-// Keyed by sessionId — survives within a single Cloud Run instance lifetime
-export const sessionStore = new Map<string, StrategySession>();
-
-// Clean up sessions older than 1 hour
-setInterval(() => {
-    const oneHourAgo = Date.now() - 3600_000;
-    for (const [id, session] of sessionStore.entries()) {
-        if (session.createdAt < oneHourAgo) sessionStore.delete(id);
-    }
-}, 5 * 60 * 1000);
-
-// ─── Strategic Critic (re-exported from here for backward compat) ────────────
-export { strategicCritic };
+// Re-export StrategySession type for index.ts
+export type { StrategySession } from './services/sessionService.js';
 
 // ─── Chief Strategy Agent ────────────────────────────────────────────────────
 export class ChiefStrategyAgent {
@@ -62,40 +44,61 @@ export class ChiefStrategyAgent {
      * without asking the user for clarification.
      */
     async evaluateCompleteness(
-        discovery: DiscoveryResult
+        discovery: DiscoveryResult,
+        sessionId: string
     ): Promise<{ proceed: boolean; gap?: string }> {
         if (discovery.isComplete || discovery.gaps.length === 0) {
+            log({
+                severity: 'INFO',
+                message: 'Discovery completeness check passed — proceeding to analysis',
+                agent_id: 'chief_strategy_agent',
+                phase: 'evaluation',
+                session_id: sessionId,
+            });
             return { proceed: true };
         }
 
-        // If there are meaningful gaps, construct a specific clarifying question
         const gap = discovery.gaps.slice(0, 2).join('. ');
+        log({
+            severity: 'WARNING',
+            message: 'Discovery gap detected — triggering conversational clarification',
+            agent_id: 'chief_strategy_agent',
+            phase: 'evaluation',
+            session_id: sessionId,
+            gaps: discovery.gaps,
+        });
         return { proceed: false, gap };
     }
 
     /**
      * Runs the full 15-dimension analysis pipeline.
      */
-    async analyze(businessContext: string): Promise<string> {
-        console.log('[CSO] Starting analysis for:', businessContext.slice(0, 80));
+    async analyze(businessContext: string, sessionId: string): Promise<string> {
+        log({
+            severity: 'INFO',
+            message: 'CSO analysis started',
+            agent_id: 'chief_strategy_agent',
+            phase: 'synthesis',
+            session_id: sessionId,
+        });
 
         const runner = new InMemoryRunner({
             agent: this.agent,
             appName: 'velocity_cso',
         });
 
-        const sessionId = randomUUID();
+        const internalSessionId = randomUUID();
         const userId = 'api_user';
 
         await runner.sessionService.createSession({
             appName: 'velocity_cso',
             userId,
-            sessionId
+            sessionId: internalSessionId
         });
 
         const eventStream = runner.runAsync({
             userId,
-            sessionId,
+            sessionId: internalSessionId,
             newMessage: { role: 'user', parts: [{ text: businessContext }] }
         });
 
@@ -109,7 +112,17 @@ export class ChiefStrategyAgent {
             }
         }
 
-        console.log('[CSO] Analysis complete.');
+        const cost = estimateCost('gemini-2.5-pro', businessContext.length, finalReport.length);
+        log({
+            severity: 'INFO',
+            message: 'CSO analysis complete',
+            agent_id: 'chief_strategy_agent',
+            phase: 'synthesis',
+            session_id: sessionId,
+            token_estimate: cost.inputTokens + cost.outputTokens,
+            cost_usd: cost.usd,
+        });
+
         return finalReport || 'Strategic analysis failed. No final response generated.';
     }
 }

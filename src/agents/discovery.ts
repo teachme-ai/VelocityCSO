@@ -1,5 +1,6 @@
 import { LlmAgent, InMemoryRunner, isFinalResponse } from '@google/adk';
 import { randomUUID } from 'crypto';
+import { log, estimateCost } from '../services/logger.js';
 
 export interface DiscoveryResult {
     findings: string;
@@ -56,30 +57,31 @@ For pre-revenue, unnamed, or niche businesses, is_complete should almost always 
         });
     }
 
-    async discover(businessContext: string): Promise<DiscoveryResult> {
+    async discover(businessContext: string, sessionId?: string): Promise<DiscoveryResult> {
         const runner = new InMemoryRunner({
             agent: this.agent,
             appName: 'velocity_cso_discovery',
         });
 
-        const sessionId = randomUUID();
+        const runnerSessionId = randomUUID();
         const userId = 'discovery_user';
 
         await runner.sessionService.createSession({
             appName: 'velocity_cso_discovery',
             userId,
-            sessionId
+            sessionId: runnerSessionId
         });
 
         const eventStream = runner.runAsync({
             userId,
-            sessionId,
+            sessionId: runnerSessionId,
             newMessage: {
                 role: 'user',
                 parts: [{ text: `Business to analyse:\n${businessContext}\n\nBegin the 24-month intelligence sweep. Return ONLY the JSON object.` }]
             }
         });
 
+        log({ severity: 'INFO', message: 'Discovery sweep started', agent_id: 'discovery_agent', phase: 'discovery', session_id: sessionId });
         let rawOutput = '';
         for await (const event of eventStream) {
             if (event.author === this.agent.name || isFinalResponse(event)) {
@@ -94,6 +96,17 @@ For pre-revenue, unnamed, or niche businesses, is_complete should almost always 
         if (jsonMatch) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]);
+                const cost = estimateCost('gemini-2.0-flash', businessContext.length, rawOutput.length);
+                log({
+                    severity: 'INFO',
+                    message: 'Discovery scan complete',
+                    agent_id: 'discovery_agent',
+                    phase: 'discovery',
+                    session_id: sessionId,
+                    is_complete: parsed.is_complete,
+                    gaps_count: Array.isArray(parsed.gaps) ? parsed.gaps.length : 0,
+                    cost_usd: cost.usd,
+                });
                 return {
                     findings: parsed.findings || rawOutput,
                     gaps: Array.isArray(parsed.gaps) ? parsed.gaps : [],
@@ -101,12 +114,12 @@ For pre-revenue, unnamed, or niche businesses, is_complete should almost always 
                     summary: parsed.summary || 'Discovery scan complete.'
                 };
             } catch (parseErr) {
-                console.warn('[Discovery] Regex-extracted JSON still failed to parse:', parseErr);
+                log({ severity: 'WARNING', message: 'Regex-extracted JSON failed to parse', agent_id: 'discovery_agent', session_id: sessionId, error: String(parseErr) });
             }
         }
 
         // Fallback: parsing failed entirely — treat as incomplete so clarification triggers
-        console.warn('[Discovery] Could not extract valid JSON. Triggering clarification path.');
+        log({ severity: 'WARNING', message: 'Could not extract valid JSON from Discovery output — triggering clarification', agent_id: 'discovery_agent', session_id: sessionId });
         return {
             findings: rawOutput || 'No structured findings available.',
             gaps: [
