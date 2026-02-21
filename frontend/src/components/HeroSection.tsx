@@ -4,7 +4,9 @@ import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { AgentOrbs } from './AgentOrbs';
 import { AgentStatus } from './AgentStatus';
+import { StressTestPanel } from './StressTestPanel';
 import type { StatusEvent } from './AgentStatus';
+import type { StressResult } from '../types/stress';
 import { DiagnosticScorecard } from './DiagnosticScorecard';
 import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 
@@ -79,6 +81,8 @@ export function HeroSection() {
     const [error, setError] = useState('');
     const [sseEvents, setSseEvents] = useState<StatusEvent[]>([]);
     const [_lastReportId, setLastReportId] = useState<string | null>(null);
+    const [stressResult, setStressResult] = useState<StressResult | null>(null);
+    const [currentReportId, setCurrentReportId] = useState<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     // Restore last report ID from localStorage on mount
@@ -155,9 +159,11 @@ export function HeroSection() {
                         if (dims) parsed.dimensions = dims;
                         if (reportId) {
                             setLastReportId(reportId);
+                            setCurrentReportId(reportId);
                             localStorage.setItem(LAST_REPORT_KEY, reportId);
                         }
                         setResult(parsed);
+                        setStressResult(null);
                         setPhase('done');
                         break;
                     }
@@ -366,7 +372,20 @@ export function HeroSection() {
                             </div>
                             <div className="overflow-y-auto flex-1 p-6 flex flex-col gap-8">
                                 {result.dimensions && Object.keys(result.dimensions).length > 0 && (
-                                    <DiagnosticScorecard dimensions={result.dimensions} onAreaClick={() => { }} />
+                                    <DiagnosticScorecard
+                                        dimensions={stressResult ? stressResult.stressedScores : result.dimensions}
+                                        originalDimensions={stressResult ? result.dimensions : undefined}
+                                        onAreaClick={() => { }}
+                                    />
+                                )}
+                                {/* Stress-Test Simulator Panel */}
+                                {currentReportId && result.dimensions && Object.keys(result.dimensions).length > 0 && (
+                                    <StressTestPanel
+                                        reportId={currentReportId}
+                                        originalScores={result.dimensions}
+                                        onStressResult={(r) => setStressResult(r)}
+                                        apiBase={import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : ''}
+                                    />
                                 )}
                                 {result.confidence_score && result.confidence_score < 70 && (
                                     <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-4">

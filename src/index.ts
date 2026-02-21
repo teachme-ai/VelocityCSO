@@ -9,6 +9,7 @@ import { DiscoveryAgent } from './agents/discovery.js';
 import { saveSession, getSession, deleteSession } from './services/sessionService.js';
 import { log, createTraceLogger, logAuditCost, estimateCost } from './services/logger.js';
 import { saveAuditMemory, loadAuditMemory } from './services/memory.js';
+import { SCENARIOS, ScenarioId } from './scenarios.js';
 import type { StrategySession } from './services/sessionService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -141,6 +142,9 @@ app.post('/analyze', async (req, res) => {
         let docId = `local-${randomUUID()}`;
         try {
             const fingerprint = business_context.trim().slice(0, 80).toLowerCase();
+            // NOTE: Enable Firestore TTL in GCP Console → Firestore → Indexes → TTL Policies
+            // Field: expiresAt, Collection: enterprise_strategy_reports
+            const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
             const docRef = await admin.firestore().collection('enterprise_strategy_reports').add({
                 business_context,
                 fingerprint,
@@ -148,6 +152,7 @@ app.post('/analyze', async (req, res) => {
                 dimension_scores: dimensionScores,
                 discovery_findings: discoveryResult.findings,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
+                expires_at: expiresAt,
             });
             docId = docRef.id;
 
@@ -222,6 +227,7 @@ ${clarification}
         let docId = `local-${randomUUID()}`;
         try {
             const fingerprint = session.enrichedContext.trim().slice(0, 80).toLowerCase();
+            const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
             const docRef = await admin.firestore().collection('enterprise_strategy_reports').add({
                 business_context: session.enrichedContext,
                 fingerprint,
@@ -229,6 +235,7 @@ ${clarification}
                 report,
                 dimension_scores: dimensionScores,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
+                expires_at: expiresAt,
             });
             docId = docRef.id;
 
@@ -253,6 +260,50 @@ ${clarification}
 
     } catch (error: any) {
         tlog({ severity: 'ERROR', message: 'Clarify endpoint failed', error: error.message, session_id: sessionId });
+        sseWrite(res, { type: 'ERROR', message: error.message });
+        res.end();
+    }
+});
+
+// ─── POST /analyze/stress-test ───────────────────────────────────────────────
+// Fast scenario recalculation — bypasses Discovery, uses Firestore cached context.
+app.post('/analyze/stress-test', async (req, res) => {
+    const { reportId, scenarioId } = req.body;
+
+    if (!reportId || !scenarioId) {
+        return res.status(400).json({ error: 'reportId and scenarioId are required' });
+    }
+    if (!SCENARIOS[scenarioId as ScenarioId]) {
+        return res.status(400).json({ error: `Unknown scenarioId. Valid: ${Object.keys(SCENARIOS).join(', ')}` });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const sessionId = randomUUID();
+    const tlog = createTraceLogger(req.headers['x-cloud-trace-context'] as string);
+
+    tlog({ severity: 'INFO', message: 'Stress test request received', session_id: sessionId, report_id: reportId, scenario: scenarioId });
+    sseWrite(res, { type: 'STRESS_START', scenarioId, scenarioLabel: SCENARIOS[scenarioId as ScenarioId].label });
+
+    try {
+        const result = await cso.triggerStressTest(reportId, scenarioId as ScenarioId, sessionId);
+
+        sseWrite(res, {
+            type: 'STRESS_COMPLETE',
+            scenarioId: result.scenarioId,
+            scenarioLabel: result.scenarioLabel,
+            originalScores: result.originalScores,
+            stressedScores: result.stressedScores,
+            riskDeltas: result.riskDeltas,
+            mitigationCards: result.mitigationCards,
+        });
+        res.end();
+    } catch (error: any) {
+        tlog({ severity: 'ERROR', message: 'Stress test failed', error: error.message, session_id: sessionId });
         sseWrite(res, { type: 'ERROR', message: error.message });
         res.end();
     }

@@ -4,6 +4,8 @@ import { specialists } from './specialists.js';
 import { strategicCritic } from './critic.js';
 import { DiscoveryResult } from './agents/discovery.js';
 import { log, estimateCost } from './services/logger.js';
+import { SCENARIOS, ScenarioId, StressResult, MitigationCard } from './scenarios.js';
+import { loadAuditMemory } from './services/memory.js';
 
 // Re-export StrategySession type for index.ts
 export type { StrategySession } from './services/sessionService.js';
@@ -124,5 +126,134 @@ export class ChiefStrategyAgent {
         });
 
         return finalReport || 'Strategic analysis failed. No final response generated.';
+    }
+
+    /**
+     * Runs a fast stress-test recalculation on an existing completed report.
+     * Discovery is bypassed — uses cached Firestore grounded context.
+     * Uses gemini-2.5-flash for speed and minimal cost.
+     */
+    async triggerStressTest(reportId: string, scenarioId: ScenarioId, sessionId: string): Promise<StressResult> {
+        const scenario = SCENARIOS[scenarioId];
+
+        log({ severity: 'INFO', message: `Stress test triggered: ${scenario.label}`, agent_id: 'stress_test_agent', phase: 'stress_test', session_id: sessionId, scenario: scenarioId });
+
+        // Load cached grounded context from Firestore
+        const memory = await loadAuditMemory(reportId);
+        if (!memory) throw new Error(`Report ${reportId} not found in Firestore. Run a full audit first.`);
+
+        const DIM_NAMES = [
+            'TAM Viability', 'Target Precision', 'Trend Adoption',
+            'Competitive Defensibility', 'Model Innovation', 'Flywheel Potential',
+            'Pricing Power', 'CAC/LTV Ratio', 'Market Entry Speed',
+            'Execution Speed', 'Scalability', 'ESG Posture',
+            'ROI Projection', 'Risk Tolerance', 'Capital Efficiency'
+        ];
+
+        const stressPrompt = `
+You are a rapid stress-test recalculation engine. You have been given:
+
+1. BUSINESS GROUNDED CONTEXT (from 24-month discovery sweep):
+${memory.groundedContext || memory.businessContext}
+
+2. ORIGINAL DIMENSION SCORES (baseline):
+${JSON.stringify(memory.dimensionScores, null, 2)}
+
+3. SYNTHETIC CRISIS SCENARIO TO SIMULATE:
+${scenario.prompt}
+
+YOUR TASK:
+- Recalculate scores for ALL 15 dimensions under this specific crisis.
+- For any dimension scoring below 40, generate 3 concrete mitigation steps and a CSO-level "Crisis Play" recommendation.
+- Return ONLY a valid raw JSON object. No preamble, no markdown, no explanation.
+
+Required JSON structure:
+{
+  "stressed_scores": {
+    "TAM Viability": 62,
+    "Target Precision": 58,
+    ...all 15 dimensions...
+  },
+  "mitigation_cards": [
+    {
+      "dimension": "CAC/LTV Ratio",
+      "stressed_score": 32,
+      "mitigation_steps": ["Step 1...", "Step 2...", "Step 3..."],
+      "cso_crisis_play": "Immediate: activate a land-and-expand motion — reduce initial ACVs by 40% to lower acquisition friction while protecting LTV via expansion revenue triggers..."
+    }
+  ]
+}
+
+Dimensions to score: ${DIM_NAMES.join(', ')}
+Only include a dimension in mitigation_cards if its stressed score is below 40.
+        `.trim();
+
+        // Run as a lightweight single-agent call (no sub-agents, no Discovery)
+        const stressAgent = new LlmAgent({
+            name: 'stress_test_agent',
+            model: 'gemini-2.5-flash',
+            description: 'Rapid stress-test recalculation specialist.',
+            instruction: 'You are a McKinsey-level stress-test analyst. Respond ONLY with a raw JSON object as instructed.',
+        });
+
+        const runner = new InMemoryRunner({ agent: stressAgent, appName: 'velocity_stress' });
+        const runnerSessionId = randomUUID();
+        await runner.sessionService.createSession({ appName: 'velocity_stress', userId: 'stress_user', sessionId: runnerSessionId });
+
+        const eventStream = runner.runAsync({
+            userId: 'stress_user',
+            sessionId: runnerSessionId,
+            newMessage: { role: 'user', parts: [{ text: stressPrompt }] }
+        });
+
+        let rawOutput = '';
+        for await (const event of eventStream) {
+            if (event.author === stressAgent.name || isFinalResponse(event)) {
+                const parts = event.content?.parts || [];
+                const text = parts.map((p: { text?: string }) => p.text).filter(Boolean).join('\n');
+                if (text) rawOutput += text;
+            }
+        }
+
+        // Robust JSON extraction
+        const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
+        let stressedScores: Record<string, number> = {};
+        let rawMitigationCards: MitigationCard[] = [];
+
+        if (jsonMatch) {
+            try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                stressedScores = parsed.stressed_scores || {};
+                rawMitigationCards = (parsed.mitigation_cards || []).map((c: any) => ({
+                    dimension: c.dimension,
+                    stressedScore: c.stressed_score,
+                    riskDelta: (memory.dimensionScores[c.dimension] || 50) - c.stressed_score,
+                    mitigationSteps: c.mitigation_steps || [],
+                    csoCrisisPlay: c.cso_crisis_play || '',
+                }));
+            } catch (e) {
+                log({ severity: 'WARNING', message: 'Stress test JSON parse failed', session_id: sessionId, error: String(e) });
+            }
+        }
+
+        // Compute risk deltas
+        const riskDeltas: Record<string, number> = {};
+        for (const dim of DIM_NAMES) {
+            const original = memory.dimensionScores[dim] ?? 50;
+            const stressed = stressedScores[dim] ?? original;
+            riskDeltas[dim] = stressed - original; // negative = worse
+        }
+
+        const cost = estimateCost('gemini-2.5-flash', stressPrompt.length, rawOutput.length);
+        log({ severity: 'INFO', message: 'Stress test complete', agent_id: 'stress_test_agent', phase: 'stress_test', session_id: sessionId, cost_usd: cost.usd, scenario: scenarioId });
+
+        return {
+            scenarioId,
+            scenarioLabel: scenario.label,
+            originalScores: memory.dimensionScores,
+            stressedScores,
+            riskDeltas,
+            mitigationCards: rawMitigationCards,
+        };
     }
 }
