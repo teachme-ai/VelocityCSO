@@ -16,39 +16,36 @@ export const DiagnosticScorecard = ({ dimensions, originalDimensions, onAreaClic
     const isStressMode = !!originalDimensions;
 
     return (
-        <div className="w-full rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <h3 className="text-sm font-semibold mb-4 uppercase tracking-widest"
-                style={{ color: isStressMode ? '#f97316' : '#a855f7' }}>
+        <div style={{ width: '100%', borderRadius: 12, padding: '12px 0', background: 'rgba(255,255,255,0.02)' }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: isStressMode ? '#f97316' : '#a855f7', marginBottom: 12 }}>
                 {isStressMode ? '⚡ Stressed Dimension Matrix' : '15-Dimension Strategy Matrix'}
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-1">
-                {Object.entries(CATEGORIES).map(([cat, dims]) => (
-                    <div key={cat}>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2 mt-3">{cat}</p>
-                        {dims.map(dim => {
-                            const score = dimensions[dim] ?? 0;
-                            const baseline = originalDimensions?.[dim] ?? score;
-                            const dropped = isStressMode && (baseline - score) > 15;
-                            const color = score >= 70 ? '#16a34a' : score >= 40 ? '#2563eb' : '#dc2626';
-                            return (
-                                <div key={dim} className="flex items-center gap-2 mb-2 cursor-pointer group" onClick={() => onAreaClick(dim)}>
-                                    <span className={`text-xs w-32 shrink-0 truncate group-hover:text-white transition-colors ${dropped ? 'text-amber-400 font-semibold' : 'text-gray-400'}`}>
-                                        {dropped ? `⚠ ${dim}` : dim}
-                                    </span>
-                                    <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                        <div className="h-full rounded-full transition-all duration-700"
-                                            style={{ width: `${score}%`, background: color }} />
-                                    </div>
-                                    <span className="text-xs font-mono w-7 text-right shrink-0" style={{ color }}>{score}</span>
-                                    {isStressMode && dropped && (
-                                        <span className="text-[10px] text-red-400 shrink-0">↓{baseline - score}</span>
-                                    )}
+            </p>
+            {Object.entries(CATEGORIES).map(([cat, dims]) => (
+                <div key={cat} style={{ marginBottom: 8 }}>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 6, marginTop: 10 }}>{cat}</p>
+                    {dims.map(dim => {
+                        const score = dimensions[dim] ?? 0;
+                        const baseline = originalDimensions?.[dim] ?? score;
+                        const dropped = isStressMode && (baseline - score) > 15;
+                        const color = score >= 70 ? '#16a34a' : score >= 40 ? '#2563eb' : '#dc2626';
+                        return (
+                            <div key={dim} onClick={() => onAreaClick(dim)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer' }}>
+                                <span style={{ fontSize: 11, width: 160, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: dropped ? '#fbbf24' : '#9ca3af', fontWeight: dropped ? 600 : 400 }}>
+                                    {dropped ? `⚠ ${dim}` : dim}
+                                </span>
+                                <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 9999, overflow: 'hidden' }}>
+                                    <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: 9999, transition: 'width 0.7s' }} />
                                 </div>
-                            );
-                        })}
-                    </div>
-                ))}
-            </div>
+                                <span style={{ fontSize: 11, fontFamily: 'monospace', width: 26, textAlign: 'right', flexShrink: 0, color }}>{score}</span>
+                                {isStressMode && dropped && (
+                                    <span style={{ fontSize: 9, color: '#f87171', flexShrink: 0, width: 28 }}>↓{baseline - score}</span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            ))}
         </div>
     );
 };

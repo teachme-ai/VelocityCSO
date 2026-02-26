@@ -467,77 +467,83 @@ export function HeroSection() {
                 </AnimatePresence>
             </div>
 
-            {/* Results Slide-Up Panel */}
+            {/* Full-Screen Report Page */}
             <AnimatePresence>
                 {result && (
-                    <motion.div initial={{ opacity: 0, y: 80 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 80 }}
-                        transition={{ type: 'spring', stiffness: 80, damping: 20 }}
-                        className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setResult(null); setPhase('idle'); }} />
-                        <div className="relative glass-card w-full max-w-5xl flex flex-col max-h-[90vh] md:max-h-[85vh] overflow-hidden rounded-t-2xl md:rounded-2xl">
-                            <div className="flex items-center justify-between p-6 border-b border-white/10">
-                                <h2 className="text-xl font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Strategy Intelligence Report</h2>
-                                <div className="flex items-center gap-3">
-                                    {currentReportId && currentReportToken && (
-                                        <a
-                                            href={`/report/${currentReportId}/download?token=${currentReportToken}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs font-semibold px-4 py-2 rounded-lg transition-all duration-200 hover:opacity-90 flex items-center gap-2"
-                                            style={{ background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(37,99,235,0.4)', color: '#93C5FD' }}
-                                        >
-                                            ↓ Board-Ready PDF
-                                        </a>
-                                    )}
-                                    <button onClick={() => { setResult(null); setPhase('idle'); }} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                </div>
+                    <motion.div
+                        initial={{ opacity: 0, x: '100%' }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: '100%' }}
+                        transition={{ type: 'spring', stiffness: 100, damping: 22 }}
+                        style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column', background: '#0a0a0f' }}
+                    >
+                        {/* Top Bar */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#a855f7' }} />
+                                <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 16, color: '#fff' }}>Strategy Intelligence Report</span>
                             </div>
-                            <div className="overflow-y-auto flex-1 p-6 flex flex-col gap-8">
-                                {result.dimensions && Object.keys(result.dimensions).length > 0 && (
-                                    <DiagnosticScorecard
-                                        dimensions={stressResult ? stressResult.stressedScores : result.dimensions}
-                                        originalDimensions={stressResult ? result.dimensions : undefined}
-                                        onAreaClick={() => { }}
-                                    />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {currentReportId && currentReportToken && (
+                                    <a href={`/report/${currentReportId}/download?token=${currentReportToken}`} target="_blank" rel="noopener noreferrer"
+                                        style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 8, background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(37,99,235,0.4)', color: '#93C5FD', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        ↓ Board-Ready PDF
+                                    </a>
                                 )}
-                                {/* Stress-Test Simulator Panel */}
-                                {currentReportId && result.dimensions && Object.keys(result.dimensions).length > 0 && (
+                                <button onClick={() => { setResult(null); setPhase('idle'); }}
+                                    style={{ padding: 8, borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex' }}>
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Body: Left Sidebar + Right Report */}
+                        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+                            {/* LEFT SIDEBAR — Scorecard + Stress Test */}
+                            <div style={{ width: 380, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.07)', overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                                <DiagnosticScorecard
+                                    dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
+                                    originalDimensions={stressResult ? result.dimensions : undefined}
+                                    onAreaClick={() => {}}
+                                />
+                                {currentReportId && (
                                     <StressTestPanel
                                         reportId={currentReportId}
-                                        originalScores={result.dimensions}
+                                        originalScores={result.dimensions || {}}
                                         onStressResult={(r) => setStressResult(r)}
                                         apiBase={import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : ''}
                                     />
                                 )}
+                            </div>
+
+                            {/* RIGHT PANEL — Full Report */}
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '28px 40px' }}>
                                 {result.confidence_score && result.confidence_score < 70 && (
-                                    <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-4">
-                                        <ShieldAlert className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                                    <div style={{ padding: 16, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 12, display: 'flex', gap: 12, marginBottom: 24 }}>
+                                        <ShieldAlert size={18} style={{ color: '#fbbf24', flexShrink: 0, marginTop: 2 }} />
                                         <div>
-                                            <h4 className="text-amber-300 font-semibold text-sm">Strategic Blindspot Detected</h4>
-                                            <p className="text-amber-200/70 text-xs mt-1">Confidence: {result.confidence_score}/100. Critic flagged contradictions or insufficient supporting data.</p>
+                                            <p style={{ color: '#fcd34d', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Strategic Blindspot Detected</p>
+                                            <p style={{ color: 'rgba(252,211,77,0.7)', fontSize: 12 }}>Confidence: {result.confidence_score}/100. Critic flagged contradictions or insufficient supporting data.</p>
                                         </div>
                                     </div>
                                 )}
-                                <div>
-                                    <h3 className="text-sm font-semibold text-emerald-400 mb-3 tracking-wide uppercase">Executive Synthesis</h3>
-                                    <div className="text-sm text-gray-300 leading-relaxed space-y-3 prose prose-invert prose-sm max-w-none">
-                                        {(result.analysis_markdown || '')
-                                            .replace(/## Dimension Scores[\s\S]*?(?=\n## |$)/i, '')
-                                            .replace(/^(TAM Viability|Target Precision|Trend Adoption|Competitive Defensibility|Model Innovation|Flywheel Potential|Pricing Power|CAC\/LTV Ratio|Market Entry Speed|Execution Speed|Scalability|ESG Posture|ROI Projection|Risk Tolerance|Capital Efficiency)[^\n]*$/gm, '')
-                                            .replace(/\n{3,}/g, '\n\n')
-                                            .trim()
-                                            .split('\n')
-                                            .map((line, i) => {
-                                                if (/^#{1,2}\s/.test(line)) return <h3 key={i} className="text-base font-bold text-white mt-4 mb-1 border-l-2 border-violet-500 pl-3">{line.replace(/^#+\s*/, '')}</h3>;
-                                                if (/^###\s/.test(line)) return <h4 key={i} className="text-sm font-semibold text-violet-300 mt-3 mb-1">{line.replace(/^#+\s*/, '')}</h4>;
-                                                if (/^[-*]\s/.test(line)) return <p key={i} className="flex gap-2 text-gray-300"><span className="text-violet-400 shrink-0">•</span><span dangerouslySetInnerHTML={{__html: line.replace(/^[-*]\s*/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}} /></p>;
-                                                if (line.trim() === '') return <div key={i} className="h-2" />;
-                                                return <p key={i} className="text-gray-300" dangerouslySetInnerHTML={{__html: line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}} />;
-                                            })
-                                        }
-                                    </div>
+                                <p style={{ fontSize: 11, fontWeight: 700, color: '#34d399', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 16 }}>Executive Synthesis</p>
+                                <div style={{ fontSize: 14, color: '#d1d5db', lineHeight: 1.75 }}>
+                                    {(result.analysis_markdown || '')
+                                        .replace(/^## Dimension Scores.*$/im, '')
+                                        .replace(/^(TAM Viability|Target Precision|Trend Adoption|Competitive Defensibility|Model Innovation|Flywheel Potential|Pricing Power|CAC\/LTV Ratio|Market Entry Speed|Execution Speed|Scalability|ESG Posture|ROI Projection|Risk Tolerance|Capital Efficiency)[^\n]*$/gm, '')
+                                        .replace(/\n{3,}/g, '\n\n')
+                                        .trim()
+                                        .split('\n')
+                                        .map((line, i) => {
+                                            if (/^#{1,2}\s/.test(line)) return <h3 key={i} style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '24px 0 8px', paddingLeft: 12, borderLeft: '3px solid #7c3aed' }}>{line.replace(/^#+\s*/, '')}</h3>;
+                                            if (/^###\s/.test(line)) return <h4 key={i} style={{ fontSize: 14, fontWeight: 600, color: '#c4b5fd', margin: '16px 0 6px' }}>{line.replace(/^#+\s*/, '')}</h4>;
+                                            if (/^[-*]\s/.test(line)) return <p key={i} style={{ display: 'flex', gap: 8, margin: '4px 0' }}><span style={{ color: '#7c3aed', flexShrink: 0 }}>•</span><span dangerouslySetInnerHTML={{__html: line.replace(/^[-*]\s*/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}} /></p>;
+                                            if (line.trim() === '') return <div key={i} style={{ height: 8 }} />;
+                                            return <p key={i} style={{ margin: '4px 0' }} dangerouslySetInnerHTML={{__html: line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}} />;
+                                        })
+                                    }
                                 </div>
                             </div>
                         </div>
