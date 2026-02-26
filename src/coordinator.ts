@@ -125,6 +125,7 @@ export class ChiefStrategyAgent {
         });
 
         let finalReport = '';
+        const allDimensions: Record<string, number> = {};
 
         for await (const event of eventStream) {
             if (event.author === this.agent.name || isFinalResponse(event)) {
@@ -132,6 +133,36 @@ export class ChiefStrategyAgent {
                 const text = parts.map((p: { text?: string }) => p.text).filter(Boolean).join('\n');
                 if (text) finalReport += text;
             }
+        }
+
+        // Extract JSON blocks from specialist outputs and merge dimensions
+        const jsonMatches = finalReport.match(/\{[\s\S]*?\}/g) || [];
+        for (const jsonStr of jsonMatches) {
+            try {
+                const parsed = JSON.parse(jsonStr);
+                if (parsed.dimensions) {
+                    Object.assign(allDimensions, parsed.dimensions);
+                }
+            } catch { /* skip non-JSON or malformed */ }
+        }
+
+        // If we extracted dimensions from JSON, rebuild report as pure markdown
+        if (Object.keys(allDimensions).length > 0) {
+            const dimLines = Object.entries(allDimensions)
+                .map(([dim, score]) => `${dim}: ${score}/100`)
+                .join('\n');
+            
+            // Strip JSON, keep only markdown narrative
+            let cleanReport = finalReport
+                .replace(/\{[\s\S]*?\}/g, '') // Remove all JSON blocks
+                .replace(/^\s*\n/gm, '') // Remove empty lines
+                .trim();
+            
+            // Ensure scoring table is present
+            if (!cleanReport.includes('## Dimension Scores')) {
+                cleanReport += `\n\n## Dimension Scores\n${dimLines}`;
+            }
+            finalReport = cleanReport;
         }
 
         const cost = estimateCost('gemini-2.5-pro', businessContext.length, finalReport.length);
