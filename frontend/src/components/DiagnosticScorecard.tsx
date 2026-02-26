@@ -1,88 +1,54 @@
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-
 interface ScorecardProps {
     dimensions: Record<string, number>;
-    /** Optional: baseline scores shown as ghost layer behind stressed scores */
     originalDimensions?: Record<string, number>;
     onAreaClick: (area: string) => void;
 }
 
+const CATEGORIES: Record<string, string[]> = {
+    'Market':     ['TAM Viability', 'Target Precision', 'Trend Adoption'],
+    'Strategy':   ['Competitive Defensibility', 'Model Innovation', 'Flywheel Potential'],
+    'Commercial': ['Pricing Power', 'CAC/LTV Ratio', 'Market Entry Speed'],
+    'Operations': ['Execution Speed', 'Scalability', 'ESG Posture'],
+    'Finance':    ['ROI Projection', 'Risk Tolerance', 'Capital Efficiency'],
+};
+
 export const DiagnosticScorecard = ({ dimensions, originalDimensions, onAreaClick }: ScorecardProps) => {
-    // Merge keys from both sets to ensure consistent axis labels
-    const allKeys = originalDimensions
-        ? Array.from(new Set([...Object.keys(dimensions), ...Object.keys(originalDimensions)]))
-        : Object.keys(dimensions);
-
-    const data = allKeys.map(key => ({
-        subject: key,
-        Stressed: dimensions[key] ?? 50,
-        Original: originalDimensions ? (originalDimensions[key] ?? 50) : undefined,
-        // Flag dimensions that dropped >20 points for amber pulse
-        dropped: originalDimensions
-            ? (originalDimensions[key] ?? 50) - (dimensions[key] ?? 50) > 20
-            : false,
-        fullMark: 100,
-    }));
-
     const isStressMode = !!originalDimensions;
 
     return (
-        <div className="w-full h-[420px] mt-4 rounded-xl p-4"
-            style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <h3 className="text-sm font-semibold text-center mb-3 uppercase tracking-widest"
+        <div className="w-full rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <h3 className="text-sm font-semibold mb-4 uppercase tracking-widest"
                 style={{ color: isStressMode ? '#f97316' : '#a855f7' }}>
                 {isStressMode ? '⚡ Stressed Dimension Matrix' : '15-Dimension Strategy Matrix'}
             </h3>
-            <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="75%" data={data}>
-                    <PolarGrid stroke="rgba(255,255,255,0.08)" />
-                    <PolarAngleAxis
-                        dataKey="subject"
-                        tick={({ payload, x, y, cx, cy, ...rest }: any) => {
-                            const entry = data.find(d => d.subject === payload.value);
-                            const isDropped = entry?.dropped;
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-1">
+                {Object.entries(CATEGORIES).map(([cat, dims]) => (
+                    <div key={cat}>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2 mt-3">{cat}</p>
+                        {dims.map(dim => {
+                            const score = dimensions[dim] ?? 0;
+                            const baseline = originalDimensions?.[dim] ?? score;
+                            const dropped = isStressMode && (baseline - score) > 15;
+                            const color = score >= 70 ? '#16a34a' : score >= 40 ? '#2563eb' : '#dc2626';
                             return (
-                                <text
-                                    {...rest}
-                                    x={x} y={y} cx={cx} cy={cy}
-                                    fontSize={10}
-                                    fill={isDropped ? '#f59e0b' : 'rgba(255,255,255,0.65)'}
-                                    fontWeight={isDropped ? '600' : '400'}
-                                    textAnchor="middle"
-                                    style={{ cursor: 'pointer' }}
-                                    onClick={() => onAreaClick(payload.value)}
-                                >
-                                    {isDropped ? `⚠ ${payload.value}` : payload.value}
-                                </text>
+                                <div key={dim} className="flex items-center gap-2 mb-2 cursor-pointer group" onClick={() => onAreaClick(dim)}>
+                                    <span className={`text-xs w-40 shrink-0 truncate group-hover:text-white transition-colors ${dropped ? 'text-amber-400 font-semibold' : 'text-gray-400'}`}>
+                                        {dropped ? `⚠ ${dim}` : dim}
+                                    </span>
+                                    <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full transition-all duration-700"
+                                            style={{ width: `${score}%`, background: color }} />
+                                    </div>
+                                    <span className="text-xs font-mono w-7 text-right shrink-0" style={{ color }}>{score}</span>
+                                    {isStressMode && dropped && (
+                                        <span className="text-[10px] text-red-400 shrink-0">↓{baseline - score}</span>
+                                    )}
+                                </div>
                             );
-                        }}
-                    />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-
-                    {/* Ghost layer — original baseline scores */}
-                    {isStressMode && (
-                        <Radar
-                            name="Baseline"
-                            dataKey="Original"
-                            stroke="rgba(168,85,247,0.25)"
-                            fill="rgba(168,85,247,0.08)"
-                            fillOpacity={0.3}
-                            strokeDasharray="4 2"
-                            isAnimationActive={false}
-                        />
-                    )}
-
-                    {/* Foreground — stressed or normal scores */}
-                    <Radar
-                        name={isStressMode ? 'Stressed' : 'Score'}
-                        dataKey="Stressed"
-                        stroke={isStressMode ? '#f97316' : '#a855f7'}
-                        fill={isStressMode ? '#ef4444' : '#a855f7'}
-                        fillOpacity={isStressMode ? 0.35 : 0.55}
-                        isAnimationActive={true}
-                    />
-                </RadarChart>
-            </ResponsiveContainer>
+                        })}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };
