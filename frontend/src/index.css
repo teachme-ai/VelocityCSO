@@ -7,10 +7,12 @@
 @layer base {
   * {
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
   }
 
   html {
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
@@ -19,6 +21,7 @@
     background: #050814;
     color: #e8eaf0;
     overflow-x: hidden;
+    touch-action: manipulation;
   }
 
   h1,
@@ -26,6 +29,21 @@
   h3,
   h4 {
     font-family: 'Space Grotesk', sans-serif;
+  }
+
+  input,
+  textarea {
+    font-size: 16px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+  }
+
+  @media (min-width: 768px) {
+    input,
+    textarea {
+      font-size: 14px;
+    }
   }
 }
 

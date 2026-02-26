@@ -127,7 +127,7 @@ export function DimensionOrbit() {
                     </motion.p>
                 </div>
 
-                <Canvas camera={{ position: [0, 0, 8], fov: 60 }}>
+                <Canvas camera={{ position: [0, 0, 8], fov: 60 }} style={{ pointerEvents: 'none' }}>
                     <ambientLight intensity={0.5} />
                     <pointLight position={[10, 10, 10]} />
                     <Scene />

@@ -39,7 +39,7 @@ const LAST_REPORT_KEY = 'vcso_last_report_id';
 
 function StarField() {
     return (
-        <Canvas camera={{ position: [0, 0, 1] }} style={{ position: 'absolute', inset: 0 }}>
+        <Canvas camera={{ position: [0, 0, 1] }} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
             <Stars radius={80} depth={60} count={6000} factor={4} saturation={0} fade speed={0.5} />
         </Canvas>
     );
@@ -266,10 +266,14 @@ export function HeroSection() {
                             <form onSubmit={handleAudit} className="glass-card glow-purple p-6 flex flex-col gap-4">
                                 <textarea
                                     ref={inputRef}
-                                    className="w-full h-36 bg-transparent border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none text-sm leading-relaxed"
+                                    className="w-full h-36 md:h-36 bg-transparent border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none text-base md:text-sm leading-relaxed"
                                     placeholder="Describe your business — model, market, constraints, ambition. Or just name a company. We'll discover the rest."
                                     value={context}
                                     onChange={(e) => setContext(e.target.value)}
+                                    autoComplete="off"
+                                    autoCorrect="off"
+                                    autoCapitalize="sentences"
+                                    spellCheck="true"
                                 />
                                 <div className="flex items-center justify-between flex-wrap gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer group">
@@ -330,11 +334,14 @@ export function HeroSection() {
                                 <form onSubmit={handleClarify} className="flex gap-3">
                                     <input
                                         type="text"
-                                        className="flex-1 bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors text-sm"
+                                        className="flex-1 bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors text-base md:text-sm"
                                         placeholder="e.g. We pivoted from B2C to B2B in Q3 2024, targeting enterprise compliance teams..."
                                         value={clarificationInput}
                                         onChange={(e) => setClarificationInput(e.target.value)}
                                         autoFocus
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="sentences"
                                     />
                                     <button type="submit" disabled={!clarificationInput.trim()} className="btn-primary px-4 py-3 disabled:opacity-40 disabled:cursor-not-allowed">
                                         <Send className="w-4 h-4" />
@@ -361,9 +368,9 @@ export function HeroSection() {
                 {result && (
                     <motion.div initial={{ opacity: 0, y: 80 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 80 }}
                         transition={{ type: 'spring', stiffness: 80, damping: 20 }}
-                        className="fixed inset-0 z-50 flex items-end justify-center">
+                        className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setResult(null); setPhase('idle'); }} />
-                        <div className="relative glass-card w-full max-w-5xl flex flex-col max-h-[85vh] overflow-hidden rounded-b-none">
+                        <div className="relative glass-card w-full max-w-5xl flex flex-col max-h-[90vh] md:max-h-[85vh] overflow-hidden rounded-t-2xl md:rounded-2xl">
                             <div className="flex items-center justify-between p-6 border-b border-white/10">
                                 <h2 className="text-xl font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Strategy Intelligence Report</h2>
                                 <button onClick={() => { setResult(null); setPhase('idle'); }} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
