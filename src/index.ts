@@ -144,28 +144,30 @@ app.post('/analyze', async (req, res) => {
             gaps: discoveryResult.gaps,
         });
 
-        // ── Phase 0.5: Completeness Check ─────────────────────────────────
-        const { proceed, gap } = await cso.evaluateCompleteness(discoveryResult, sessionId);
+        // ── Phase 0.5: Completeness Check — skip if interrogator already cleared ──
+        if (!ir.isAuditable) {
+            const { proceed, gap } = await cso.evaluateCompleteness(discoveryResult, sessionId);
 
-        if (!proceed && gap) {
-            await saveSession(sessionId, {
-                originalContext: business_context,
-                enrichedContext: business_context,
-                discoveryFindings: discoveryResult.findings,
-                gaps: discoveryResult.gaps,
-                turnCount: 0,
-                usedLenses: [],
-            });
-            tlog({ severity: 'WARNING', message: 'Clarification required — session saved', session_id: sessionId });
-            sseWrite(res, {
-                type: 'NEED_CLARIFICATION',
-                sessionId,
-                summary: discoveryResult.summary,
-                gap,
-                findings: discoveryResult.findings,
-            });
-            res.end();
-            return;
+            if (!proceed && gap) {
+                await saveSession(sessionId, {
+                    originalContext: business_context,
+                    enrichedContext: business_context,
+                    discoveryFindings: discoveryResult.findings,
+                    gaps: discoveryResult.gaps,
+                    turnCount: 0,
+                    usedLenses: [],
+                });
+                tlog({ severity: 'WARNING', message: 'Clarification required — session saved', session_id: sessionId });
+                sseWrite(res, {
+                    type: 'NEED_CLARIFICATION',
+                    sessionId,
+                    summary: discoveryResult.summary,
+                    gap,
+                    findings: discoveryResult.findings,
+                });
+                res.end();
+                return;
+            }
         }
 
         // ── Phase 1–3: Full Analysis ──────────────────────────────────────
