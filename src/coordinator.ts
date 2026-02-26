@@ -55,7 +55,8 @@ export class ChiefStrategyAgent {
         ROI Projection: [score]/100
         Risk Tolerance: [score]/100
         Capital Efficiency: [score]/100
-      `,
+        
+        CRITICAL: Output ONLY markdown text. Do NOT output JSON, code blocks, or raw data structures. All output must be human-readable narrative markdown.`,
             subAgents: [...specialists, strategicCritic],
         });
     }

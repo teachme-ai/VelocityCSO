@@ -501,7 +501,7 @@ export function HeroSection() {
                         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
                             {/* LEFT SIDEBAR — Scorecard + Stress Test */}
-                            <div style={{ width: 380, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.07)', overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                            <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.07)', overflowY: 'auto', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                                 <DiagnosticScorecard
                                     dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
                                     originalDimensions={stressResult ? result.dimensions : undefined}
@@ -518,7 +518,7 @@ export function HeroSection() {
                             </div>
 
                             {/* RIGHT PANEL — Full Report */}
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '28px 40px' }}>
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
                                 {result.confidence_score && result.confidence_score < 70 && (
                                     <div style={{ padding: 16, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 12, display: 'flex', gap: 12, marginBottom: 24 }}>
                                         <ShieldAlert size={18} style={{ color: '#fbbf24', flexShrink: 0, marginTop: 2 }} />
