@@ -46,8 +46,13 @@ function extractDimensions(report: string): Record<string, number> {
         'ROI Projection', 'Risk Tolerance', 'Capital Efficiency'
     ];
     for (const dim of dimNames) {
-        const match = report.match(new RegExp(`${dim}[^0-9]*([0-9]{1,3})`, 'i'));
-        if (match) dimensions[dim] = Math.min(100, parseInt(match[1]));
+        // Match score in any format: "TAM Viability: 78", "TAM Viability** 78/100", "TAM Viability Score: **78**"
+        const escaped = dim.replace('/', '\/').replace('(', '\(').replace(')', '\)');
+        const match = report.match(new RegExp(escaped + '[^\n]{0,60}?\b([0-9]{1,3})\b', 'i'));
+        if (match) {
+            const score = parseInt(match[1]);
+            if (score <= 100) dimensions[dim] = score;
+        }
     }
     return dimensions;
 }

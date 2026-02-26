@@ -36,6 +36,25 @@ export class ChiefStrategyAgent {
         - **Strategic Blindspots**: If any final confidence_score from a specialist is below 70%, or if the critic flagged unresolvable contradictions, include a "Strategic Blindspots" section.
         
         Output Format: A robust Markdown report with an Executive Summary.
+        
+        MANDATORY SCORING TABLE: You MUST include this exact block in your report, with real scores filled in:
+        
+        ## Dimension Scores
+        TAM Viability: [score]/100
+        Target Precision: [score]/100
+        Trend Adoption: [score]/100
+        Competitive Defensibility: [score]/100
+        Model Innovation: [score]/100
+        Flywheel Potential: [score]/100
+        Pricing Power: [score]/100
+        CAC/LTV Ratio: [score]/100
+        Market Entry Speed: [score]/100
+        Execution Speed: [score]/100
+        Scalability: [score]/100
+        ESG Posture: [score]/100
+        ROI Projection: [score]/100
+        Risk Tolerance: [score]/100
+        Capital Efficiency: [score]/100
       `,
             subAgents: [...specialists, strategicCritic],
         });
