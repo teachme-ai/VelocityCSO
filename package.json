@@ -23,9 +23,11 @@
     "express": "^5.2.1",
     "firebase-admin": "^13.6.1",
     "genkit": "^1.28.0",
+    "pdfkit": "^0.17.2",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "@types/pdfkit": "^0.17.5",
     "nodemon": "^3.1.13",
     "ts-node": "^10.9.2"
   },

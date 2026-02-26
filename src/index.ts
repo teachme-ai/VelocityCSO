@@ -10,6 +10,7 @@ import { InterrogatorAgent } from './agents/interrogator.js';
 import { saveSession, getSession, deleteSession } from './services/sessionService.js';
 import { log, createTraceLogger, logAuditCost, estimateCost } from './services/logger.js';
 import { saveAuditMemory, loadAuditMemory } from './services/memory.js';
+import { generatePDF } from './services/pdfService.js';
 import { SCENARIOS, ScenarioId } from './scenarios.js';
 import type { StrategySession } from './services/sessionService.js';
 
@@ -52,13 +53,13 @@ function extractDimensions(report: string): Record<string, number> {
 }
 
 // ─── GET /report/:id ─────────────────────────────────────────────────────────
-// Restores the Radar Chart and report from Firestore without re-running.
 app.get('/report/:id', async (req, res) => {
     const { id } = req.params;
+    const token = req.query.token as string | undefined;
     const memory = await loadAuditMemory(id);
-    if (!memory) {
-        return res.status(404).json({ error: 'Report not found or expired.' });
-    }
+    if (!memory) return res.status(404).json({ error: 'Report not found or expired.' });
+    // Simple access key: token must match last 8 chars of reportId
+    if (token !== id.slice(-8)) return res.status(403).json({ error: 'Invalid access token.' });
     res.json({
         id,
         report: memory.report,
@@ -67,6 +68,23 @@ app.get('/report/:id', async (req, res) => {
         business_context: memory.businessContext,
         created_at: memory.createdAt,
     });
+});
+
+// ─── GET /report/:id/download ─────────────────────────────────────────────────
+app.get('/report/:id/download', async (req, res) => {
+    const { id } = req.params;
+    const token = req.query.token as string | undefined;
+    const memory = await loadAuditMemory(id);
+    if (!memory) return res.status(404).json({ error: 'Report not found or expired.' });
+    if (token !== id.slice(-8)) return res.status(403).json({ error: 'Invalid access token.' });
+    try {
+        const pdf = generatePDF(memory);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="VelocityCSO-Audit-${id.slice(0, 8)}.pdf"`);
+        res.send(pdf);
+    } catch (err: any) {
+        res.status(500).json({ error: 'PDF generation failed', detail: err.message });
+    }
 });
 
 // ─── POST /analyze ───────────────────────────────────────────────────────────
@@ -207,7 +225,7 @@ app.post('/analyze', async (req, res) => {
 
         logAuditCost(sessionId, { discovery: discoveryCost.usd, synthesis: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, report, dimensions: dimensionScores });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions: dimensionScores });
         res.end();
 
     } catch (error: any) {
@@ -324,7 +342,7 @@ ${clarification}
         await deleteSession(sessionId);
         logAuditCost(sessionId, { synthesis_with_clarification: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, report, dimensions: dimensionScores });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions: dimensionScores });
         res.end();
 
     } catch (error: any) {

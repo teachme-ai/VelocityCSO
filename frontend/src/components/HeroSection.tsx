@@ -85,6 +85,7 @@ export function HeroSection() {
     const [_lastReportId, setLastReportId] = useState<string | null>(null);
     const [stressResult, setStressResult] = useState<StressResult | null>(null);
     const [currentReportId, setCurrentReportId] = useState<string | null>(null);
+    const [currentReportToken, setCurrentReportToken] = useState<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     // Restore last report ID from localStorage on mount
@@ -179,6 +180,7 @@ export function HeroSection() {
                         if (reportId) {
                             setLastReportId(reportId);
                             setCurrentReportId(reportId);
+                            setCurrentReportToken((event.token as string) || reportId.slice(-8));
                             localStorage.setItem(LAST_REPORT_KEY, reportId);
                         }
                         setResult(parsed);
@@ -450,9 +452,22 @@ export function HeroSection() {
                         <div className="relative glass-card w-full max-w-5xl flex flex-col max-h-[90vh] md:max-h-[85vh] overflow-hidden rounded-t-2xl md:rounded-2xl">
                             <div className="flex items-center justify-between p-6 border-b border-white/10">
                                 <h2 className="text-xl font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Strategy Intelligence Report</h2>
-                                <button onClick={() => { setResult(null); setPhase('idle'); }} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
-                                    <X className="w-5 h-5" />
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    {currentReportId && currentReportToken && (
+                                        <a
+                                            href={`/report/${currentReportId}/download?token=${currentReportToken}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs font-semibold px-4 py-2 rounded-lg transition-all duration-200 hover:opacity-90 flex items-center gap-2"
+                                            style={{ background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(37,99,235,0.4)', color: '#93C5FD' }}
+                                        >
+                                            ↓ Board-Ready PDF
+                                        </a>
+                                    )}
+                                    <button onClick={() => { setResult(null); setPhase('idle'); }} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
                             </div>
                             <div className="overflow-y-auto flex-1 p-6 flex flex-col gap-8">
                                 {result.dimensions && Object.keys(result.dimensions).length > 0 && (

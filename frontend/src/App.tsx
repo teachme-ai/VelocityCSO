@@ -48,6 +48,7 @@ export default function App() {
         <div className="hidden md:flex items-center gap-8 text-sm text-gray-400">
           <a href="#engine" className="hover:text-white transition-colors">The Engine</a>
           <a href="#offerings" className="hover:text-white transition-colors">Offerings</a>
+          <a href="/report/sample?token=00sample" className="hover:text-white transition-colors text-violet-400">Sample Report</a>
         </div>
         <a href="#audit"
           className="text-xs font-semibold px-5 py-2 rounded-lg transition-all duration-300 hover:opacity-90"
