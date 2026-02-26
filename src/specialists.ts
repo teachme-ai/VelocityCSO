@@ -14,6 +14,13 @@ const jsonInstruction = `
     }
 `;
 
+const asymmetricPlayRule = `
+    BANNED TACTICS — Never suggest: Marketing campaigns, Social Media strategies, or Discounts/promotions.
+    ASYMMETRIC PLAYS ONLY — Every recommendation must exploit a structural advantage the competitor cannot easily copy.
+    Example: Instead of "offer delivery", suggest "Subscription-based Desk-Drops to hostel wardens" to bypass the competitor's lack of local access.
+    Frame every insight as: "Because [competitor] cannot [do X], you can [asymmetric move] to lock in [specific customer segment]."
+`;
+
 export const marketAnalyst = new LlmAgent({
   name: 'market_analyst',
   model: 'gemini-2.5-flash',
@@ -24,6 +31,8 @@ export const marketAnalyst = new LlmAgent({
     - Detailed Customer Personas.
     - Current and Emergent Industry Trends.
     
+    ${asymmetricPlayRule}
+
     You must extract and score the following 3 dimensions (0-100):
     1. "TAM Viability"
     2. "Target Precision"
@@ -43,6 +52,8 @@ export const innovationAnalyst = new LlmAgent({
     - SWOT Analysis and Porter's Five Forces.
     - Three Horizons of Growth Framework.
     
+    ${asymmetricPlayRule}
+
     You must extract and score the following 3 dimensions (0-100):
     1. "Competitive Defensibility"
     2. "Model Innovation"
@@ -62,6 +73,8 @@ export const commercialAnalyst = new LlmAgent({
     - Go-To-Market (GTM) Strategy.
     - Market Entry/Expansion Plans.
     
+    ${asymmetricPlayRule}
+
     You must extract and score the following 3 dimensions (0-100):
     1. "Pricing Power"
     2. "CAC/LTV Ratio"
@@ -81,6 +94,8 @@ export const operationsAnalyst = new LlmAgent({
     - Value Chain Analysis and AI Operating Model Triangle readiness.
     - ESG (Environmental, Social, and Governance) Assessment.
     
+    ${asymmetricPlayRule}
+
     You must extract and score the following 3 dimensions (0-100):
     1. "Execution Speed"
     2. "Scalability"
@@ -100,6 +115,8 @@ export const financeAnalyst = new LlmAgent({
     - Comprehensive Risk Assessment and Mitigation.
     - M&A and Inorganic Growth Opportunities.
     
+    ${asymmetricPlayRule}
+
     You must extract and score the following 3 dimensions (0-100):
     1. "ROI Projection"
     2. "Risk Tolerance"
