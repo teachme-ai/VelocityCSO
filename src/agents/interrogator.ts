@@ -1,6 +1,7 @@
 import { LlmAgent, InMemoryRunner, isFinalResponse } from '@google/adk';
 import { randomUUID } from 'crypto';
 import { log, estimateCost } from '../services/logger.js';
+import admin from 'firebase-admin';
 
 export interface InterrogatorResult {
     category: string;
@@ -11,68 +12,82 @@ export interface InterrogatorResult {
     idBreakdown: { specificity: number; completeness: number; moat: number };
 }
 
-const INSTRUCTION = `
+// Strategic lens rotation by turn
+const LENS: Record<number, string> = {
+    1: 'CUSTOMER/MARKET LENS: Focus on WHO the customer is — demographics, location, daily behaviour, unmet need.',
+    2: 'COMPETITOR/MOAT LENS: Focus on WHY competitors cannot copy this — structural advantages, exclusive access, switching costs.',
+    3: 'OPERATIONS/SUPPLY LENS: Focus on the SECRET SAUCE — supply chain, unique process, proprietary relationships.',
+};
+
+function buildInstruction(turnCount: number, askedQuestions: string[]): string {
+    const lens = LENS[turnCount] || LENS[1];
+    const blacklist = askedQuestions.length > 0
+        ? `\nQUESTION BLACKLIST — you are STRICTLY FORBIDDEN from asking these again:\n${askedQuestions.map(q => `- "${q}"`).join('\n')}\n`
+        : '';
+
+    return `
 You are a Strategic Interrogator and Information Density Scorer.
+
+ACTIVE LENS FOR THIS TURN: ${lens}
 
 STEP 1 — CATEGORIZE: Identify the business category (Retail, SaaS, Manufacturing, Services, etc.)
 
-STEP 2 — SCORE the FULL GROUNDED CONTEXT (not just the latest input) using this strict heuristic (max 100):
-  +30 points: Contains a specific Location OR Demographic (e.g. "Koramangala", "Gen Z students", "near a hospital")
-  +30 points: Identifies a Competitor OR Constraint (e.g. "Reliance Smart", "high CAPEX", "thin margins")
-  +40 points: Identifies an Unfair Advantage (e.g. "exclusive farmer deal", "only Korean snack stockist", "hostel warden relationship")
-
+STEP 2 — SCORE the FULL GROUNDED CONTEXT using this strict heuristic (max 100):
+  +30 points: Contains a specific Location OR Demographic
+  +30 points: Identifies a Competitor OR Constraint
+  +40 points: Identifies an Unfair Advantage or unique resource
+${blacklist}
 STEP 3 — DECIDE:
-  If score < 70: Generate ONE "Deep Dive" question targeting the missing highest-value dimension. Plain language only.
   If score >= 70: Set is_auditable = true. Summarize ALL facts into strategy_context.
+  If score < 70: Generate ONE question targeting the ACTIVE LENS above.
+    - Use plain industry language. No jargon.
+    - The question MUST target a dimension NOT already covered in the Grounded Context.
+    - Do NOT repeat or rephrase any blacklisted question.
 
 OUTPUT: Raw JSON only, no markdown.
 {
   "category": "Retail",
-  "id_score": 100,
-  "question": "",
-  "is_auditable": true,
-  "strategy_context": "FreshStop, 800 sq ft grocery in Koramangala Bangalore. Competitor: Reliance Smart. Exclusive deal with 3 local farmers. Only Korean/Japanese snack stockist. Customers: 22-30 tech workers from WeWork/Awfis. Revenue ₹4.5L/month, thin margins on staples."
+  "id_score": 60,
+  "question": "What is the one thing you stock or do that your competitor physically cannot replicate within 6 months?",
+  "is_auditable": false,
+  "strategy_context": "Summary of all known facts"
 }
 `;
+}
 
 export class InterrogatorAgent {
-    private agent: LlmAgent;
-
-    constructor() {
-        this.agent = new LlmAgent({
-            name: 'interrogator_agent',
-            model: 'gemini-2.0-flash-exp',
-            description: 'Strategic Filter with Information Density scoring.',
-            instruction: INSTRUCTION,
-        });
-    }
 
     async evaluateInformationDensity(
-        groundedContext: string,  // always the FULL cumulative context from session
+        groundedContext: string,
         turnCount: number,
         sessionId: string,
     ): Promise<InterrogatorResult> {
 
-        // Hard stop — force audit at turn 3 regardless of score
+        // Hard stop — force audit at turn >= 3
         if (turnCount >= 3) {
             log({ severity: 'INFO', message: 'Interrogator: Turn limit reached. Forcing READY_FOR_AUDIT.', agent_id: 'interrogator_agent', session_id: sessionId });
-            return {
-                category: 'Unknown',
-                question: '',
-                isAuditable: true,
-                strategyContext: groundedContext,
-                idScore: 70,
-                idBreakdown: { specificity: 70, completeness: 70, moat: 70 }
-            };
+            return { category: 'Unknown', question: '', isAuditable: true, strategyContext: groundedContext, idScore: 70, idBreakdown: { specificity: 70, completeness: 70, moat: 70 } };
         }
 
-        const runner = new InMemoryRunner({ agent: this.agent, appName: 'velocity_interrogator' });
-        const runnerSessionId = randomUUID();
-        await runner.sessionService.createSession({
-            appName: 'velocity_interrogator',
-            userId: 'interrogator_user',
-            sessionId: runnerSessionId
+        // Load asked questions from Firestore for blacklist
+        let askedQuestions: string[] = [];
+        try {
+            const snap = await admin.firestore()
+                .collection('discovery_sessions').doc(sessionId)
+                .collection('asked_questions').get();
+            askedQuestions = snap.docs.map(d => d.data().question as string).filter(Boolean);
+        } catch { /* first call */ }
+
+        const agent = new LlmAgent({
+            name: 'interrogator_agent',
+            model: 'gemini-2.0-flash-exp',
+            description: 'Strategic Filter with Information Density scoring.',
+            instruction: buildInstruction(turnCount, askedQuestions),
         });
+
+        const runner = new InMemoryRunner({ agent, appName: 'velocity_interrogator' });
+        const runnerSessionId = randomUUID();
+        await runner.sessionService.createSession({ appName: 'velocity_interrogator', userId: 'interrogator_user', sessionId: runnerSessionId });
 
         const eventStream = runner.runAsync({
             userId: 'interrogator_user',
@@ -82,7 +97,7 @@ export class InterrogatorAgent {
 
         let rawOutput = '';
         for await (const event of eventStream) {
-            if (event.author === this.agent.name || isFinalResponse(event)) {
+            if (event.author === agent.name || isFinalResponse(event)) {
                 const parts = event.content?.parts || [];
                 const text = parts.map((p: { text?: string }) => p.text).filter(Boolean).join('\n');
                 if (text) rawOutput += text;
@@ -95,6 +110,19 @@ export class InterrogatorAgent {
                 const p = JSON.parse(jsonMatch[0]);
                 const idScore = Math.min(100, p.id_score || 0);
                 const isAuditable = p.is_auditable === true || idScore >= 70;
+
+                // Register question in blacklist if not auditable
+                if (!isAuditable && p.question) {
+                    try {
+                        await admin.firestore()
+                            .collection('discovery_sessions').doc(sessionId)
+                            .collection('asked_questions').add({
+                                question: p.question,
+                                turn: turnCount,
+                                timestamp: admin.firestore.FieldValue.serverTimestamp()
+                            });
+                    } catch { /* non-critical */ }
+                }
 
                 const cost = estimateCost('gemini-2.0-flash', groundedContext.length, rawOutput.length);
                 log({ severity: 'INFO', message: 'ID score calculated', agent_id: 'interrogator_agent', session_id: sessionId, id_score: idScore, turn: turnCount, cost_usd: cost.usd });

@@ -7,7 +7,7 @@ import admin from 'firebase-admin';
 import { ChiefStrategyAgent } from './coordinator.js';
 import { DiscoveryAgent } from './agents/discovery.js';
 import { InterrogatorAgent } from './agents/interrogator.js';
-import { saveSession, getSession, deleteSession, incrementTurn } from './services/sessionService.js';
+import { saveSession, getSession, deleteSession, incrementTurn, releaseLock } from './services/sessionService.js';
 import { log, createTraceLogger, logAuditCost, estimateCost } from './services/logger.js';
 import { saveAuditMemory, loadAuditMemory } from './services/memory.js';
 import { generatePDF } from './services/pdfService.js';
@@ -252,11 +252,19 @@ app.post('/analyze/clarify', async (req, res) => {
         const cumulativeContext = `${session.originalContext || session.enrichedContext}\n\n[USER CLARIFICATION]: ${clarification}`;
         const newTurnCount = await incrementTurn(sessionId, cumulativeContext, session.gaps);
 
+        // Lock check — discard duplicate concurrent request
+        if (newTurnCount === -1) {
+            sseWrite(res, { type: 'ERROR', message: 'Request already processing. Please wait.' });
+            res.end();
+            return;
+        }
+
         const ir = await interrogator.evaluateInformationDensity(cumulativeContext, newTurnCount, sessionId);
 
         sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable });
 
         if (!ir.isAuditable) {
+            await releaseLock(sessionId);
             sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown });
             res.end();
             return;
@@ -309,8 +317,9 @@ app.post('/analyze/clarify', async (req, res) => {
         sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions: dimensionScores });
         res.end();
 
-    } catch (error: any) {
+        } catch (error: any) {
         tlog({ severity: 'ERROR', message: 'Clarify endpoint failed', error: error.message, session_id: sessionId });
+        await releaseLock(sessionId);
         sseWrite(res, { type: 'ERROR', message: error.message });
         res.end();
     }

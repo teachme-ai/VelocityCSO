@@ -30,10 +30,17 @@ export async function saveSession(sessionId: string, data: Omit<StrategySession,
 export async function incrementTurn(sessionId: string, enrichedContext: string, gaps: string[]): Promise<number> {
     const ref = db().collection(COLLECTION).doc(sessionId);
     const doc = await ref.get();
+    if (doc.data()?.processing === true) return -1; // locked — discard duplicate
     const current = (doc.data()?.turnCount as number) || 0;
     const next = current + 1;
-    await ref.update({ turnCount: next, enrichedContext, gaps });
+    await ref.update({ turnCount: next, enrichedContext, gaps, processing: true });
     return next;
+}
+
+export async function releaseLock(sessionId: string): Promise<void> {
+    try {
+        await db().collection(COLLECTION).doc(sessionId).update({ processing: false });
+    } catch { /* session may be deleted */ }
 }
 
 export async function getSession(sessionId: string): Promise<StrategySession | null> {
