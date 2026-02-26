@@ -9,6 +9,7 @@ export interface InterrogatorResult {
     isAuditable: boolean;
     strategyContext: string;
     idScore: number;
+    lensUsed: string;
     idBreakdown: { specificity: number; completeness: number; moat: number };
 }
 
@@ -67,7 +68,7 @@ export class InterrogatorAgent {
 
         if (turnCount >= 3) {
             log({ severity: 'INFO', message: 'Interrogator: Turn limit reached. Forcing READY_FOR_AUDIT.', agent_id: 'interrogator_agent', session_id: sessionId });
-            return { category: 'Unknown', question: '', isAuditable: true, strategyContext: groundedContext, idScore: 70, idBreakdown: { specificity: 70, completeness: 70, moat: 70 } };
+            return { category: 'Unknown', question: '', isAuditable: true, strategyContext: groundedContext, idScore: 70, lensUsed: '', idBreakdown: { specificity: 70, completeness: 70, moat: 70 } };
         }
 
         // Load asked questions from Firestore for blacklist
@@ -134,6 +135,7 @@ export class InterrogatorAgent {
                     isAuditable,
                     strategyContext: p.strategy_context || groundedContext,
                     idScore,
+                    lensUsed,
                     idBreakdown: { specificity: idScore, completeness: idScore, moat: idScore }
                 };
             } catch {
@@ -147,6 +149,7 @@ export class InterrogatorAgent {
             isAuditable: false,
             strategyContext: groundedContext,
             idScore: 20,
+            lensUsed: '',
             idBreakdown: { specificity: 20, completeness: 15, moat: 10 }
         };
     }

@@ -263,11 +263,20 @@ app.post('/analyze/clarify', async (req, res) => {
         const { turnCount: newTurnCount, usedLenses } = turnResult;
         const ir = await interrogator.evaluateInformationDensity(cumulativeContext, newTurnCount, sessionId, usedLenses);
 
-        sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable, usedLenses });
+        // Persist the lens the model just used so next turn rotates away from it
+        if (ir.lensUsed) {
+            await incrementTurn(sessionId, cumulativeContext, session.gaps, ir.lensUsed);
+        }
+
+        const updatedLenses = ir.lensUsed && !usedLenses.includes(ir.lensUsed)
+            ? [...usedLenses, ir.lensUsed]
+            : usedLenses;
+
+        sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable, usedLenses: updatedLenses });
 
         if (!ir.isAuditable) {
             await releaseLock(sessionId);
-            sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown, usedLenses });
+            sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown, usedLenses: updatedLenses });
             res.end();
             return;
         }
