@@ -35,6 +35,7 @@ type ClarificationState = {
     findings: string;
     idScore?: number;
     idBreakdown?: { specificity: number; completeness: number; moat: number };
+    usedLenses?: string[];
 };
 
 const LAST_REPORT_KEY = 'vcso_last_report_id';
@@ -156,6 +157,7 @@ export function HeroSection() {
                             findings: event.findings as string,
                             idScore: event.idScore as number,
                             idBreakdown: event.idBreakdown as any,
+                            usedLenses: event.usedLenses as string[] || [],
                         });
                         break;
 
@@ -232,6 +234,7 @@ export function HeroSection() {
                         findings: event.findings as string,
                         idScore: event.idScore as number,
                         idBreakdown: event.idBreakdown as any,
+                        usedLenses: event.usedLenses as string[] || [],
                     });
                 } else if (event.type === 'READY_FOR_AUDIT') {
                     setPhaseLabel(`ID Score ${event.idScore}/100 — Unlocking specialist analysis...`);
@@ -332,7 +335,32 @@ export function HeroSection() {
                             exit={{ opacity: 0 }} transition={{ duration: 0.5 }}
                             className="w-full max-w-2xl"
                         >
-                            <div className="glass-card p-6 flex flex-col gap-5" style={{ borderColor: 'rgba(245,158,11,0.2)', boxShadow: '0 0 40px rgba(245,158,11,0.1)' }}>
+                            <div className="glass-card p-6 flex flex-col gap-5" style={{
+                                borderColor: 'rgba(245,158,11,0.2)',
+                                boxShadow: clarification.idScore && clarification.idScore >= 50
+                                    ? `0 0 ${clarification.idScore * 0.6}px rgba(37,99,235,0.3)`
+                                    : '0 0 40px rgba(245,158,11,0.1)'
+                            }}>
+                                {/* Lens Progress */}
+                                <div className="flex items-center gap-3">
+                                    {[
+                                        { id: 'CUSTOMER/MARKET', label: 'Market', icon: '👥' },
+                                        { id: 'COMPETITOR/MOAT', label: 'Moat', icon: '🛡️' },
+                                        { id: 'OPERATIONS/SUPPLY', label: 'Ops', icon: '⚙️' },
+                                    ].map(lens => {
+                                        const done = clarification.usedLenses?.includes(lens.id);
+                                        return (
+                                            <div key={lens.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-500 ${
+                                                done ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-gray-500 border border-white/10'
+                                            }`}>
+                                                <span>{lens.icon}</span>
+                                                <span>{lens.label}</span>
+                                                {done && <span>✓</span>}
+                                            </div>
+                                        );
+                                    })}
+                                    <span className="ml-auto text-xs text-gray-500">ID: <span className="text-white font-bold">{clarification.idScore || 0}</span>/100</span>
+                                </div>
                                 {/* Discovery Summary */}
                                 <div className="flex items-start gap-3">
                                     <div className="p-2 rounded-xl bg-violet-500/10 flex-shrink-0">
@@ -435,7 +463,11 @@ export function HeroSection() {
                             exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full max-w-2xl"
                         >
                             <AgentOrbs status={agentStatus} />
-                            <p className="text-sm text-gray-400 animate-pulse">{phaseLabel}</p>
+                            <p className="text-sm text-gray-400 animate-pulse">
+                                {phaseLabel === 'Re-grounding context with your clarification...'
+                                    ? 'Context depth reached. Converging specialists for the final audit...'
+                                    : phaseLabel}
+                            </p>
                             <AgentStatus events={sseEvents} visible={sseEvents.length > 0} />
                         </motion.div>
                     )}

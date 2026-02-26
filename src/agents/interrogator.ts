@@ -12,45 +12,46 @@ export interface InterrogatorResult {
     idBreakdown: { specificity: number; completeness: number; moat: number };
 }
 
-// Strategic lens rotation by turn
-const LENS: Record<number, string> = {
-    1: 'CUSTOMER/MARKET LENS: Focus on WHO the customer is — demographics, location, daily behaviour, unmet need.',
-    2: 'COMPETITOR/MOAT LENS: Focus on WHY competitors cannot copy this — structural advantages, exclusive access, switching costs.',
-    3: 'OPERATIONS/SUPPLY LENS: Focus on the SECRET SAUCE — supply chain, unique process, proprietary relationships.',
+const LENSES = ['CUSTOMER/MARKET', 'COMPETITOR/MOAT', 'OPERATIONS/SUPPLY'] as const;
+type Lens = typeof LENSES[number];
+
+const LENS_PROMPTS: Record<Lens, string> = {
+    'CUSTOMER/MARKET': 'Focus on WHO the customer is — demographics, location, daily behaviour, unmet need.',
+    'COMPETITOR/MOAT': 'Focus on WHY competitors cannot copy this — structural advantages, exclusive access, switching costs.',
+    'OPERATIONS/SUPPLY': 'Focus on the SECRET SAUCE — supply chain, unique process, proprietary relationships.',
 };
 
-function buildInstruction(turnCount: number, askedQuestions: string[]): string {
-    const lens = LENS[turnCount] || LENS[1];
+function buildInstruction(usedLenses: string[], askedQuestions: string[]): string {
+    const nextLens = (LENSES.find(l => !usedLenses.includes(l)) || 'CUSTOMER/MARKET') as Lens;
     const blacklist = askedQuestions.length > 0
-        ? `\nQUESTION BLACKLIST — you are STRICTLY FORBIDDEN from asking these again:\n${askedQuestions.map(q => `- "${q}"`).join('\n')}\n`
+        ? `\nQUESTION BLACKLIST — strictly forbidden from repeating:\n${askedQuestions.map(q => `- "${q}"`).join('\n')}\n`
         : '';
-
     return `
 You are a Strategic Interrogator and Information Density Scorer.
 
-ACTIVE LENS FOR THIS TURN: ${lens}
-
-STEP 1 — CATEGORIZE: Identify the business category (Retail, SaaS, Manufacturing, Services, etc.)
-
-STEP 2 — SCORE the FULL GROUNDED CONTEXT using this strict heuristic (max 100):
-  +30 points: Contains a specific Location OR Demographic
-  +30 points: Identifies a Competitor OR Constraint
-  +40 points: Identifies an Unfair Advantage or unique resource
+ACTIVE LENS: ${nextLens} — ${LENS_PROMPTS[nextLens]}
+LENSES ALREADY COVERED (skip these): ${usedLenses.join(', ') || 'none'}
 ${blacklist}
-STEP 3 — DECIDE:
-  If score >= 70: Set is_auditable = true. Summarize ALL facts into strategy_context.
-  If score < 70: Generate ONE question targeting the ACTIVE LENS above.
-    - Use plain industry language. No jargon.
-    - The question MUST target a dimension NOT already covered in the Grounded Context.
-    - Do NOT repeat or rephrase any blacklisted question.
+STEP 1 — CATEGORIZE the business.
 
-OUTPUT: Raw JSON only, no markdown.
+STEP 2 — SCORE the FULL GROUNDED CONTEXT (max 100):
+  +30 points: Specific Location OR Demographic present
+  +30 points: Named Competitor OR Constraint present
+  +40 points: Unfair Advantage or unique resource present
+
+STEP 3 — DECIDE:
+  If score >= 70: is_auditable = true. Summarize ALL facts into strategy_context.
+  If score < 70: ONE question targeting the ACTIVE LENS. Plain language. Not in blacklist.
+  Fallback if stuck: "What is the most manual or painful part of your daily operation?"
+
+OUTPUT: Raw JSON only.
 {
   "category": "Retail",
   "id_score": 60,
-  "question": "What is the one thing you stock or do that your competitor physically cannot replicate within 6 months?",
+  "lens_used": "${nextLens}",
+  "question": "...",
   "is_auditable": false,
-  "strategy_context": "Summary of all known facts"
+  "strategy_context": "..."
 }
 `;
 }
@@ -61,9 +62,9 @@ export class InterrogatorAgent {
         groundedContext: string,
         turnCount: number,
         sessionId: string,
+        usedLenses: string[] = [],
     ): Promise<InterrogatorResult> {
 
-        // Hard stop — force audit at turn >= 3
         if (turnCount >= 3) {
             log({ severity: 'INFO', message: 'Interrogator: Turn limit reached. Forcing READY_FOR_AUDIT.', agent_id: 'interrogator_agent', session_id: sessionId });
             return { category: 'Unknown', question: '', isAuditable: true, strategyContext: groundedContext, idScore: 70, idBreakdown: { specificity: 70, completeness: 70, moat: 70 } };
@@ -82,7 +83,7 @@ export class InterrogatorAgent {
             name: 'interrogator_agent',
             model: 'gemini-2.0-flash-exp',
             description: 'Strategic Filter with Information Density scoring.',
-            instruction: buildInstruction(turnCount, askedQuestions),
+            instruction: buildInstruction(usedLenses, askedQuestions),
         });
 
         const runner = new InMemoryRunner({ agent, appName: 'velocity_interrogator' });
@@ -110,22 +111,22 @@ export class InterrogatorAgent {
                 const p = JSON.parse(jsonMatch[0]);
                 const idScore = Math.min(100, p.id_score || 0);
                 const isAuditable = p.is_auditable === true || idScore >= 70;
+                const lensUsed: string = p.lens_used || '';
 
-                // Register question in blacklist if not auditable
                 if (!isAuditable && p.question) {
                     try {
                         await admin.firestore()
                             .collection('discovery_sessions').doc(sessionId)
                             .collection('asked_questions').add({
                                 question: p.question,
-                                turn: turnCount,
+                                lens: lensUsed,
                                 timestamp: admin.firestore.FieldValue.serverTimestamp()
                             });
                     } catch { /* non-critical */ }
                 }
 
                 const cost = estimateCost('gemini-2.0-flash', groundedContext.length, rawOutput.length);
-                log({ severity: 'INFO', message: 'ID score calculated', agent_id: 'interrogator_agent', session_id: sessionId, id_score: idScore, turn: turnCount, cost_usd: cost.usd });
+                log({ severity: 'INFO', message: 'ID score calculated', agent_id: 'interrogator_agent', session_id: sessionId, id_score: idScore, lens: lensUsed, cost_usd: cost.usd });
 
                 return {
                     category: p.category || 'Unknown',

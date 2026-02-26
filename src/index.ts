@@ -124,6 +124,7 @@ app.post('/analyze', async (req, res) => {
                 discoveryFindings: '',
                 gaps: [ir.question],
                 turnCount: 1,
+                usedLenses: [],
             });
             sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: ir.strategyContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown });
             res.end();
@@ -153,6 +154,7 @@ app.post('/analyze', async (req, res) => {
                 discoveryFindings: discoveryResult.findings,
                 gaps: discoveryResult.gaps,
                 turnCount: 0,
+                usedLenses: [],
             });
             tlog({ severity: 'WARNING', message: 'Clarification required — session saved', session_id: sessionId });
             sseWrite(res, {
@@ -250,22 +252,22 @@ app.post('/analyze/clarify', async (req, res) => {
     try {
         // Cumulative merge: originalContext is locked, enrichedContext grows
         const cumulativeContext = `${session.originalContext || session.enrichedContext}\n\n[USER CLARIFICATION]: ${clarification}`;
-        const newTurnCount = await incrementTurn(sessionId, cumulativeContext, session.gaps);
+        const turnResult = await incrementTurn(sessionId, cumulativeContext, session.gaps);
 
-        // Lock check — discard duplicate concurrent request
-        if (newTurnCount === -1) {
+        if (!turnResult) {
             sseWrite(res, { type: 'ERROR', message: 'Request already processing. Please wait.' });
             res.end();
             return;
         }
 
-        const ir = await interrogator.evaluateInformationDensity(cumulativeContext, newTurnCount, sessionId);
+        const { turnCount: newTurnCount, usedLenses } = turnResult;
+        const ir = await interrogator.evaluateInformationDensity(cumulativeContext, newTurnCount, sessionId, usedLenses);
 
-        sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable });
+        sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable, usedLenses });
 
         if (!ir.isAuditable) {
             await releaseLock(sessionId);
-            sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown });
+            sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown, usedLenses });
             res.end();
             return;
         }

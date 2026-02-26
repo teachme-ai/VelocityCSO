@@ -1,11 +1,12 @@
 import admin from 'firebase-admin';
 
 export interface StrategySession {
-    originalContext: string;      // locked — never overwritten
-    enrichedContext: string;      // grows with each clarification
+    originalContext: string;
+    enrichedContext: string;
     discoveryFindings: string;
     gaps: string[];
     turnCount: number;
+    usedLenses: string[];
     createdAt: number;
     expiresAt: number;
 }
@@ -27,14 +28,18 @@ export async function saveSession(sessionId: string, data: Omit<StrategySession,
     });
 }
 
-export async function incrementTurn(sessionId: string, enrichedContext: string, gaps: string[]): Promise<number> {
+export async function incrementTurn(sessionId: string, enrichedContext: string, gaps: string[], lensUsed?: string): Promise<{ turnCount: number; usedLenses: string[] } | null> {
     const ref = db().collection(COLLECTION).doc(sessionId);
     const doc = await ref.get();
-    if (doc.data()?.processing === true) return -1; // locked — discard duplicate
+    if (doc.data()?.processing === true) return null; // locked — discard duplicate
     const current = (doc.data()?.turnCount as number) || 0;
+    const existingLenses: string[] = (doc.data()?.usedLenses as string[]) || [];
+    const usedLenses = lensUsed && !existingLenses.includes(lensUsed)
+        ? [...existingLenses, lensUsed]
+        : existingLenses;
     const next = current + 1;
-    await ref.update({ turnCount: next, enrichedContext, gaps, processing: true });
-    return next;
+    await ref.update({ turnCount: next, enrichedContext, gaps, processing: true, usedLenses });
+    return { turnCount: next, usedLenses };
 }
 
 export async function releaseLock(sessionId: string): Promise<void> {
