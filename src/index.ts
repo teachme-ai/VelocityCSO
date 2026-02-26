@@ -398,5 +398,5 @@ app.get('/{*path}', (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-    log({ severity: 'INFO', message: `VelocityCSO server started on port ${port}`, agent_id: 'system' });
+    log({ severity: 'INFO', message: `VelocityCSO server started on port ${port} [v2.1.1]`, agent_id: 'system' });
 });
