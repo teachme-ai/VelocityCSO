@@ -93,35 +93,38 @@ app.post('/analyze', async (req, res) => {
     tlog({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, phase: 'discovery' });
 
     try {
-        // ── Phase 0: Interrogator (Adaptive Discovery) ────────────────
+        // ── Phase 0: Interrogator (ID Scoring) ───────────────────────
         sseWrite(res, { type: 'INTERROGATOR_START' });
-        const interrogatorResult = await interrogator.interrogate(business_context, sessionId);
-        
+        const ir = await interrogator.evaluateInformationDensity(business_context, sessionId);
+
         sseWrite(res, {
             type: 'INTERROGATOR_RESPONSE',
-            category: interrogatorResult.category,
-            questions: interrogatorResult.questions,
-            signalStrength: interrogatorResult.signalStrength,
-            isComplete: interrogatorResult.isComplete
+            category: ir.category,
+            idScore: ir.idScore,
+            idBreakdown: ir.idBreakdown,
+            isAuditable: ir.isAuditable,
         });
 
-        if (!interrogatorResult.isComplete) {
+        if (!ir.isAuditable) {
             await saveSession(sessionId, {
-                enrichedContext: interrogatorResult.strategyContext,
+                enrichedContext: ir.strategyContext,
                 discoveryFindings: '',
-                gaps: interrogatorResult.questions,
+                gaps: [ir.question],
             });
-            tlog({ severity: 'INFO', message: 'Interrogator needs more data', session_id: sessionId });
             sseWrite(res, {
                 type: 'NEED_CLARIFICATION',
                 sessionId,
-                summary: `Business Category: ${interrogatorResult.category}`,
-                gap: interrogatorResult.questions[0],
-                findings: interrogatorResult.strategyContext,
+                summary: `${ir.category} · ID Score: ${ir.idScore}/100`,
+                gap: ir.question,
+                findings: ir.strategyContext,
+                idScore: ir.idScore,
+                idBreakdown: ir.idBreakdown,
             });
             res.end();
             return;
         }
+
+        sseWrite(res, { type: 'READY_FOR_AUDIT', idScore: ir.idScore, category: ir.category });
 
         // ── Phase 0: Discovery ────────────────────────────────────────────
         sseWrite(res, { type: 'DISCOVERY_START' });
@@ -237,11 +240,45 @@ app.post('/analyze/clarify', async (req, res) => {
     tlog({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId });
 
     try {
-        const regroundedContext = `
-${session.enrichedContext}
+        // Re-run ID scoring with the new clarification
+        const conversationHistory = [
+            `ORIGINAL: ${session.enrichedContext}`,
+            `CLARIFICATION: ${clarification}`
+        ];
+        const ir = await interrogator.evaluateInformationDensity(clarification, sessionId, conversationHistory);
 
---- DISCOVERY INTELLIGENCE ---
-${session.discoveryFindings}
+        sseWrite(res, {
+            type: 'INTERROGATOR_RESPONSE',
+            category: ir.category,
+            idScore: ir.idScore,
+            idBreakdown: ir.idBreakdown,
+            isAuditable: ir.isAuditable,
+        });
+
+        // Still not auditable — ask another deepening question
+        if (!ir.isAuditable) {
+            await saveSession(sessionId, {
+                enrichedContext: ir.strategyContext,
+                discoveryFindings: session.discoveryFindings,
+                gaps: [ir.question],
+            });
+            sseWrite(res, {
+                type: 'NEED_CLARIFICATION',
+                sessionId,
+                summary: `${ir.category} · ID Score: ${ir.idScore}/100`,
+                gap: ir.question,
+                findings: ir.strategyContext,
+                idScore: ir.idScore,
+                idBreakdown: ir.idBreakdown,
+            });
+            res.end();
+            return;
+        }
+
+        sseWrite(res, { type: 'READY_FOR_AUDIT', idScore: ir.idScore, category: ir.category });
+
+        const regroundedContext = `
+${ir.strategyContext}
 
 --- USER CLARIFICATION ---
 ${clarification}

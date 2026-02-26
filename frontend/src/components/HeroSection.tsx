@@ -33,6 +33,8 @@ type ClarificationState = {
     summary: string;
     gap: string;
     findings: string;
+    idScore?: number;
+    idBreakdown?: { specificity: number; completeness: number; moat: number };
 };
 
 const LAST_REPORT_KEY = 'vcso_last_report_id';
@@ -126,7 +128,12 @@ export function HeroSection() {
 
                     case 'INTERROGATOR_RESPONSE':
                         setPhase('evaluating');
-                        setPhaseLabel(`${event.category} detected - Signal: ${event.signalStrength}%`);
+                        setPhaseLabel(`${event.category} · ID Score: ${event.idScore}/100`);
+                        break;
+
+                    case 'READY_FOR_AUDIT':
+                        setPhase('analyzing');
+                        setPhaseLabel(`ID Score ${event.idScore}/100 — Unlocking specialist analysis...`);
                         break;
 
                     case 'DISCOVERY_START':
@@ -146,6 +153,8 @@ export function HeroSection() {
                             summary: event.summary as string,
                             gap: event.gap as string,
                             findings: event.findings as string,
+                            idScore: event.idScore as number,
+                            idBreakdown: event.idBreakdown as any,
                         });
                         break;
 
@@ -329,9 +338,33 @@ export function HeroSection() {
                                     <div className="p-2 rounded-xl bg-amber-500/10 flex-shrink-0">
                                         <AlertTriangle className="w-4 h-4 text-amber-400" />
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide mb-1">Critical Gap Detected</p>
+                                    <div className="flex-1">
+                                        <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide mb-1">Deepening Question</p>
                                         <p className="text-sm text-amber-200/80 leading-relaxed">{clarification.gap}</p>
+                                        {/* ID Score Breakdown */}
+                                        {clarification.idBreakdown && (
+                                            <div className="mt-3 flex flex-col gap-1.5">
+                                                {[
+                                                    { label: 'Specificity', value: clarification.idBreakdown.specificity, color: 'bg-violet-500' },
+                                                    { label: 'Completeness', value: clarification.idBreakdown.completeness, color: 'bg-emerald-500' },
+                                                    { label: 'Moat Potential', value: clarification.idBreakdown.moat, color: 'bg-amber-500' },
+                                                ].map(({ label, value, color }) => (
+                                                    <div key={label} className="flex items-center gap-2">
+                                                        <span className="text-xs text-gray-500 w-24 shrink-0">{label}</span>
+                                                        <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+                                                            <motion.div
+                                                                initial={{ width: 0 }}
+                                                                animate={{ width: `${value}%` }}
+                                                                transition={{ duration: 0.8, ease: 'easeOut' }}
+                                                                className={`h-full ${color}`}
+                                                            />
+                                                        </div>
+                                                        <span className="text-xs text-gray-500 w-8 text-right">{value}</span>
+                                                    </div>
+                                                ))}
+                                                <p className="text-xs text-gray-500 mt-1">ID Score: <span className="text-white font-semibold">{clarification.idScore}/100</span> — need 70 to unlock analysis</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
