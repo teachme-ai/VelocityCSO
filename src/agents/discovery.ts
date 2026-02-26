@@ -22,7 +22,6 @@ export class DiscoveryAgent {
             name: 'discovery_agent',
             model: 'gemini-2.0-flash',
             description: 'Rapid business intelligence gatherer with 24-month lookback capability.',
-            tools: ['code_execution' as any],
             instruction: `
 You are a Deep Research Intelligence Agent. Analyse the business described by the user.
 
