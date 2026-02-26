@@ -7,7 +7,7 @@ import admin from 'firebase-admin';
 import { ChiefStrategyAgent } from './coordinator.js';
 import { DiscoveryAgent } from './agents/discovery.js';
 import { InterrogatorAgent } from './agents/interrogator.js';
-import { saveSession, getSession, deleteSession } from './services/sessionService.js';
+import { saveSession, getSession, deleteSession, incrementTurn } from './services/sessionService.js';
 import { log, createTraceLogger, logAuditCost, estimateCost } from './services/logger.js';
 import { saveAuditMemory, loadAuditMemory } from './services/memory.js';
 import { generatePDF } from './services/pdfService.js';
@@ -113,31 +113,19 @@ app.post('/analyze', async (req, res) => {
     try {
         // ── Phase 0: Interrogator (ID Scoring) ───────────────────────
         sseWrite(res, { type: 'INTERROGATOR_START' });
-        const ir = await interrogator.evaluateInformationDensity(business_context, sessionId);
+        const ir = await interrogator.evaluateInformationDensity(business_context, 0, sessionId);
 
-        sseWrite(res, {
-            type: 'INTERROGATOR_RESPONSE',
-            category: ir.category,
-            idScore: ir.idScore,
-            idBreakdown: ir.idBreakdown,
-            isAuditable: ir.isAuditable,
-        });
+        sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable });
 
         if (!ir.isAuditable) {
             await saveSession(sessionId, {
-                enrichedContext: ir.strategyContext,
+                originalContext: business_context,
+                enrichedContext: business_context,
                 discoveryFindings: '',
                 gaps: [ir.question],
+                turnCount: 1,
             });
-            sseWrite(res, {
-                type: 'NEED_CLARIFICATION',
-                sessionId,
-                summary: `${ir.category} · ID Score: ${ir.idScore}/100`,
-                gap: ir.question,
-                findings: ir.strategyContext,
-                idScore: ir.idScore,
-                idBreakdown: ir.idBreakdown,
-            });
+            sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: ir.strategyContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown });
             res.end();
             return;
         }
@@ -160,9 +148,11 @@ app.post('/analyze', async (req, res) => {
 
         if (!proceed && gap) {
             await saveSession(sessionId, {
+                originalContext: business_context,
                 enrichedContext: business_context,
                 discoveryFindings: discoveryResult.findings,
                 gaps: discoveryResult.gaps,
+                turnCount: 0,
             });
             tlog({ severity: 'WARNING', message: 'Clarification required — session saved', session_id: sessionId });
             sseWrite(res, {
@@ -258,49 +248,23 @@ app.post('/analyze/clarify', async (req, res) => {
     tlog({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId });
 
     try {
-        // Re-run ID scoring with the new clarification
-        const conversationHistory = [
-            `ORIGINAL: ${session.enrichedContext}`,
-            `CLARIFICATION: ${clarification}`
-        ];
-        const ir = await interrogator.evaluateInformationDensity(clarification, sessionId, conversationHistory);
+        // Cumulative merge: originalContext is locked, enrichedContext grows
+        const cumulativeContext = `${session.originalContext || session.enrichedContext}\n\n[USER CLARIFICATION]: ${clarification}`;
+        const newTurnCount = await incrementTurn(sessionId, cumulativeContext, session.gaps);
 
-        sseWrite(res, {
-            type: 'INTERROGATOR_RESPONSE',
-            category: ir.category,
-            idScore: ir.idScore,
-            idBreakdown: ir.idBreakdown,
-            isAuditable: ir.isAuditable,
-        });
+        const ir = await interrogator.evaluateInformationDensity(cumulativeContext, newTurnCount, sessionId);
 
-        // Still not auditable — ask another deepening question
+        sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable });
+
         if (!ir.isAuditable) {
-            await saveSession(sessionId, {
-                enrichedContext: ir.strategyContext,
-                discoveryFindings: session.discoveryFindings,
-                gaps: [ir.question],
-            });
-            sseWrite(res, {
-                type: 'NEED_CLARIFICATION',
-                sessionId,
-                summary: `${ir.category} · ID Score: ${ir.idScore}/100`,
-                gap: ir.question,
-                findings: ir.strategyContext,
-                idScore: ir.idScore,
-                idBreakdown: ir.idBreakdown,
-            });
+            sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown });
             res.end();
             return;
         }
 
         sseWrite(res, { type: 'READY_FOR_AUDIT', idScore: ir.idScore, category: ir.category });
 
-        const regroundedContext = `
-${ir.strategyContext}
-
---- USER CLARIFICATION ---
-${clarification}
-        `.trim();
+        const regroundedContext = cumulativeContext;
 
         const finalContext = stress_test
             ? regroundedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST enabled. Score conservatively.'

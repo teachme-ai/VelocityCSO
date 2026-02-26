@@ -1,9 +1,11 @@
 import admin from 'firebase-admin';
 
 export interface StrategySession {
-    enrichedContext: string;
+    originalContext: string;      // locked — never overwritten
+    enrichedContext: string;      // grows with each clarification
     discoveryFindings: string;
     gaps: string[];
+    turnCount: number;
     createdAt: number;
     expiresAt: number;
 }
@@ -23,6 +25,15 @@ export async function saveSession(sessionId: string, data: Omit<StrategySession,
         createdAt: now,
         expiresAt: now + SESSION_TTL_MS,
     });
+}
+
+export async function incrementTurn(sessionId: string, enrichedContext: string, gaps: string[]): Promise<number> {
+    const ref = db().collection(COLLECTION).doc(sessionId);
+    const doc = await ref.get();
+    const current = (doc.data()?.turnCount as number) || 0;
+    const next = current + 1;
+    await ref.update({ turnCount: next, enrichedContext, gaps });
+    return next;
 }
 
 export async function getSession(sessionId: string): Promise<StrategySession | null> {
