@@ -61,12 +61,20 @@ function extractKillerMove(report: string): string {
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-export function generatePDF(memory: AuditMemory): Buffer {
-    const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ size: 'A4', margin: 0, bufferPages: true });
-    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+export function generatePDF(memory: AuditMemory): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        const doc = new PDFDocument({ size: 'A4', margin: 0, bufferPages: true });
+        doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+        _buildPDF(doc, memory);
+    });
+}
 
-    const orgName = extractOrgName(memory.businessContext);
+function _buildPDF(doc: PDFKit.PDFDocument, memory: AuditMemory): void {
+
+    const orgName = extractOrgName(memory.businessContext || '');
     const killerMove = extractKillerMove(memory.report);
     const overallScore = Object.values(memory.dimensionScores).length
         ? Math.round(Object.values(memory.dimensionScores).reduce((a, b) => a + b, 0) / Object.values(memory.dimensionScores).length)
@@ -234,5 +242,4 @@ export function generatePDF(memory: AuditMemory): Buffer {
     drawFooter(doc, page);
 
     doc.end();
-    return Buffer.concat(chunks);
 }

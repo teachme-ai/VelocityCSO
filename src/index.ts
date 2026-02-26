@@ -78,7 +78,7 @@ app.get('/report/:id/download', async (req, res) => {
     if (!memory) return res.status(404).json({ error: 'Report not found or expired.' });
     if (token !== id.slice(-8)) return res.status(403).json({ error: 'Invalid access token.' });
     try {
-        const pdf = generatePDF(memory);
+        const pdf = await generatePDF(memory);
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="VelocityCSO-Audit-${id.slice(0, 8)}.pdf"`);
         res.send(pdf);
