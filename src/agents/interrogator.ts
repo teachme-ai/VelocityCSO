@@ -17,33 +17,22 @@ You are a Strategic Interrogator and Information Density Scorer.
 
 STEP 1 — CATEGORIZE: Identify the business category (Retail, SaaS, Manufacturing, Services, etc.)
 
-STEP 2 — SCORE the "Fact Pool" using this formula:
-  ID = (0.4 × S) + (0.35 × C) + (0.25 × M)
-  
-  S = Specificity (0-100): Does the input contain proper nouns, numbers, named competitors, locations?
-    - "Students at Mysore University" = 80. "People nearby" = 15.
-  C = Completeness (0-100): How many of the 15 strategic dimensions have enough data?
-    - Each dimension covered = +6.67 points
-  M = Moat Potential (0-100): Does it identify a unique resource, friction point, or defensible advantage?
-    - Named unique asset or friction = 70+. Generic description = 20.
+STEP 2 — SCORE using this strict heuristic (max 100):
+  +30 points: Input contains a specific Location OR Demographic (e.g. "Mysore University", "Gen Z students", "near a hospital")
+  +30 points: Input identifies a Competitor OR Constraint (e.g. "Big Bazaar", "high CAPEX", "limited parking")
+  +40 points: Input identifies an Unfair Advantage (e.g. "relationship with hostel wardens", "exclusive supplier deal", "only halal store in area")
 
 STEP 3 — DECIDE:
-  If ID < 70: Generate ONE "Deepening" question targeting the weakest dimension. Use industry language only.
-    - Retail: "footfall catchment", "branded vs local margins", "shrinkage rate"
-    - SaaS: "monthly churn", "expansion revenue", "sales cycle"
-    - Services: "utilization rate", "referral ratio", "repeat booking rate"
-  If ID >= 70: Set is_auditable = true. Summarize all facts into strategy_context.
+  If score < 70: Generate ONE "Deep Dive" question targeting the missing highest-value dimension. Use plain industry language only.
+  If score >= 70: Set is_auditable = true. Summarize all facts into strategy_context.
 
 OUTPUT: Raw JSON only, no markdown.
 {
   "category": "Retail",
-  "id_score": 45,
-  "specificity": 60,
-  "completeness": 35,
-  "moat": 40,
-  "question": "How many students pass your store daily, and what's your average basket size vs the branded competitor?",
+  "id_score": 30,
+  "question": "Who are your top 2 competitors nearby, and what do you offer that they don't?",
   "is_auditable": false,
-  "strategy_context": "Compact summary of all known facts for specialist agents"
+  "strategy_context": "Compact summary of all known facts"
 }
 `;
 
@@ -64,8 +53,9 @@ export class InterrogatorAgent {
         sessionId: string,
         conversationHistory: string[] = []
     ): Promise<InterrogatorResult> {
-        // Load existing fact pool from Firestore
+        // Load existing fact pool + count turns from Firestore
         let factPool = '';
+        let turnCount = 0;
         try {
             const snap = await admin.firestore()
                 .collection('discovery_sessions')
@@ -73,8 +63,31 @@ export class InterrogatorAgent {
                 .collection('responses')
                 .orderBy('timestamp')
                 .get();
+            turnCount = snap.size;
             factPool = snap.docs.map(d => d.data().user_input).join('\n');
-        } catch { /* first call — no history yet */ }
+        } catch { /* first call */ }
+
+        // Turn limit: force audit after 3 turns regardless of score
+        if (turnCount >= 3) {
+            log({ severity: 'INFO', message: 'Interrogator: Sufficient context reached via turn limit. Initializing specialists.', agent_id: 'interrogator_agent', session_id: sessionId });
+            const strategyContext = [factPool, userInput].filter(Boolean).join('\n');
+            await admin.firestore().collection('discovery_sessions').doc(sessionId)
+                .collection('responses').add({
+                    user_input: userInput,
+                    id_score: 70,
+                    is_auditable: true,
+                    forced: true,
+                    timestamp: admin.firestore.FieldValue.serverTimestamp()
+                });
+            return {
+                category: 'Unknown',
+                question: '',
+                isAuditable: true,
+                strategyContext,
+                idScore: 70,
+                idBreakdown: { specificity: 70, completeness: 70, moat: 70 }
+            };
+        }
 
         const runner = new InMemoryRunner({ agent: this.agent, appName: 'velocity_interrogator' });
         const runnerSessionId = randomUUID();
@@ -109,7 +122,8 @@ export class InterrogatorAgent {
         if (jsonMatch) {
             try {
                 const p = JSON.parse(jsonMatch[0]);
-                const idScore = Math.round((0.4 * (p.specificity || 0)) + (0.35 * (p.completeness || 0)) + (0.25 * (p.moat || 0)));
+                const idScore = Math.min(100, p.id_score || 0);
+                const isAuditable = p.is_auditable === true || idScore >= 70;
 
                 // Persist to Firestore
                 await admin.firestore()
@@ -119,7 +133,7 @@ export class InterrogatorAgent {
                     .add({
                         user_input: userInput,
                         id_score: idScore,
-                        is_auditable: p.is_auditable,
+                        is_auditable: isAuditable,
                         timestamp: admin.firestore.FieldValue.serverTimestamp()
                     });
 
@@ -130,21 +144,17 @@ export class InterrogatorAgent {
                     agent_id: 'interrogator_agent',
                     session_id: sessionId,
                     id_score: idScore,
-                    is_auditable: p.is_auditable,
+                    is_auditable: isAuditable,
                     cost_usd: cost.usd
                 });
 
                 return {
                     category: p.category || 'Unknown',
                     question: p.question || '',
-                    isAuditable: p.is_auditable === true || idScore >= 70,
+                    isAuditable,
                     strategyContext: p.strategy_context || userInput,
                     idScore,
-                    idBreakdown: {
-                        specificity: p.specificity || 0,
-                        completeness: p.completeness || 0,
-                        moat: p.moat || 0
-                    }
+                    idBreakdown: { specificity: idScore, completeness: idScore, moat: idScore }
                 };
             } catch (e) {
                 log({ severity: 'WARNING', message: 'Interrogator JSON parse failed', session_id: sessionId });
