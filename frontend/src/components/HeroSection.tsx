@@ -169,16 +169,11 @@ export function HeroSection() {
                     case 'REPORT_COMPLETE': {
                         const reportId = event.id as string;
                         const dims = event.dimensions as Record<string, number> | undefined;
-                        let parsed: ReportData;
                         const raw = event.report as string;
-                        try {
-                            parsed = typeof raw === 'string'
-                                ? JSON.parse(raw.replace(/```json/g, '').replace(/```/g, '').trim())
-                                : raw as ReportData;
-                        } catch {
-                            parsed = { analysis_markdown: raw };
-                        }
-                        if (dims) parsed.dimensions = dims;
+                        const parsed: ReportData = {
+                            analysis_markdown: raw,
+                            dimensions: dims || {},
+                        };
                         if (reportId) {
                             setLastReportId(reportId);
                             setCurrentReportId(reportId);
@@ -241,16 +236,14 @@ export function HeroSection() {
                 } else if (event.type === 'ANALYSIS_START') {
                     setPhaseLabel('Running 15-dimension diagnostic...');
                 } else if (event.type === 'REPORT_COMPLETE') {
-                    let parsed: ReportData;
                     const raw = event.report as string;
-                    try {
-                        parsed = typeof raw === 'string'
-                            ? JSON.parse(raw.replace(/```json/g, '').replace(/```/g, '').trim())
-                            : raw as ReportData;
-                    } catch {
-                        parsed = { analysis_markdown: raw };
+                    const dims = event.dimensions as Record<string, number> | undefined;
+                    const reportId = event.id as string;
+                    setResult({ analysis_markdown: raw, dimensions: dims || {} });
+                    if (reportId) {
+                        setCurrentReportId(reportId);
+                        setCurrentReportToken((event.token as string) || reportId.slice(-8));
                     }
-                    setResult(parsed);
                     setPhase('done');
                 } else if (event.type === 'ERROR') {
                     setError((event.message as string) || 'Clarification failed.');
@@ -529,9 +522,22 @@ export function HeroSection() {
                                 )}
                                 <div>
                                     <h3 className="text-sm font-semibold text-emerald-400 mb-3 tracking-wide uppercase">Executive Synthesis</h3>
-                                    <pre className="whitespace-pre-wrap font-sans text-sm text-gray-300 leading-relaxed">
-                                        {result.analysis_markdown || JSON.stringify(result, null, 2)}
-                                    </pre>
+                                    <div className="text-sm text-gray-300 leading-relaxed space-y-3 prose prose-invert prose-sm max-w-none">
+                                        {(result.analysis_markdown || '')
+                                            .replace(/## Dimension Scores[\s\S]*?(?=\n## |$)/i, '')
+                                            .replace(/^(TAM Viability|Target Precision|Trend Adoption|Competitive Defensibility|Model Innovation|Flywheel Potential|Pricing Power|CAC\/LTV Ratio|Market Entry Speed|Execution Speed|Scalability|ESG Posture|ROI Projection|Risk Tolerance|Capital Efficiency)[^\n]*$/gm, '')
+                                            .replace(/\n{3,}/g, '\n\n')
+                                            .trim()
+                                            .split('\n')
+                                            .map((line, i) => {
+                                                if (/^#{1,2}\s/.test(line)) return <h3 key={i} className="text-base font-bold text-white mt-4 mb-1 border-l-2 border-violet-500 pl-3">{line.replace(/^#+\s*/, '')}</h3>;
+                                                if (/^###\s/.test(line)) return <h4 key={i} className="text-sm font-semibold text-violet-300 mt-3 mb-1">{line.replace(/^#+\s*/, '')}</h4>;
+                                                if (/^[-*]\s/.test(line)) return <p key={i} className="flex gap-2 text-gray-300"><span className="text-violet-400 shrink-0">•</span><span dangerouslySetInnerHTML={{__html: line.replace(/^[-*]\s*/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}} /></p>;
+                                                if (line.trim() === '') return <div key={i} className="h-2" />;
+                                                return <p key={i} className="text-gray-300" dangerouslySetInnerHTML={{__html: line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}} />;
+                                            })
+                                        }
+                                    </div>
                                 </div>
                             </div>
                         </div>

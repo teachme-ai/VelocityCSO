@@ -189,6 +189,7 @@ app.post('/analyze', async (req, res) => {
         const report = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
         const dimensionScores = extractDimensions(report);
+        tlog({ severity: 'INFO', message: 'Dimension scores extracted', session_id: sessionId, dimension_count: Object.keys(dimensionScores).length, scores: dimensionScores });
 
         // Save to Firestore with structured memory
         let docId = `local-${randomUUID()}`;
@@ -302,8 +303,10 @@ app.post('/analyze/clarify', async (req, res) => {
         const report = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
         const dimensionScores = extractDimensions(report);
+        tlog({ severity: 'INFO', message: 'Dimension scores extracted (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensionScores).length, scores: dimensionScores });
 
         let docId = `local-${randomUUID()}`;
+
         try {
             const fingerprint = session.enrichedContext.trim().slice(0, 80).toLowerCase();
             const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
