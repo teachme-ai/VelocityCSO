@@ -87,7 +87,15 @@ export function HeroSection() {
     const [stressResult, setStressResult] = useState<StressResult | null>(null);
     const [currentReportId, setCurrentReportId] = useState<string | null>(null);
     const [currentReportToken, setCurrentReportToken] = useState<string | null>(null);
+    const [showScorecard, setShowScorecard] = useState(false);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (stressResult) {
+            console.log('[UI] Stress test result received — showing scorecard with stressed dimensions', { scenario: stressResult.scenarioId, stressedScores: stressResult.stressedScores });
+            setShowScorecard(true);
+        }
+    }, [stressResult]);
 
     // Restore last report ID from localStorage on mount
     useEffect(() => {
@@ -500,18 +508,26 @@ export function HeroSection() {
                         {/* Body: Left Sidebar + Right Report */}
                         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-                            {/* LEFT SIDEBAR — Scorecard + Stress Test */}
-                            <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.07)', overflowY: 'auto', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-                                <DiagnosticScorecard
-                                    dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
-                                    originalDimensions={stressResult ? result.dimensions : undefined}
-                                    onAreaClick={() => {}}
-                                />
+                            {/* LEFT SIDEBAR — Scorecard (hidden until stress test) + Stress Test */}
+                            <div style={{ width: showScorecard ? 320 : 140, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.07)', overflowY: 'auto', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 20, transition: 'width 0.3s ease' }}>
+                                {showScorecard && (
+                                    <>
+                                        <DiagnosticScorecard
+                                            dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
+                                            originalDimensions={stressResult ? result.dimensions : undefined}
+                                            onAreaClick={() => {}}
+                                        />
+                                        <div style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>Stress Test Results</div>
+                                    </>
+                                )}
                                 {currentReportId && (
                                     <StressTestPanel
                                         reportId={currentReportId}
                                         originalScores={result.dimensions || {}}
-                                        onStressResult={(r) => setStressResult(r)}
+                                        onStressResult={(r) => {
+                                            console.log('[UI] Stress test clicked \u2014 expanding scorecard', { scenario: r.scenarioId });
+                                            setStressResult(r);
+                                        }}
                                         apiBase={import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : ''}
                                     />
                                 )}
@@ -530,20 +546,26 @@ export function HeroSection() {
                                 )}
                                 <p style={{ fontSize: 11, fontWeight: 700, color: '#34d399', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 16 }}>Executive Synthesis</p>
                                 <div style={{ fontSize: 14, color: '#d1d5db', lineHeight: 1.75 }}>
-                                    {(result.analysis_markdown || '')
-                                        .replace(/^## Dimension Scores.*$/im, '')
-                                        .replace(/^(TAM Viability|Target Precision|Trend Adoption|Competitive Defensibility|Model Innovation|Flywheel Potential|Pricing Power|CAC\/LTV Ratio|Market Entry Speed|Execution Speed|Scalability|ESG Posture|ROI Projection|Risk Tolerance|Capital Efficiency)[^\n]*$/gm, '')
-                                        .replace(/\n{3,}/g, '\n\n')
-                                        .trim()
-                                        .split('\n')
-                                        .map((line, i) => {
-                                            if (/^#{1,2}\s/.test(line)) return <h3 key={i} style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '24px 0 8px', paddingLeft: 12, borderLeft: '3px solid #7c3aed' }}>{line.replace(/^#+\s*/, '')}</h3>;
-                                            if (/^###\s/.test(line)) return <h4 key={i} style={{ fontSize: 14, fontWeight: 600, color: '#c4b5fd', margin: '16px 0 6px' }}>{line.replace(/^#+\s*/, '')}</h4>;
-                                            if (/^[-*]\s/.test(line)) return <p key={i} style={{ display: 'flex', gap: 8, margin: '4px 0' }}><span style={{ color: '#7c3aed', flexShrink: 0 }}>•</span><span dangerouslySetInnerHTML={{__html: line.replace(/^[-*]\s*/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}} /></p>;
+                                    {(() => {
+                                        const text = result.analysis_markdown || '';
+                                        const cleaned = text
+                                            .replace(/\{[\s\S]*?\}/g, '')
+                                            .replace(/^## Dimension Scores.*$/im, '')
+                                            .replace(/^(TAM Viability|Target Precision|Trend Adoption|Competitive Defensibility|Model Innovation|Flywheel Potential|Pricing Power|CAC\/LTV Ratio|Market Entry Speed|Execution Speed|Scalability|ESG Posture|ROI Projection|Risk Tolerance|Capital Efficiency)[^\n]*$/gm, '')
+                                            .replace(/\*\*(.+?)\*\*/g, '$1')
+                                            .replace(/^#+\s*/gm, '')
+                                            .replace(/^[-*]\s*/gm, '• ')
+                                            .replace(/\n{3,}/g, '\n\n')
+                                            .trim();
+                                        
+                                        console.log('[UI] Report text cleaned — JSON and markdown removed', { originalLength: text.length, cleanedLength: cleaned.length });
+                                        
+                                        return cleaned.split('\n').map((line, i) => {
                                             if (line.trim() === '') return <div key={i} style={{ height: 8 }} />;
-                                            return <p key={i} style={{ margin: '4px 0' }} dangerouslySetInnerHTML={{__html: line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}} />;
-                                        })
-                                    }
+                                            if (line.startsWith('• ')) return <p key={i} style={{ display: 'flex', gap: 8, margin: '6px 0' }}><span style={{ color: '#7c3aed', flexShrink: 0 }}>•</span><span>{line.slice(2)}</span></p>;
+                                            return <p key={i} style={{ margin: '6px 0' }}>{line}</p>;
+                                        });
+                                    })()}
                                 </div>
                             </div>
                         </div>
