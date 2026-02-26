@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import admin from 'firebase-admin';
 import { ChiefStrategyAgent } from './coordinator.js';
 import { DiscoveryAgent } from './agents/discovery.js';
+import { InterrogatorAgent } from './agents/interrogator.js';
 import { saveSession, getSession, deleteSession } from './services/sessionService.js';
 import { log, createTraceLogger, logAuditCost, estimateCost } from './services/logger.js';
 import { saveAuditMemory, loadAuditMemory } from './services/memory.js';
@@ -26,6 +27,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 const cso = new ChiefStrategyAgent();
 const discovery = new DiscoveryAgent();
+const interrogator = new InterrogatorAgent();
 
 // ─── Helper: SSE Sender ──────────────────────────────────────────────────────
 function sseWrite(res: express.Response, data: object) {
@@ -91,6 +93,36 @@ app.post('/analyze', async (req, res) => {
     tlog({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, phase: 'discovery' });
 
     try {
+        // ── Phase 0: Interrogator (Adaptive Discovery) ────────────────
+        sseWrite(res, { type: 'INTERROGATOR_START' });
+        const interrogatorResult = await interrogator.interrogate(business_context, sessionId);
+        
+        sseWrite(res, {
+            type: 'INTERROGATOR_RESPONSE',
+            category: interrogatorResult.category,
+            questions: interrogatorResult.questions,
+            signalStrength: interrogatorResult.signalStrength,
+            isComplete: interrogatorResult.isComplete
+        });
+
+        if (!interrogatorResult.isComplete) {
+            await saveSession(sessionId, {
+                enrichedContext: interrogatorResult.strategyContext,
+                discoveryFindings: '',
+                gaps: interrogatorResult.questions,
+            });
+            tlog({ severity: 'INFO', message: 'Interrogator needs more data', session_id: sessionId });
+            sseWrite(res, {
+                type: 'NEED_CLARIFICATION',
+                sessionId,
+                summary: `Business Category: ${interrogatorResult.category}`,
+                gap: interrogatorResult.questions[0],
+                findings: interrogatorResult.strategyContext,
+            });
+            res.end();
+            return;
+        }
+
         // ── Phase 0: Discovery ────────────────────────────────────────────
         sseWrite(res, { type: 'DISCOVERY_START' });
         const discoveryResult = await discovery.discover(business_context, sessionId);

@@ -96,8 +96,8 @@ export function HeroSection() {
 
     // Maps ADK status to AgentOrbs status prop
     const agentStatus = phase === 'analyzing' ? 'cso'
-        : phase === 'discovery' ? 'market'
-            : phase === 'evaluating' ? 'finance'
+        : phase === 'discovery' ? 'interrogator'
+            : phase === 'evaluating' ? 'market'
                 : 'idle';
 
     const handleAudit = async (e: React.FormEvent) => {
@@ -119,6 +119,16 @@ export function HeroSection() {
             for await (const event of readSSE(response)) {
                 addEvent(event as StatusEvent);
                 switch (event.type) {
+                    case 'INTERROGATOR_START':
+                        setPhase('discovery');
+                        setPhaseLabel('Analyzing business context...');
+                        break;
+
+                    case 'INTERROGATOR_RESPONSE':
+                        setPhase('evaluating');
+                        setPhaseLabel(`${event.category} detected - Signal: ${event.signalStrength}%`);
+                        break;
+
                     case 'DISCOVERY_START':
                         setPhase('discovery');
                         setPhaseLabel('Running deep intelligence sweep...');
@@ -300,12 +310,17 @@ export function HeroSection() {
                             <div className="glass-card p-6 flex flex-col gap-5" style={{ borderColor: 'rgba(245,158,11,0.2)', boxShadow: '0 0 40px rgba(245,158,11,0.1)' }}>
                                 {/* Discovery Summary */}
                                 <div className="flex items-start gap-3">
-                                    <div className="p-2 rounded-xl bg-emerald-500/10 flex-shrink-0">
-                                        <Search className="w-4 h-4 text-emerald-400" />
+                                    <div className="p-2 rounded-xl bg-violet-500/10 flex-shrink-0">
+                                        <Search className="w-4 h-4 text-violet-400" />
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wide mb-1">Intelligence Found</p>
+                                    <div className="flex-1">
+                                        <p className="text-xs font-semibold text-violet-400 uppercase tracking-wide mb-1">Strategic Context</p>
                                         <p className="text-sm text-gray-300 leading-relaxed">{clarification.summary}</p>
+                                        {clarification.findings && (
+                                            <div className="mt-2 p-2 bg-white/5 rounded text-xs text-gray-400">
+                                                {clarification.findings}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -326,26 +341,41 @@ export function HeroSection() {
                                         <MessageSquare className="w-4 h-4 text-violet-400" />
                                     </div>
                                     <p className="text-sm text-violet-200 leading-relaxed pt-1">
-                                        Can you help me fill in that gap? Your answer will be merged with the discovery data before the analysis runs.
+                                        Help me understand this better:
                                     </p>
                                 </div>
 
-                                {/* Clarification Input */}
-                                <form onSubmit={handleClarify} className="flex gap-3">
-                                    <input
-                                        type="text"
-                                        className="flex-1 bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors text-base md:text-sm"
-                                        placeholder="e.g. We pivoted from B2C to B2B in Q3 2024, targeting enterprise compliance teams..."
-                                        value={clarificationInput}
-                                        onChange={(e) => setClarificationInput(e.target.value)}
-                                        autoFocus
-                                        autoComplete="off"
-                                        autoCorrect="off"
-                                        autoCapitalize="sentences"
-                                    />
-                                    <button type="submit" disabled={!clarificationInput.trim()} className="btn-primary px-4 py-3 disabled:opacity-40 disabled:cursor-not-allowed">
-                                        <Send className="w-4 h-4" />
-                                    </button>
+                                {/* Clarification Input with Signal Strength */}
+                                <form onSubmit={handleClarify} className="flex flex-col gap-3">
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            className="w-full bg-transparent border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors text-base md:text-sm"
+                                            placeholder="Type your answer..."
+                                            value={clarificationInput}
+                                            onChange={(e) => setClarificationInput(e.target.value)}
+                                            autoFocus
+                                            autoComplete="off"
+                                            autoCorrect="off"
+                                            autoCapitalize="sentences"
+                                        />
+                                        {/* Signal Strength Meter */}
+                                        {clarificationInput.length > 0 && (
+                                            <motion.div
+                                                initial={{ width: 0 }}
+                                                animate={{ width: `${Math.min(100, clarificationInput.length / 2)}%` }}
+                                                className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-violet-500 to-emerald-500"
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-gray-500">
+                                            Signal: {Math.min(100, Math.floor(clarificationInput.length / 2))}%
+                                        </span>
+                                        <button type="submit" disabled={!clarificationInput.trim()} className="btn-primary px-4 py-3 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+                                            <Send className="w-4 h-4" /> Continue
+                                        </button>
+                                    </div>
                                 </form>
                             </div>
                         </motion.div>

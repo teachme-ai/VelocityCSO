@@ -2,15 +2,16 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-export const AgentOrbs = ({ status }: { status: 'idle' | 'market' | 'finance' | 'cso' }) => {
+export const AgentOrbs = ({ status }: { status: 'idle' | 'interrogator' | 'market' | 'finance' | 'cso' }) => {
     const orbs = [
+        { id: 'interrogator', color: 'bg-violet-500', hex: '#8B5CF6', label: 'Interrogator Analyzing Context' },
         { id: 'market', color: 'bg-savvy-purple', hex: '#A855F7', label: 'Market Analyst Sensing' },
         { id: 'finance', color: 'bg-savvy-gold', hex: '#F59E0B', label: 'Financial Analyst Calculating Risk' },
         { id: 'cso', color: 'bg-savvy-green', hex: '#10B981', label: 'CSO Synthesizing Strategy' },
     ];
 
     return (
-        <div className="flex justify-center items-center gap-8 py-8">
+        <div className="flex justify-center items-center gap-6 py-8 flex-wrap">
             {orbs.map((orb) => {
                 const isActive = status === orb.id;
                 return (
