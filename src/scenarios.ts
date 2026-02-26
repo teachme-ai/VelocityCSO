@@ -60,6 +60,20 @@ A structural talent shortage in the core skill domain has materialized:
 - AI/automation cannot bridge the gap fast enough; R&D velocity drops 35%
 Recalculate how this talent crisis degrades each of the 15 dimensions.`,
     },
+    REGULATORY: {
+        id: 'REGULATORY',
+        label: 'Regulatory Crackdown',
+        icon: 'Shield',
+        color: '#eab308',
+        prompt: `SYNTHETIC CRISIS — REGULATORY CRACKDOWN:
+A sweeping regulatory intervention has targeted this business's core market:
+- New compliance requirements add 25-40% to operational overhead immediately
+- Core product features must be redesigned or disabled pending regulatory approval (6-18 month timeline)
+- Data handling and privacy mandates require costly infrastructure overhaul
+- Fines and legal exposure have frozen enterprise sales cycles; procurement teams are paused
+- Investor confidence has dropped; valuation multiples compressed 30-50% sector-wide
+Recalculate how this regulatory shock impacts all 15 strategic dimensions.`,
+    },
 } as const;
 
 export type ScenarioId = keyof typeof SCENARIOS;

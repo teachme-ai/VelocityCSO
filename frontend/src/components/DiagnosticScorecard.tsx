@@ -32,7 +32,7 @@ export const DiagnosticScorecard = ({ dimensions, originalDimensions, onAreaClic
                             const color = score >= 70 ? '#16a34a' : score >= 40 ? '#2563eb' : '#dc2626';
                             return (
                                 <div key={dim} className="flex items-center gap-2 mb-2 cursor-pointer group" onClick={() => onAreaClick(dim)}>
-                                    <span className={`text-xs w-40 shrink-0 truncate group-hover:text-white transition-colors ${dropped ? 'text-amber-400 font-semibold' : 'text-gray-400'}`}>
+                                    <span className={`text-xs w-32 shrink-0 truncate group-hover:text-white transition-colors ${dropped ? 'text-amber-400 font-semibold' : 'text-gray-400'}`}>
                                         {dropped ? `⚠ ${dim}` : dim}
                                     </span>
                                     <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">

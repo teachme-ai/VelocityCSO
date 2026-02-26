@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingDown, Swords, Rocket, Users, ChevronDown, ChevronUp, AlertTriangle, Zap } from 'lucide-react';
+import { TrendingDown, Swords, Rocket, Users, Shield, ChevronDown, ChevronUp, AlertTriangle, Zap } from 'lucide-react';
 import type { MitigationCard } from '../types/stress';
 
 const SCENARIO_META = {
@@ -15,6 +15,7 @@ const SCENARIO_META = {
     PRICE_WAR: { label: 'Competitor Price War', icon: Swords, color: '#f97316', glow: 'rgba(249,115,22,0.15)' },
     SCALE_UP: { label: 'Aggressive Scale-Up', icon: Rocket, color: '#8b5cf6', glow: 'rgba(139,92,246,0.15)' },
     TALENT: { label: 'Global Talent Shortage', icon: Users, color: '#06b6d4', glow: 'rgba(6,182,212,0.15)' },
+    REGULATORY: { label: 'Regulatory Crackdown', icon: Shield, color: '#eab308', glow: 'rgba(234,179,8,0.15)' },
 } as const;
 
 type ScenarioId = keyof typeof SCENARIO_META;
@@ -107,7 +108,7 @@ export function StressTestPanel({ reportId, originalScores: _originalScores, onS
             </div>
 
             {/* Scenario Toggles */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {(Object.entries(SCENARIO_META) as [ScenarioId, typeof SCENARIO_META[ScenarioId]][]).map(([id, meta]) => {
                     const Icon = meta.icon;
                     const isActive = activeScenario === id;
