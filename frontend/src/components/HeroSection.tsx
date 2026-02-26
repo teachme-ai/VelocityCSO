@@ -219,7 +219,21 @@ export function HeroSection() {
             });
 
             for await (const event of readSSE(response)) {
-                if (event.type === 'ANALYSIS_START') {
+                if (event.type === 'INTERROGATOR_RESPONSE') {
+                    setPhaseLabel(`${event.category} · ID Score: ${event.idScore}/100`);
+                } else if (event.type === 'NEED_CLARIFICATION') {
+                    setPhase('clarifying');
+                    setClarification({
+                        sessionId: event.sessionId as string,
+                        summary: event.summary as string,
+                        gap: event.gap as string,
+                        findings: event.findings as string,
+                        idScore: event.idScore as number,
+                        idBreakdown: event.idBreakdown as any,
+                    });
+                } else if (event.type === 'READY_FOR_AUDIT') {
+                    setPhaseLabel(`ID Score ${event.idScore}/100 — Unlocking specialist analysis...`);
+                } else if (event.type === 'ANALYSIS_START') {
                     setPhaseLabel('Running 15-dimension diagnostic...');
                 } else if (event.type === 'REPORT_COMPLETE') {
                     let parsed: ReportData;
