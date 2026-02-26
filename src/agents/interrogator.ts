@@ -22,6 +22,20 @@ const LENS_PROMPTS: Record<Lens, string> = {
     'OPERATIONS/SUPPLY': 'Focus on the SECRET SAUCE — supply chain, unique process, proprietary relationships.',
 };
 
+// Keyword signals for each scoring dimension — checked before hitting the LLM
+const LOCATION_KEYWORDS = /\b(US|UK|EU|Canada|Australia|India|New York|London|California|Texas|Chicago|nationwide|global|region|city|state|country)\b/i;
+const COMPETITOR_KEYWORDS = /\b(competitor|vs\.?|against|rival|alternative|instead of|compared to|[A-Z][a-z]+\s+(Inc|Corp|Ltd|LLC|SaaS|AI|Tech)|Asana|Monday|Salesforce|HubSpot|Shopify|Blue Yonder|Crisp|SAP|Oracle|AWS|Google|Microsoft|Amazon)\b/;
+const MOAT_KEYWORDS = /\b(exclusive|patent|proprietary|partnership|contract|license|unique|only|can't replicate|cannot copy|switching cost|lock.?in|data advantage|network effect|retention|NPS|referral|distributor|supplier agreement)\b/i;
+
+function scoreContextDeterministically(context: string): { score: number; coveredLenses: string[] } {
+    const coveredLenses: string[] = [];
+    let score = 0;
+    if (LOCATION_KEYWORDS.test(context)) { score += 30; coveredLenses.push('CUSTOMER/MARKET'); }
+    if (COMPETITOR_KEYWORDS.test(context)) { score += 30; coveredLenses.push('COMPETITOR/MOAT'); }
+    if (MOAT_KEYWORDS.test(context)) { score += 40; coveredLenses.push('OPERATIONS/SUPPLY'); }
+    return { score, coveredLenses };
+}
+
 function buildInstruction(usedLenses: string[], askedQuestions: string[]): string {
     const nextLens = (LENSES.find(l => !usedLenses.includes(l)) || 'CUSTOMER/MARKET') as Lens;
     const blacklist = askedQuestions.length > 0
@@ -71,6 +85,16 @@ export class InterrogatorAgent {
             return { category: 'Unknown', question: '', isAuditable: true, strategyContext: groundedContext, idScore: 70, lensUsed: '', idBreakdown: { specificity: 70, completeness: 70, moat: 70 } };
         }
 
+        // Fast-path: deterministic pre-score — skip LLM if context is already rich
+        const preScore = scoreContextDeterministically(groundedContext);
+        if (preScore.score >= 70) {
+            log({ severity: 'INFO', message: 'Interrogator: Pre-score passed. Skipping LLM.', agent_id: 'interrogator_agent', session_id: sessionId, id_score: preScore.score });
+            return { category: 'B2B SaaS', question: '', isAuditable: true, strategyContext: groundedContext, idScore: preScore.score, lensUsed: '', idBreakdown: { specificity: preScore.score, completeness: preScore.score, moat: preScore.score } };
+        }
+
+        // Merge deterministically covered lenses with session-tracked ones
+        const effectiveUsedLenses = [...new Set([...usedLenses, ...preScore.coveredLenses])];
+
         // Load asked questions from Firestore for blacklist
         let askedQuestions: string[] = [];
         try {
@@ -84,7 +108,7 @@ export class InterrogatorAgent {
             name: 'interrogator_agent',
             model: 'gemini-2.0-flash-exp',
             description: 'Strategic Filter with Information Density scoring.',
-            instruction: buildInstruction(usedLenses, askedQuestions),
+            instruction: buildInstruction(effectiveUsedLenses, askedQuestions),
         });
 
         const runner = new InMemoryRunner({ agent, appName: 'velocity_interrogator' });

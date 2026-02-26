@@ -263,14 +263,16 @@ app.post('/analyze/clarify', async (req, res) => {
         const { turnCount: newTurnCount, usedLenses } = turnResult;
         const ir = await interrogator.evaluateInformationDensity(cumulativeContext, newTurnCount, sessionId, usedLenses);
 
-        // Persist the lens the model just used so next turn rotates away from it
-        if (ir.lensUsed) {
-            await incrementTurn(sessionId, cumulativeContext, session.gaps, ir.lensUsed);
-        }
-
         const updatedLenses = ir.lensUsed && !usedLenses.includes(ir.lensUsed)
             ? [...usedLenses, ir.lensUsed]
             : usedLenses;
+
+        // Persist the lens used so next turn rotates
+        if (ir.lensUsed && !usedLenses.includes(ir.lensUsed)) {
+            try {
+                await admin.firestore().collection('velocity_cso_sessions').doc(sessionId).update({ usedLenses: updatedLenses });
+            } catch { /* non-critical */ }
+        }
 
         sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable, usedLenses: updatedLenses });
 
