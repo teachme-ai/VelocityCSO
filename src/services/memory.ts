@@ -16,6 +16,8 @@ export interface AuditMemory {
     dimensionScores: Record<string, number>; // merged 15-dimension scores
     report: string;                    // Final Markdown report
     stressTest: boolean;
+    moatRationale?: string;           // 2-sentence explanation of top dimension
+    orgName?: string;                 // Extracted Organisation Name
     createdAt: number;
 }
 
@@ -41,6 +43,8 @@ export async function saveAuditMemory(
             dimension_scores: data.dimensionScores,
             report: data.report,
             stress_test: data.stressTest,
+            moat_rationale: data.moatRationale,
+            org_name: data.orgName,
             created_at: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
 
@@ -106,6 +110,8 @@ export async function loadAuditMemory(reportId: string): Promise<AuditMemory | n
             dimensionScores: data.dimension_scores || {},
             report: data.report || '',
             stressTest: data.stress_test || false,
+            moatRationale: data.moat_rationale || '',
+            orgName: data.org_name || '',
             createdAt: data.created_at?.toMillis() ?? Date.now(),
         };
     } catch (err: any) {

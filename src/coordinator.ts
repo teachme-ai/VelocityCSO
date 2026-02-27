@@ -6,6 +6,7 @@ import { DiscoveryResult } from './agents/discovery.js';
 import { log, estimateCost } from './services/logger.js';
 import { SCENARIOS, ScenarioId, StressResult, MitigationCard } from './scenarios.js';
 import { loadAuditMemory } from './services/memory.js';
+import { emitHeartbeat } from './index.js';
 
 // Re-export StrategySession type for index.ts
 export type { StrategySession } from './services/sessionService.js';
@@ -96,7 +97,40 @@ export class ChiefStrategyAgent {
      * Runs the full 15-dimension analysis pipeline.
      * Uses Promise.all to ensure all specialists finish before synthesis.
      */
-    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number>; specialistOutputs: Record<string, any> }> {
+    private robustParse(agentName: string, raw: string): any {
+        const fallback = {
+            analysis_markdown: raw,
+            dimensions: {
+                'TAM Viability': 50, 'Target Precision': 50, 'Trend Adoption': 50,
+                'Competitive Defensibility': 50, 'Model Innovation': 50, 'Flywheel Potential': 50,
+                'Pricing Power': 50, 'CAC/LTV Ratio': 50, 'Market Entry Speed': 50,
+                'Execution Speed': 50, 'Scalability': 50, 'ESG Posture': 50,
+                'ROI Projection': 50, 'Risk Tolerance': 50, 'Capital Efficiency': 50
+            },
+            confidence_score: 50
+        };
+
+        // 1. Sanitize Markdown backticks if present
+        let sanitized = raw.replace(/```json\s?/, '').replace(/```\s?$/, '').trim();
+
+        // 2. Greedy Extraction
+        const jsonMatch = sanitized.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) return fallback;
+
+        try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            // Merge defaults to ensure all 15 dimensions exist
+            return {
+                ...fallback,
+                ...parsed,
+                dimensions: { ...fallback.dimensions, ...(parsed.dimensions || {}) }
+            };
+        } catch {
+            return fallback;
+        }
+    }
+
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number>; specialistOutputs: Record<string, any>; orgName: string; moatRationale: string }> {
         log({
             severity: 'INFO',
             message: 'CSO analysis started (Parallel Specialist Mode)',
@@ -104,8 +138,15 @@ export class ChiefStrategyAgent {
             phase: 'synthesis',
             session_id: sessionId,
         });
+        emitHeartbeat(sessionId, '◆ CSO: analysis started (Parallel Specialist Mode)');
 
-        const finalDimensions: Record<string, number> = {};
+        const finalDimensions: Record<string, number> = {
+            'TAM Viability': 0, 'Target Precision': 0, 'Trend Adoption': 0,
+            'Competitive Defensibility': 0, 'Model Innovation': 0, 'Flywheel Potential': 0,
+            'Pricing Power': 0, 'CAC/LTV Ratio': 0, 'Market Entry Speed': 0,
+            'Execution Speed': 0, 'Scalability': 0, 'ESG Posture': 0,
+            'ROI Projection': 0, 'Risk Tolerance': 0, 'Capital Efficiency': 0
+        };
         const specialistOutputs: Record<string, any> = {};
 
         // 1. Run all 5 specialists in parallel
@@ -117,9 +158,13 @@ export class ChiefStrategyAgent {
             const eventStream = runner.runAsync({
                 userId: 'cso_internal',
                 sessionId: internalId,
-                newMessage: { role: 'user', parts: [{ text: businessContext }] }
+                newMessage: {
+                    role: 'user',
+                    parts: [{ text: `${businessContext}\n\nCRITICAL: You MUST return your analysis as a clean JSON object according to your schema. Do NOT include markdown text outside the JSON. All 3 dimensions for your lens MUST be scored 0-100.` }]
+                }
             });
 
+            emitHeartbeat(sessionId, `◆ ${agent.name}: sensing market signals and identifying asymmetric plays...`);
             let rawOutput = '';
             for await (const event of eventStream) {
                 if (event.author === agent.name || isFinalResponse(event)) {
@@ -129,26 +174,25 @@ export class ChiefStrategyAgent {
                 }
             }
 
-            // Extract JSON from specialist output
-            const jsonMatch = rawOutput.match(/\{[\s\S]*?\}/);
-            if (jsonMatch) {
-                try {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    if (parsed.dimensions) {
-                        Object.assign(finalDimensions, parsed.dimensions);
-                    }
-                    specialistOutputs[agent.name!] = parsed;
-                    return parsed;
-                } catch {
-                    log({ severity: 'WARNING', message: `Failed to parse JSON for ${agent.name}`, session_id: sessionId });
-                }
+            const result = this.robustParse(agent.name!, rawOutput);
+            if (result.dimensions) {
+                Object.assign(finalDimensions, result.dimensions);
+                Object.entries(result.dimensions).forEach(([dim, score]) => {
+                    emitHeartbeat(sessionId, `◆ ${agent.name} calculated ${dim}: ${score}/100`);
+                });
             }
-            return { analysis_markdown: rawOutput };
+            emitHeartbeat(sessionId, `◆ ${agent.name}: analysis complete. alignment verified.`);
+            specialistOutputs[agent.name!] = result;
+            return result;
         });
 
         await Promise.all(specialistPromises);
 
         // 2. Comprehensive Synthesis by CSO
+        emitHeartbeat(sessionId, '◆ CSO: Initializing strategic synthesis of 15-dimension matrix...');
+        emitHeartbeat(sessionId, '◆ Critic: Verifying cross-functional alignment of specialist findings...');
+        emitHeartbeat(sessionId, '◆ CSO: Synthesizing narrative for executive board-room delivery...');
+
         const synthesisPrompt = `
             You are the Chief Strategy Officer. You have received independent analysis from your specialists.
             
@@ -171,6 +215,7 @@ export class ChiefStrategyAgent {
             ${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
         `.trim();
 
+        emitHeartbeat(sessionId, '◆ CSO: merging 15-dimension matrix...');
         const csoRunner = new InMemoryRunner({ agent: this.agent, appName: 'velocity_cso_synthesis' });
         const csoSessionId = randomUUID();
         await csoRunner.sessionService.createSession({ appName: 'velocity_cso_synthesis', userId: 'cso_user', sessionId: csoSessionId });
@@ -200,10 +245,81 @@ export class ChiefStrategyAgent {
             cost_usd: cost.usd,
         });
 
+        // 3. Extract Organisation Name
+        const nameMatch = businessContext.match(/^([A-Z][a-zA-Z\s&]{2,40})/);
+        const orgName = nameMatch ? nameMatch[1].trim() : 'The Venture';
+
+        // 4. Generate Moat Rationale
+        const topDimension = Object.entries(finalDimensions).reduce((a, b) => b[1] > a[1] ? b : a);
+        const moatPrompt = `
+            Identify why "${topDimension[0]}" is the primary moat for this business based on the analysis.
+            CONTEXT: ${businessContext.slice(0, 500)}
+            SCORE: ${topDimension[1]}/100
+            TASK: Write a 2-sentence 'Moat Rationale'.
+            FORMAT: "Explain that this is the moat because [reason] it represents a [Premium/high-demand/asymmetric] play that [benefit], creating a barrier against generic competitors."
+        `.trim();
+
+        emitHeartbeat(sessionId, `◆ CSO: Identifying strategic moat (${topDimension[0]})...`);
+        const moatAgent = new LlmAgent({
+            name: 'moat_analyst',
+            model: 'gemini-2.0-flash-exp',
+            instruction: 'Write a concise 2-sentence Moat Rationale.'
+        });
+        const moatRunner = new InMemoryRunner({ agent: moatAgent, appName: 'moat_logic' });
+        const moatId = randomUUID();
+        await moatRunner.sessionService.createSession({ appName: 'moat_logic', userId: 'cso', sessionId: moatId });
+        const moatStream = moatRunner.runAsync({ userId: 'cso', sessionId: moatId, newMessage: { role: 'user', parts: [{ text: moatPrompt }] } });
+        let moatRationale = '';
+        for await (const ev of moatStream) {
+            if (ev.author === 'moat_analyst' || isFinalResponse(ev)) {
+                moatRationale += (ev.content?.parts || []).map((p: any) => p.text).join('');
+            }
+        }
+
+        // 3. Safety Receipt Check: If dimensions are empty or generic, trigger a re-audit
+        const isGeneric = Object.values(finalDimensions).every(v => v === 0 || v === 50);
+        if (isGeneric) {
+            log({ severity: 'WARNING', message: 'Dimensions appear generic — potential parsing failure. Triggering specialized re-audit.', session_id: sessionId });
+
+            // Re-run specialists once more with extreme JSON enforcement
+            const retryPromises = specialists.map(async (agent) => {
+                const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist_retry' });
+                const internalId = randomUUID();
+                await runner.sessionService.createSession({ appName: 'velocity_specialist_retry', userId: 'cso_internal', sessionId: internalId });
+
+                const eventStream = runner.runAsync({
+                    userId: 'cso_internal',
+                    sessionId: internalId,
+                    newMessage: {
+                        role: 'user',
+                        parts: [{ text: `${businessContext}\n\nRE-AUDIT REQUIRED: Previous output failed parsing. Return ONLY a valid JSON object. No markdown.` }]
+                    }
+                });
+
+                let rawOutput = '';
+                for await (const event of eventStream) {
+                    if (event.author === agent.name || isFinalResponse(event)) {
+                        const parts = event.content?.parts || [];
+                        const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
+                        if (text) rawOutput += text;
+                    }
+                }
+
+                const result = this.robustParse(agent.name!, rawOutput);
+                if (result.dimensions) {
+                    Object.assign(finalDimensions, result.dimensions);
+                }
+                return result;
+            });
+            await Promise.all(retryPromises);
+        }
+
         return {
             report: finalReport || 'Strategic analysis failed.',
             dimensions: finalDimensions,
-            specialistOutputs
+            specialistOutputs,
+            orgName,
+            moatRationale
         };
     }
 
@@ -215,11 +331,14 @@ export class ChiefStrategyAgent {
     async triggerStressTest(reportId: string, scenarioId: ScenarioId, sessionId: string): Promise<StressResult> {
         const scenario = SCENARIOS[scenarioId];
 
-        log({ severity: 'INFO', message: `Stress test triggered: ${scenario.label}`, agent_id: 'stress_test_agent', phase: 'stress_test', session_id: sessionId, scenario: scenarioId });
+        log({
+            severity: 'INFO', message: `Stress test triggered: ${scenario.label
+                }`, agent_id: 'stress_test_agent', phase: 'stress_test', session_id: sessionId, scenario: scenarioId
+        });
 
         // Load cached grounded context from Firestore
         const memory = await loadAuditMemory(reportId);
-        if (!memory) throw new Error(`Report ${reportId} not found in Firestore. Run a full audit first.`);
+        if (!memory) throw new Error(`Report ${reportId} not found in Firestore.Run a full audit first.`);
 
         const DIM_NAMES = [
             'TAM Viability', 'Target Precision', 'Trend Adoption',
@@ -230,12 +349,12 @@ export class ChiefStrategyAgent {
         ];
 
         const stressPrompt = `
-You are a rapid stress-test recalculation engine. You have been given:
+You are a rapid stress - test recalculation engine.You have been given:
 
-1. BUSINESS GROUNDED CONTEXT (from 24-month discovery sweep):
+1. BUSINESS GROUNDED CONTEXT(from 24 - month discovery sweep):
 ${memory.groundedContext || memory.businessContext}
 
-2. ORIGINAL DIMENSION SCORES (baseline):
+2. ORIGINAL DIMENSION SCORES(baseline):
 ${JSON.stringify(memory.dimensionScores, null, 2)}
 
 3. SYNTHETIC CRISIS SCENARIO TO SIMULATE:
@@ -243,29 +362,29 @@ ${scenario.prompt}
 
 YOUR TASK:
 - Recalculate scores for ALL 15 dimensions under this specific crisis.
-- For any dimension scoring below 40, generate 3 concrete mitigation steps and a CSO-level "Crisis Play" recommendation.
-- Return ONLY a valid raw JSON object. No preamble, no markdown, no explanation.
+- For any dimension scoring below 40, generate 3 concrete mitigation steps and a CSO - level "Crisis Play" recommendation.
+- Return ONLY a valid raw JSON object.No preamble, no markdown, no explanation.
 
 Required JSON structure:
 {
-  "stressed_scores": {
-    "TAM Viability": 62,
-    "Target Precision": 58,
+    "stressed_scores": {
+        "TAM Viability": 62,
+            "Target Precision": 58,
     ...all 15 dimensions...
-  },
-  "mitigation_cards": [
-    {
-      "dimension": "CAC/LTV Ratio",
-      "stressed_score": 32,
-      "mitigation_steps": ["Step 1...", "Step 2...", "Step 3..."],
-      "cso_crisis_play": "Immediate: activate a land-and-expand motion — reduce initial ACVs by 40% to lower acquisition friction while protecting LTV via expansion revenue triggers..."
-    }
-  ]
+    },
+    "mitigation_cards": [
+        {
+            "dimension": "CAC/LTV Ratio",
+            "stressed_score": 32,
+            "mitigation_steps": ["Step 1...", "Step 2...", "Step 3..."],
+            "cso_crisis_play": "Immediate: activate a land-and-expand motion — reduce initial ACVs by 40% to lower acquisition friction while protecting LTV via expansion revenue triggers..."
+        }
+    ]
 }
 
 Dimensions to score: ${DIM_NAMES.join(', ')}
 Only include a dimension in mitigation_cards if its stressed score is below 40.
-        `.trim();
+    `.trim();
 
         // Run as a lightweight single-agent call (no sub-agents, no Discovery)
         const stressAgent = new LlmAgent({

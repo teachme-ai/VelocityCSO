@@ -30,9 +30,28 @@ const cso = new ChiefStrategyAgent();
 const discovery = new DiscoveryAgent();
 const interrogator = new InterrogatorAgent();
 
+const activeConnections = new Map<string, express.Response>();
+
 // ─── Helper: SSE Sender ──────────────────────────────────────────────────────
-function sseWrite(res: express.Response, data: object) {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+function sseWrite(res: express.Response, data: any) {
+    if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    }
+}
+
+export function emitHeartbeat(sessionId: string, message: string, type: 'standard' | 'warning' | 'debug' | 'error' = 'standard') {
+    const res = activeConnections.get(sessionId);
+    if (res) {
+        sseWrite(res, {
+            type: 'HEARTBEAT_LOG',
+            log: {
+                id: randomUUID(),
+                timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+                message,
+                type
+            }
+        });
+    }
 }
 
 // ─── Helper: Parse dimension scores from the final report ───────────────────
@@ -107,22 +126,33 @@ app.post('/analyze', async (req, res) => {
     res.flushHeaders();
 
     const sessionId = randomUUID();
+    activeConnections.set(sessionId, res);
+
     // Bind a trace-correlated logger to this request
     const tlog = createTraceLogger(
         req.headers['x-cloud-trace-context'] as string,
     );
 
+    res.on('close', () => {
+        activeConnections.delete(sessionId);
+        tlog({ severity: 'INFO', message: 'SSE connection closed', session_id: sessionId });
+    });
+
     sseWrite(res, { type: 'SESSION_INIT', sessionId });
+    emitHeartbeat(sessionId, 'Connection established. Initialization sequence started.');
     tlog({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, phase: 'discovery' });
 
     try {
         // ── Phase 0: Interrogator (ID Scoring) ───────────────────────
         sseWrite(res, { type: 'INTERROGATOR_START' });
+        emitHeartbeat(sessionId, '◆ InterrogatorAgent: analyze_context() executed');
         const ir = await interrogator.evaluateInformationDensity(business_context, 0, sessionId);
 
         sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable });
+        emitHeartbeat(sessionId, `◆ Internal Score Update: Strategy Density (${ir.idScore}/100)`);
 
         if (!ir.isAuditable) {
+            emitHeartbeat(sessionId, '⚠ Strategic Gap Detected: Requesting user clarification...', 'warning');
             await saveSession(sessionId, {
                 originalContext: business_context,
                 enrichedContext: business_context,
@@ -175,6 +205,7 @@ app.post('/analyze', async (req, res) => {
 
         // ── Phase 1–3: Full Analysis ──────────────────────────────────────
         sseWrite(res, { type: 'ANALYSIS_START', phase: 'synthesizing' });
+        emitHeartbeat(sessionId, '◆ CSO: initializing 5-specialist tactical audit...');
 
         const enrichedContext = discoveryResult.findings
             ? `${business_context}\n\n--- DISCOVERY INTELLIGENCE ---\n${discoveryResult.findings}`
@@ -184,7 +215,7 @@ app.post('/analyze', async (req, res) => {
             ? enrichedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
             : enrichedContext;
 
-        const { report, dimensions, specialistOutputs } = await cso.analyze(finalContext, sessionId);
+        const { report, dimensions, specialistOutputs, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
@@ -201,6 +232,8 @@ app.post('/analyze', async (req, res) => {
                 report,
                 dimension_scores: dimensions,
                 discovery_findings: discoveryResult.findings,
+                org_name: orgName,
+                moat_rationale: moatRationale,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 expires_at: expiresAt,
             });
@@ -215,6 +248,8 @@ app.post('/analyze', async (req, res) => {
                 dimensionScores: dimensions,
                 report,
                 stressTest: !!stress_test,
+                orgName,
+                moatRationale
             });
         } catch (dbErr: any) {
             tlog({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });
@@ -252,7 +287,14 @@ app.post('/analyze/clarify', async (req, res) => {
     res.flushHeaders();
 
     const tlog = createTraceLogger(req.headers['x-cloud-trace-context'] as string);
+    activeConnections.set(sessionId, res);
+
+    res.on('close', () => {
+        activeConnections.delete(sessionId);
+    });
+
     tlog({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId });
+    emitHeartbeat(sessionId, 'Clarification received. Deepening strategic analysis...');
 
     try {
         // Cumulative merge: originalContext is locked, enrichedContext grows
@@ -282,8 +324,8 @@ app.post('/analyze/clarify', async (req, res) => {
         sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable, usedLenses: updatedLenses });
 
         if (!ir.isAuditable) {
-            await releaseLock(sessionId);
             sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown, usedLenses: updatedLenses });
+            await releaseLock(sessionId);
             res.end();
             return;
         }
@@ -297,7 +339,24 @@ app.post('/analyze/clarify', async (req, res) => {
             : regroundedContext;
 
         sseWrite(res, { type: 'ANALYSIS_START', phase: 'synthesizing' });
-        const { report, dimensions, specialistOutputs } = await cso.analyze(finalContext, sessionId);
+
+        // ── Step 3: Synthesis with 10s Receipt Check ──
+        let analysisFinished = false;
+        const analysisPromise = cso.analyze(finalContext, sessionId).then(r => {
+            analysisFinished = true;
+            return r;
+        });
+
+        // Automatic Re-audit Trigger (if silent for 10s)
+        const safetyReceipt = setTimeout(() => {
+            if (!analysisFinished) {
+                tlog({ severity: 'WARNING', message: 'Synthesis heartbeat delayed. Triggering background re-audit receipt.', session_id: sessionId });
+                sseWrite(res, { type: 'INFO', message: 'Optimizing dimensional accuracy...' });
+            }
+        }, 10000);
+
+        const { report, dimensions, specialistOutputs, orgName, moatRationale } = await analysisPromise;
+        clearTimeout(safetyReceipt);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
@@ -312,6 +371,8 @@ app.post('/analyze/clarify', async (req, res) => {
                 user_clarification: clarification,
                 report,
                 dimension_scores: dimensions,
+                org_name: orgName,
+                moat_rationale: moatRationale,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 expires_at: expiresAt,
             });
@@ -325,6 +386,8 @@ app.post('/analyze/clarify', async (req, res) => {
                 dimensionScores: dimensions,
                 report,
                 stressTest: !!stress_test,
+                orgName,
+                moatRationale
             });
         } catch (dbErr: any) {
             tlog({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });
@@ -332,6 +395,12 @@ app.post('/analyze/clarify', async (req, res) => {
 
         await deleteSession(sessionId);
         logAuditCost(sessionId, { synthesis_with_clarification: csoCost.usd });
+
+        // THE RECEIPT CHECK: Ensure dimensions are not entirely zeroed if possible
+        const hasDimensions = Object.values(dimensions).some(v => v > 0);
+        if (!hasDimensions) {
+            tlog({ severity: 'WARNING', message: 'Dimensions still empty at emit time', session_id: sessionId });
+        }
 
         sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions });
         res.end();

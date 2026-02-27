@@ -85,13 +85,12 @@ export function ReportPage({ result, reportId, reportToken, apiBase, onClose }: 
                             <DiagnosticScorecard
                                 dimensions={stressResult ? stressResult.stressedScores : dims}
                                 originalDimensions={stressResult ? dims : undefined}
-                                onAreaClick={() => {}}
+                                onAreaClick={() => { }}
                             />
                             <div style={{ marginTop: 24 }}>
                                 {reportId && (
                                     <StressTestPanel
                                         reportId={reportId}
-                                        originalScores={dims}
                                         onStressResult={setStressResult}
                                         apiBase={apiBase}
                                     />
@@ -102,7 +101,6 @@ export function ReportPage({ result, reportId, reportToken, apiBase, onClose }: 
                         reportId && (
                             <StressTestPanel
                                 reportId={reportId}
-                                originalScores={{}}
                                 onStressResult={setStressResult}
                                 apiBase={apiBase}
                             />

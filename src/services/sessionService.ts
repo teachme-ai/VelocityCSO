@@ -30,16 +30,32 @@ export async function saveSession(sessionId: string, data: Omit<StrategySession,
 
 export async function incrementTurn(sessionId: string, enrichedContext: string, gaps: string[], lensUsed?: string): Promise<{ turnCount: number; usedLenses: string[] } | null> {
     const ref = db().collection(COLLECTION).doc(sessionId);
-    const doc = await ref.get();
-    if (doc.data()?.processing === true) return null; // locked — discard duplicate
-    const current = (doc.data()?.turnCount as number) || 0;
-    const existingLenses: string[] = (doc.data()?.usedLenses as string[]) || [];
-    const usedLenses = lensUsed && !existingLenses.includes(lensUsed)
-        ? [...existingLenses, lensUsed]
-        : existingLenses;
-    const next = current + 1;
-    await ref.update({ turnCount: next, enrichedContext, gaps, processing: true, usedLenses });
-    return { turnCount: next, usedLenses };
+
+    return await db().runTransaction(async (t) => {
+        const doc = await t.get(ref);
+        if (!doc.exists) return null;
+
+        const data = doc.data();
+        if (data?.processing === true) return null; // locked — discard duplicate
+
+        const current = (data?.turnCount as number) || 0;
+        const existingLenses: string[] = (data?.usedLenses as string[]) || [];
+        const usedLenses = lensUsed && !existingLenses.includes(lensUsed)
+            ? [...existingLenses, lensUsed]
+            : existingLenses;
+
+        const next = current + 1;
+        t.update(ref, {
+            turnCount: next,
+            enrichedContext,
+            gaps,
+            processing: true,
+            usedLenses,
+            lastAccessed: Date.now()
+        });
+
+        return { turnCount: next, usedLenses };
+    });
 }
 
 export async function releaseLock(sessionId: string): Promise<void> {

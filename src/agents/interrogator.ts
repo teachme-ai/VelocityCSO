@@ -2,6 +2,7 @@ import { LlmAgent, InMemoryRunner, isFinalResponse } from '@google/adk';
 import { randomUUID } from 'crypto';
 import { log, estimateCost } from '../services/logger.js';
 import admin from 'firebase-admin';
+import { emitHeartbeat } from '../index.js';
 
 export interface InterrogatorResult {
     category: string;
@@ -39,30 +40,28 @@ function scoreContextDeterministically(context: string): { score: number; covere
 function buildInstruction(usedLenses: string[], askedQuestions: string[]): string {
     const nextLens = (LENSES.find(l => !usedLenses.includes(l)) || 'CUSTOMER/MARKET') as Lens;
     const blacklist = askedQuestions.length > 0
-        ? `\nQUESTION BLACKLIST — strictly forbidden from repeating:\n${askedQuestions.map(q => `- "${q}"`).join('\n')}\n`
+        ? `\nQUESTION BLACKLIST — strictly forbidden from repeating or asking about these areas:\n${askedQuestions.map(q => `- "${q}"`).join('\n')}\n`
         : '';
     return `
-You are a Strategic Interrogator and Information Density Scorer.
+You are a Strategic Interrogator. Your goal is to maximize information density before a strategy audit.
 
-ACTIVE LENS: ${nextLens} — ${LENS_PROMPTS[nextLens]}
-LENSES ALREADY COVERED (skip these): ${usedLenses.join(', ') || 'none'}
-${blacklist}
+CRITICAL RULES:
+1. ACTIVE LENS: ${nextLens} — Only ask a question related to this lens.
+2. BLACKLIST: Never repeat these previous questions or cover these lenses: ${usedLenses.join(', ') || 'none'}.
+3. NO REPEATS: If you find yourself wanting to ask a similar question, pivot to a different sub-topic within the ${nextLens} lens.
+
 STEP 1 — CATEGORIZE the business.
-
-STEP 2 — SCORE the FULL GROUNDED CONTEXT (max 100):
-  +30 points: Specific Location OR Demographic present
-  +30 points: Named Competitor OR Constraint present
-  +40 points: Unfair Advantage or unique resource present
-
+STEP 2 — SCORE the information density (0-100).
 STEP 3 — DECIDE:
-  If score >= 70: is_auditable = true. Summarize ALL facts into strategy_context.
-  If score < 70: ONE question targeting the ACTIVE LENS. Plain language. Not in blacklist.
-  Fallback if stuck: "What is the most manual or painful part of your daily operation?"
+  - If score >= 70 OR you have enough info to proceed: set is_auditable = true.
+  - If score < 70: Ask ONE precise, high-impact question targeting ${nextLens}.
+
+${blacklist}
 
 OUTPUT: Raw JSON only.
 {
-  "category": "Retail",
-  "id_score": 60,
+  "category": "...",
+  "id_score": 0,
   "lens_used": "${nextLens}",
   "question": "...",
   "is_auditable": false,
@@ -79,6 +78,7 @@ export class InterrogatorAgent {
         sessionId: string,
         usedLenses: string[] = [],
     ): Promise<InterrogatorResult> {
+        emitHeartbeat(sessionId, `[DEBUG] InterrogatorAgent.evaluateDensity() called. Turn: ${turnCount}`, 'debug');
 
         if (turnCount >= 3) {
             log({ severity: 'INFO', message: 'Interrogator: Turn limit reached. Forcing READY_FOR_AUDIT.', agent_id: 'interrogator_agent', session_id: sessionId });
@@ -89,6 +89,7 @@ export class InterrogatorAgent {
         const preScore = scoreContextDeterministically(groundedContext);
         if (preScore.score >= 70) {
             log({ severity: 'INFO', message: 'Interrogator: Pre-score passed. Skipping LLM.', agent_id: 'interrogator_agent', session_id: sessionId, id_score: preScore.score });
+            emitHeartbeat(sessionId, `[DEBUG] Deterministic match passed (Score: ${preScore.score}). Skipping LLM.`, 'debug');
             return { category: 'B2B SaaS', question: '', isAuditable: true, strategyContext: groundedContext, idScore: preScore.score, lensUsed: '', idBreakdown: { specificity: preScore.score, completeness: preScore.score, moat: preScore.score } };
         }
 
@@ -143,11 +144,26 @@ export class InterrogatorAgent {
                 const idScore = Math.min(100, p.id_score || 0);
                 const lensUsed: string = p.lens_used || '';
 
+                emitHeartbeat(sessionId, `[DEBUG] Turn Token issued. Current Turn: ${turnCount}. Lens: ${lensUsed}`, 'debug');
+
                 // If only one lens was left and we got a decent score, or LLM says auditable
                 const isAuditable = p.is_auditable === true || idScore >= 70 || (effectiveUsedLenses.length === 2 && idScore >= 50);
 
                 if (!isAuditable && p.question) {
+                    emitHeartbeat(sessionId, `[DEBUG] Turn ${turnCount}: Generating deepening question for ${p.lens_used}.`, 'debug');
                     try {
+                        const existingQuestonsSnap = await admin.firestore()
+                            .collection('discovery_sessions').doc(sessionId)
+                            .collection('asked_questions')
+                            .where('question', '==', p.question)
+                            .get();
+
+                        if (!existingQuestonsSnap.empty) {
+                            emitHeartbeat(sessionId, `[DEBUG] Verifying against previous questions... Match found? true. Redundant execution detected for lens: ${p.lens_used}`, 'error');
+                        } else {
+                            emitHeartbeat(sessionId, `[DEBUG] Verifying against previous questions... Match found? false. Tracking new question for lens: ${p.lens_used}`, 'debug');
+                        }
+
                         await admin.firestore()
                             .collection('discovery_sessions').doc(sessionId)
                             .collection('asked_questions').add({

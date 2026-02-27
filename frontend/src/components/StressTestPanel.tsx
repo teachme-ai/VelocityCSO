@@ -22,7 +22,6 @@ type ScenarioId = keyof typeof SCENARIO_META;
 
 interface StressTestPanelProps {
     reportId: string;
-    originalScores: Record<string, number>;
     onStressResult: (result: StressResult) => void;
     apiBase: string;
 }
@@ -55,7 +54,7 @@ async function* readSSE(response: Response): AsyncGenerator<Record<string, unkno
     }
 }
 
-export function StressTestPanel({ reportId, originalScores: _originalScores, onStressResult, apiBase }: StressTestPanelProps) {
+export function StressTestPanel({ reportId, onStressResult, apiBase }: StressTestPanelProps) {
     const [activeScenario, setActiveScenario] = useState<ScenarioId | null>(null);
     const [loadingScenario, setLoadingScenario] = useState<ScenarioId | null>(null);
     const [expandedCard, setExpandedCard] = useState<string | null>(null);
@@ -107,8 +106,8 @@ export function StressTestPanel({ reportId, originalScores: _originalScores, onS
                 </div>
             </div>
 
-            {/* Scenario Toggles */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {/* Scenario Toggles - Vertical Stack */}
+            <div className="flex flex-col gap-2">
                 {(Object.entries(SCENARIO_META) as [ScenarioId, typeof SCENARIO_META[ScenarioId]][]).map(([id, meta]) => {
                     const Icon = meta.icon;
                     const isActive = activeScenario === id;
@@ -119,30 +118,35 @@ export function StressTestPanel({ reportId, originalScores: _originalScores, onS
                             key={id}
                             onClick={() => handleToggle(id)}
                             disabled={loadingScenario !== null}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            className="relative p-4 rounded-2xl border text-left transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                            whileHover={{ scale: 1.01, x: 4 }}
+                            whileTap={{ scale: 0.99 }}
+                            className="relative p-3 rounded-xl border text-left transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed group"
                             style={{
                                 background: isActive ? `${meta.glow}` : 'rgba(255,255,255,0.03)',
-                                borderColor: isActive ? `${meta.color}40` : 'rgba(255,255,255,0.06)',
-                                boxShadow: isActive ? `0 0 24px ${meta.glow}` : 'none',
+                                borderColor: isActive ? `${meta.color}50` : 'rgba(255,255,255,0.06)',
+                                boxShadow: isActive ? `0 0 16px ${meta.glow}` : 'none',
                             }}
                         >
                             {isLoading && (
-                                <div className="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                                <div className="absolute inset-0 rounded-xl flex items-center justify-center bg-black/40 backdrop-blur-sm z-10">
                                     <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" />
                                 </div>
                             )}
-                            <div className="flex items-start gap-2">
-                                <div className="p-1.5 rounded-lg flex-shrink-0" style={{ background: `${meta.color}20` }}>
-                                    <Icon className="w-3.5 h-3.5" style={{ color: meta.color }} />
+                            <div className="flex items-center gap-3">
+                                <div className="p-1.5 rounded-lg flex-shrink-0 transition-colors group-hover:bg-opacity-30" style={{ background: `${meta.color}20` }}>
+                                    <Icon className="w-4 h-4" style={{ color: meta.color }} />
                                 </div>
-                                <div>
-                                    <p className="text-xs font-medium text-white leading-snug">{meta.label}</p>
-                                    {isActive && (
-                                        <p className="text-[10px] mt-0.5" style={{ color: meta.color }}>Active</p>
+                                <div className="flex-1">
+                                    <p className="text-xs font-semibold text-white tracking-wide">{meta.label}</p>
+                                    {isActive ? (
+                                        <p className="text-[10px] h-3 animate-pulse" style={{ color: meta.color }}>Active Simulation</p>
+                                    ) : (
+                                        <p className="text-[10px] text-gray-500 h-3">Tap to simulate</p>
                                     )}
                                 </div>
+                                {isActive && (
+                                    <Zap className="w-3 h-3 text-white fill-white" />
+                                )}
                             </div>
                         </motion.button>
                     );

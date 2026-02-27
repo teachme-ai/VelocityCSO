@@ -1,14 +1,16 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 // import { Canvas } from '@react-three/fiber';
 // import { Stars } from '@react-three/drei';
 import { AgentOrbs } from './AgentOrbs';
-import { AgentStatus } from './AgentStatus';
 import { StressTestPanel } from './StressTestPanel';
 import type { StatusEvent } from './AgentStatus';
 import type { StressResult } from '../types/stress';
 import { DiagnosticScorecard } from './DiagnosticScorecard';
 import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send } from 'lucide-react';
+import { StrategyRadar } from './StrategyRadar';
+import { AgentHeartbeat } from './AgentHeartbeat';
+import { type HeartbeatLog } from './HeartbeatTerminal';
 
 const API_URL = import.meta.env.VITE_API_URL || '/analyze';
 const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
@@ -103,7 +105,8 @@ function sanitizeReport(text: string): string {
         .replace(/\{[\s\S]*?\}/g, '')       // Remove raw JSON objects
         .replace(/```markdown/g, '')        // Remove markdown tags
         .replace(/```/g, '')                // Remove any remaining backticks
-        .replace(/^## Dimension Scores[\s\S]*$/im, '') // Remove dimension scores table (already in sidebar)
+        .replace(/^## Dimension Scores[\s\S]*$/im, '')
+        .replace(/Dimension Scores:[\s\S]*$/im, '')
         .trim();
 }
 
@@ -117,25 +120,12 @@ export function HeroSection() {
     const [clarificationInput, setClarificationInput] = useState('');
     const [error, setError] = useState('');
     const [sseEvents, setSseEvents] = useState<StatusEvent[]>([]);
-    const [_lastReportId, setLastReportId] = useState<string | null>(null);
     const [stressResult, setStressResult] = useState<StressResult | null>(null);
     const [currentReportId, setCurrentReportId] = useState<string | null>(null);
     const [currentReportToken, setCurrentReportToken] = useState<string | null>(null);
-    const [showScorecard, setShowScorecard] = useState(false);
+    const [heartbeatLogs, setHeartbeatLogs] = useState<HeartbeatLog[]>([]);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
-    useEffect(() => {
-        if (stressResult) {
-            console.log('[UI] Stress test result received — showing scorecard with stressed dimensions', { scenario: stressResult.scenarioId, stressedScores: stressResult.stressedScores });
-            setShowScorecard(true);
-        }
-    }, [stressResult]);
-
-    // Restore last report ID from localStorage on mount
-    useEffect(() => {
-        const saved = localStorage.getItem(LAST_REPORT_KEY);
-        if (saved) setLastReportId(saved);
-    }, []);
 
     const addEvent = (event: StatusEvent) =>
         setSseEvents(prev => [...prev, event]);
@@ -152,6 +142,7 @@ export function HeroSection() {
 
         setResult(null); setError(''); setClarification(null);
         setSseEvents([]);
+        setHeartbeatLogs([]); // Reset logs for new audit
         setPhase('discovery');
         setPhaseLabel('Scanning 24 months of public signals...');
 
@@ -164,6 +155,15 @@ export function HeroSection() {
 
             for await (const event of readSSE(response)) {
                 addEvent(event as StatusEvent);
+
+                if (event.type === 'SESSION_INIT' && event.sessionId) {
+                    // setCurrentSessionId(event.sessionId); // Assuming setCurrentSessionId is defined elsewhere if needed
+                    setHeartbeatLogs([]); // Reset for new session
+                }
+                if (event.type === 'HEARTBEAT_LOG' && event.log) {
+                    setHeartbeatLogs(prev => [...prev, event.log as HeartbeatLog]);
+                }
+
                 switch (event.type) {
                     case 'INTERROGATOR_START':
                         setPhase('discovery');
@@ -198,7 +198,7 @@ export function HeroSection() {
                             gap: event.gap as string,
                             findings: event.findings as string,
                             idScore: event.idScore as number,
-                            idBreakdown: event.idBreakdown as any,
+                            idBreakdown: event.idBreakdown as { specificity: number; completeness: number; moat: number },
                             usedLenses: event.usedLenses as string[] || [],
                         });
                         break;
@@ -217,7 +217,7 @@ export function HeroSection() {
                             dimensions: dims || {},
                         };
                         if (reportId) {
-                            setLastReportId(reportId);
+                            // setLastReportId(reportId);
                             setCurrentReportId(reportId);
                             setCurrentReportToken((event.token as string) || reportId.slice(-8));
                             localStorage.setItem(LAST_REPORT_KEY, reportId);
@@ -260,6 +260,14 @@ export function HeroSection() {
             });
 
             for await (const event of readSSE(response)) {
+                if (event.type === 'SESSION_INIT' && event.sessionId) {
+                    // setCurrentSessionId(event.sessionId); // Assuming setCurrentSessionId is defined elsewhere if needed
+                    setHeartbeatLogs([]); // Reset for new session
+                }
+                if (event.type === 'HEARTBEAT_LOG' && event.log) {
+                    setHeartbeatLogs(prev => [...prev, event.log as HeartbeatLog]);
+                }
+
                 if (event.type === 'INTERROGATOR_RESPONSE') {
                     setPhaseLabel(`${event.category} · ID Score: ${event.idScore}/100`);
                 } else if (event.type === 'NEED_CLARIFICATION') {
@@ -270,7 +278,7 @@ export function HeroSection() {
                         gap: event.gap as string,
                         findings: event.findings as string,
                         idScore: event.idScore as number,
-                        idBreakdown: event.idBreakdown as any,
+                        idBreakdown: event.idBreakdown as { specificity: number; completeness: number; moat: number },
                         usedLenses: event.usedLenses as string[] || [],
                     });
                 } else if (event.type === 'READY_FOR_AUDIT') {
@@ -502,7 +510,7 @@ export function HeroSection() {
                                     ? 'Context depth reached. Converging specialists for the final audit...'
                                     : phaseLabel}
                             </p>
-                            <AgentStatus events={sseEvents} visible={sseEvents.length > 0} />
+                            <AgentHeartbeat events={sseEvents} logs={heartbeatLogs} />
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -538,47 +546,92 @@ export function HeroSection() {
                             </div>
                         </div>
 
-                        {/* Body: Left Sidebar + Right Report */}
-                        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-
-                            {/* LEFT SIDEBAR — Scorecard (hidden until stress test) + Stress Test */}
-                            <div style={{ width: showScorecard ? 320 : 140, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.07)', overflowY: 'auto', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 20, transition: 'width 0.3s ease' }}>
-                                {showScorecard && (
-                                    <>
-                                        <DiagnosticScorecard
-                                            dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
-                                            originalDimensions={stressResult ? result.dimensions : undefined}
-                                            onAreaClick={() => { }}
+                        {/* Body: Quadrant Dashboard Layout */}
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'minmax(400px, 1.2fr) 1fr',
+                            gridTemplateRows: '340px 1fr auto',
+                            gap: '24px',
+                            padding: '24px',
+                            flex: 1,
+                            overflowY: 'auto',
+                            background: 'radial-gradient(circle at 50% -20%, rgba(124, 58, 237, 0.05), transparent)'
+                        }}>
+                            {/* TOP ROW: Simulation Controls (The 'Stress Chamber') */}
+                            <div style={{
+                                gridColumn: '1 / span 2',
+                                height: '280px',
+                                background: 'rgba(255,255,255,0.01)',
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                borderRadius: '16px',
+                                padding: '24px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                overflow: 'hidden'
+                            }}>
+                                <div style={{ marginBottom: 16 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                        <AlertTriangle size={14} className="text-amber-500" />
+                                        <h3 style={{ fontSize: 11, fontWeight: 700, color: '#a855f7', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Stress Chamber</h3>
+                                    </div>
+                                    <p style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.4 }}>Simulate macro-shifts & monitor defensive moats.</p>
+                                </div>
+                                <div style={{ flex: 1, overflowY: 'auto' }}>
+                                    {currentReportId && (
+                                        <StressTestPanel
+                                            reportId={currentReportId}
+                                            onStressResult={setStressResult}
+                                            apiBase={import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : ''}
                                         />
-                                        <div style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>Stress Test Results</div>
-                                    </>
-                                )}
-                                {currentReportId && (
-                                    <StressTestPanel
-                                        reportId={currentReportId}
-                                        originalScores={result.dimensions || {}}
-                                        onStressResult={(r) => {
-                                            console.log('[UI] Stress test clicked \u2014 expanding scorecard', { scenario: r.scenarioId });
-                                            setStressResult(r);
-                                        }}
-                                        apiBase={import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : ''}
-                                    />
-                                )}
+                                    )}
+                                </div>
                             </div>
 
-                            {/* RIGHT PANEL — Full Report */}
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-                                {result.confidence_score && result.confidence_score < 70 && (
-                                    <div style={{ padding: 16, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 12, display: 'flex', gap: 12, marginBottom: 24 }}>
-                                        <ShieldAlert size={18} style={{ color: '#fbbf24', flexShrink: 0, marginTop: 2 }} />
-                                        <div>
-                                            <p style={{ color: '#fcd34d', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Strategic Blindspot Detected</p>
-                                            <p style={{ color: 'rgba(252,211,77,0.7)', fontSize: 12 }}>Confidence: {result.confidence_score}/100. Critic flagged contradictions or insufficient supporting data.</p>
-                                        </div>
-                                    </div>
-                                )}
-                                <p style={{ fontSize: 11, fontWeight: 700, color: '#34d399', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 16 }}>Executive Synthesis</p>
-                                <div className="report-content text-sm text-gray-300 leading-relaxed">
+                            {/* CENTER: The 15-Dimension Radar Chart (The 'Core') */}
+                            <div style={{
+                                gridColumn: '1 / span 2',
+                                minHeight: '520px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'rgba(255,255,255,0.01)',
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                borderRadius: '24px',
+                                position: 'relative',
+                                padding: '40px'
+                            }}>
+                                <div style={{ width: '100%', maxWidth: '900px', height: '100%' }}>
+                                    <StrategyRadar
+                                        dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
+                                        originalDimensions={stressResult ? result.dimensions : undefined}
+                                    />
+                                </div>
+
+                                {/* Floating Diagnostic Scorecard Overlay */}
+                                <div style={{ position: 'absolute', top: 24, right: 24, width: '300px' }}>
+                                    <DiagnosticScorecard
+                                        dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
+                                        originalDimensions={stressResult ? result.dimensions : undefined}
+                                        onAreaClick={() => { }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* BOTTOM: The Strategic Deep-Dive Narrative cards (Synthesis) */}
+                            <div style={{
+                                gridColumn: '1 / span 2',
+                                background: 'rgba(15,15,25,0.4)',
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                borderRadius: '24px',
+                                padding: '40px',
+                                marginBottom: '24px'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
+                                    <Search size={20} className="text-violet-400" />
+                                    <h2 style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '0.02em', textTransform: 'uppercase' }}>Executive Strategic Synthesis</h2>
+                                </div>
+
+                                <div className="report-content text-sm text-gray-300 leading-relaxed max-w-5xl mx-auto">
                                     <ReactMarkdown
                                         components={{
                                             h1: ({ children }) => <h1 className="text-3xl font-bold text-white mb-6 mt-10">{children}</h1>,
