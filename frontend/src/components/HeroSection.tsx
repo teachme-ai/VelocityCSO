@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Canvas } from '@react-three/fiber';
-import { Stars } from '@react-three/drei';
+// import { Canvas } from '@react-three/fiber';
+// import { Stars } from '@react-three/drei';
 import { AgentOrbs } from './AgentOrbs';
 import { AgentStatus } from './AgentStatus';
 import { StressTestPanel } from './StressTestPanel';
@@ -9,6 +9,69 @@ import type { StatusEvent } from './AgentStatus';
 import type { StressResult } from '../types/stress';
 import { DiagnosticScorecard } from './DiagnosticScorecard';
 import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send } from 'lucide-react';
+
+const API_URL = import.meta.env.VITE_API_URL || '/analyze';
+const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
+
+type Phase =
+    | 'idle'
+    | 'discovery'
+    | 'evaluating'
+    | 'clarifying'
+    | 'analyzing'
+    | 'done'
+    | 'error';
+
+type ReportData = {
+    analysis_markdown?: string;
+    dimensions?: Record<string, number>;
+    confidence_score?: number;
+};
+
+type ClarificationState = {
+    sessionId: string;
+    summary: string;
+    gap: string;
+    findings: string;
+    idScore?: number;
+    idBreakdown?: { specificity: number; completeness: number; moat: number };
+    usedLenses?: string[];
+};
+
+const LAST_REPORT_KEY = 'vcso_last_report_id';
+
+function StarField() {
+    return (
+        <div className="absolute inset-0 pointer-events-none opacity-20">
+            <div className="absolute inset-0 bg-gradient-to-b from-violet-900/20 to-black" />
+        </div>
+    );
+}
+
+/** Read SSE stream from a POST fetch response */
+async function* readSSE(response: Response): AsyncGenerator<Record<string, unknown>> {
+    const reader = response.body?.getReader();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                try {
+                    yield JSON.parse(line.slice(6));
+                } catch { /* skip malformed */ }
+            }
+        }
+    }
+}
 
 import ReactMarkdown from 'react-markdown';
 
