@@ -21,38 +21,62 @@ export const StrategyRadar: React.FC<StrategyRadarProps> = ({ dimensions, origin
 
     const isStressMode = !!originalDimensions;
 
+    const avgScore = Math.round(Object.values(dimensions).reduce((a, b) => a + b, 0) / Object.values(dimensions).length);
+
     return (
         <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: [1, 1.05, 1], opacity: 1 }}
-            transition={{
-                scale: {
-                    duration: 3,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                },
-                opacity: { duration: 1 }
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.8 }}
+            style={{
+                width: '100%',
+                height: '100%',
+                minHeight: 280,
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
             }}
-            style={{ width: '100%', height: '100%', minHeight: 400 }}
         >
+            <div style={{
+                position: 'absolute',
+                textAlign: 'center',
+                zIndex: 10,
+                pointerEvents: 'none',
+                fontFamily: 'Space Grotesk, sans-serif'
+            }}>
+                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    Asymmetric Advantage
+                </div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: 'white' }}>
+                    {avgScore}<span style={{ fontSize: '14px', opacity: 0.5 }}>/100</span>
+                </div>
+            </div>
+
             <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                    <PolarGrid stroke="rgba(255,255,255,0.08)" />
+                <RadarChart cx="50%" cy="50%" outerRadius="40%" data={radarData}>
+                    <PolarGrid stroke="rgba(255,255,255,0.05)" />
                     <PolarAngleAxis
                         dataKey="subject"
-                        tick={{ fill: '#9ca3af', fontSize: 9, fontWeight: 500 }}
-                        tickSize={12}
+                        tick={false}
+                        axisLine={false}
                     />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                    <PolarRadiusAxis
+                        angle={30}
+                        domain={[0, 100]}
+                        tick={false}
+                        axisLine={false}
+                    />
 
-                    {/* Industry Parity (Ghost Layer) */}
+                    {/* Industry Parity (Ghost Layer) - Thinner */}
                     <Radar
                         name="Industry Parity"
                         dataKey="parity"
                         stroke="#9ca3af"
                         fill="transparent"
-                        strokeDasharray="4 4"
-                        strokeOpacity={0.4}
+                        strokeDasharray="2 2"
+                        strokeWidth={1}
+                        strokeOpacity={0.2}
                     />
 
                     {/* Baseline Radar (if in stress mode) */}
@@ -62,7 +86,7 @@ export const StrategyRadar: React.FC<StrategyRadarProps> = ({ dimensions, origin
                             dataKey="baseline"
                             stroke="#4b5563"
                             fill="#4b5563"
-                            fillOpacity={0.1}
+                            fillOpacity={0.05}
                         />
                     )}
 
@@ -71,7 +95,7 @@ export const StrategyRadar: React.FC<StrategyRadarProps> = ({ dimensions, origin
                         dataKey="A"
                         stroke={isStressMode ? '#f97316' : '#a855f7'}
                         fill={isStressMode ? '#f97316' : '#a855f7'}
-                        fillOpacity={0.5}
+                        fillOpacity={0.6}
                     />
                 </RadarChart>
             </ResponsiveContainer>
