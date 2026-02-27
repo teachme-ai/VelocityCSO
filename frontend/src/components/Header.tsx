@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import VelocityLogo from '../assets/VelocityCSO_logo.jpg';
 
 export function Header() {
     return (
@@ -10,56 +11,27 @@ export function Header() {
             style={{ background: 'linear-gradient(to bottom, rgba(5,8,20,0.9) 0%, transparent 100%)' }}
         >
             <div className="flex items-center gap-3">
-                {/* Resilient Shield Icon */}
-                <div className="w-8 h-8">
-                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                        <defs>
-                            <filter id="glow-header" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation="3" result="blur" />
-                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                            </filter>
-                            <linearGradient id="blue_grad_header" x1="25" y1="20" x2="25" y2="80" gradientUnits="userSpaceOnUse">
-                                <stop offset="0%" stop-color="#1e3a8a" />
-                                <stop offset="100%" stop-color="#1e40af" />
-                            </linearGradient>
-                            <linearGradient id="green_grad_header" x1="75" y1="20" x2="75" y2="80" gradientUnits="userSpaceOnUse">
-                                <stop offset="0%" stop-color="#10b981" />
-                                <stop offset="100%" stop-color="#22c55e" />
-                            </linearGradient>
-                        </defs>
-
-                        {/* Outer Glow */}
-                        <path d="M50 15 L20 25 C20 25 20 65 50 85 C80 65 80 25 80 25 L50 15 Z"
-                            fill="none" stroke="#22c55e" stroke-width="4" opacity="0.3" filter="url(#glow-header)" />
-
-                        {/* Shield Left */}
-                        <path d="M50 15 L20 25 C20 25 20 65 50 85 L50 15 Z" fill="url(#blue_grad_header)" />
-
-                        {/* Shield Right */}
-                        <path d="M50 15 L80 25 C80 25 80 65 50 85 L50 15 Z" fill="url(#green_grad_header)" />
-
-                        {/* Purple Intersection (The 'Asymmetric Advantage') with Pulsating Glow */}
-                        <motion.path
-                            d="M40 35 L50 25 L60 35 L50 80 L40 35 Z"
-                            fill="#a855f7"
-                            initial={{ opacity: 0.8, scale: 1 }}
-                            animate={{
-                                opacity: [0.8, 1, 0.8],
-                                scale: [1, 1.05, 1],
-                                filter: ['blur(0px)', 'blur(4px)', 'blur(0px)']
-                            }}
-                            transition={{
-                                duration: 3,
-                                repeat: Infinity,
-                                ease: "easeInOut"
-                            }}
-                        />
-                    </svg>
+                {/* Official VelocityCSO Logo */}
+                <div className="relative group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                    <img
+                        src={VelocityLogo}
+                        alt="VelocityCSO"
+                        className="h-10 w-auto object-contain rounded-sm"
+                    />
+                    {/* Subtle Pulsating Glow behind the logo */}
+                    <motion.div
+                        className="absolute inset-0 bg-violet-500/10 blur-xl -z-10 rounded-full"
+                        animate={{
+                            opacity: [0.1, 0.3, 0.1],
+                            scale: [1, 1.2, 1]
+                        }}
+                        transition={{
+                            duration: 3,
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                        }}
+                    />
                 </div>
-
-                <span className="font-bold text-white text-sm tracking-wide" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                    VELOCITY CSO
-                </span>
             </div>
 
             <div className="hidden md:flex items-center gap-8 text-sm text-gray-400">
