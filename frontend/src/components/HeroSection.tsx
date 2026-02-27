@@ -563,8 +563,8 @@ export function HeroSection() {
                         <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-12 bg-[radial-gradient(circle_at_50%_-20%,rgba(124,58,237,0.05),transparent)]">
 
                             {/* Zone 1: Executive Glance (Above the Fold) */}
-                            <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 items-stretch max-w-7xl mx-auto w-full">
-                                <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-6 md:p-10 backdrop-blur-xl flex flex-col items-center justify-center min-h-[500px]">
+                            <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 items-stretch max-w-7xl mx-auto w-full relative">
+                                <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-6 md:p-10 backdrop-blur-xl flex flex-col items-center justify-center min-h-[400px] lg:min-h-[500px] max-h-[300px] sm:max-h-none">
                                     <div className="w-full flex justify-between items-center mb-6">
                                         <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Strategic Position Matrix</h3>
                                         <div className="px-2 py-1 rounded bg-purple-500/10 border border-purple-500/20 text-[9px] text-purple-400 font-bold uppercase tracking-wider">Live Audit</div>
@@ -582,6 +582,18 @@ export function HeroSection() {
                                     moatRationale={result.moatRationale || 'Top-tier competitive moat identified through asymmetric multi-agentic analysis.'}
                                     dimensions={result.dimensions || {}}
                                 />
+
+                                {/* Executive Analysis Scroll Hint Notch */}
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 2, duration: 1 }}
+                                    className="absolute -bottom-16 left-1/2 -translate-x-1/2 hidden lg:flex flex-col items-center gap-2 cursor-pointer group"
+                                    onClick={() => document.getElementById('strategic-synthesis')?.scrollIntoView({ behavior: 'smooth' })}
+                                >
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.3em] group-hover:text-violet-400 transition-colors">Executive Analysis Below</span>
+                                    <div className="w-px h-12 bg-gradient-to-b from-violet-500/50 to-transparent group-hover:from-violet-400 transition-all" />
+                                </motion.div>
                             </section>
 
                             {/* Zone 2: Risk Dashboard (Side-by-Side Panel) */}
@@ -653,7 +665,7 @@ export function HeroSection() {
                                 </div>
                             </section>
 
-                            <div className="max-w-5xl mx-auto w-full pb-20 border-t border-zinc-800/50 pt-12">
+                            <div id="strategic-synthesis" className="max-w-5xl mx-auto w-full pb-20 border-t border-zinc-800/50 pt-12">
                                 <div className="flex items-center gap-3 mb-10">
                                     <Search size={22} className="text-violet-400" />
                                     <h2 className="text-2xl font-bold text-white tracking-tight uppercase">Executive Strategic Synthesis</h2>

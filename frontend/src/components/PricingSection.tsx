@@ -17,7 +17,7 @@ const plans = [
             'Self-correcting Critic Agent loop',
             'Confidence-scored evidence report',
             'Strategic Blindspot detection',
-            'Exportable McKinsey-grade Markdown report',
+            'Exportable Tier-1 Consulting-grade Markdown report',
             'Radar Chart & visual scorecard',
         ],
         cta: 'Start Free Audit',

@@ -54,11 +54,11 @@ export const StrategyRadar: React.FC<StrategyRadarProps> = ({ dimensions, origin
             </div>
 
             <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="40%" data={radarData}>
+                <RadarChart cx="50%" cy="50%" outerRadius="30%" data={radarData}>
                     <PolarGrid stroke="rgba(255,255,255,0.05)" />
                     <PolarAngleAxis
                         dataKey="subject"
-                        tick={false}
+                        tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: '8px', fontFamily: 'Inter, sans-serif' }}
                         axisLine={false}
                     />
                     <PolarRadiusAxis

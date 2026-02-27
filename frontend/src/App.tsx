@@ -16,7 +16,7 @@ function Footer() {
           <div className="w-2 h-2 rounded-full bg-emerald-400" />
         </div>
         <p className="text-xs text-gray-600">
-          © 2026 VelocityCSO. McKinsey-grade strategy intelligence, powered by agentic AI.
+          © 2026 VelocityCSO. Tier-1 Consulting strategy intelligence, powered by agentic AI.
         </p>
         <div className="flex gap-6 text-xs text-gray-600">
           <a href="#" className="hover:text-gray-400 transition-colors">Privacy</a>
@@ -34,13 +34,15 @@ export default function App() {
       {/* Nav */}
       <Header />
 
-      {/* Main Sections */}
-      <HeroSection />
-      <div id="engine">
-        <DimensionOrbit />
-      </div>
-      <div id="offerings">
-        <PricingSection />
+      {/* Main Sections - Added padding top on mobile to prevent header overlap */}
+      <div className="pt-20 sm:pt-0">
+        <HeroSection />
+        <div id="engine">
+          <DimensionOrbit />
+        </div>
+        <div id="offerings">
+          <PricingSection />
+        </div>
       </div>
       <Footer />
     </div>

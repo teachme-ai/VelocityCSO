@@ -21,7 +21,7 @@ export class ChiefStrategyAgent {
             model: 'gemini-2.5-pro',
             description: 'Enterprise-grade Chief Strategy Officer (CSO) responsible for synthesizing business analysis.',
             instruction: `
-        You are a McKinsey-level Chief Strategy Officer. 
+        You are a Global Executive Chief Strategy Officer. 
         Your goal is to receive a business description (potentially enriched with Discovery findings),
         delegate analysis to your specialized team, and synthesize their outputs into a comprehensive markdown report.
         
@@ -206,7 +206,7 @@ export class ChiefStrategyAgent {
             ${JSON.stringify(finalDimensions, null, 2)}
             
             YOUR TASK:
-            1. Synthesize these inputs into a high-end McKinsey-level strategic report.
+            1. Synthesize these inputs into a high-end Tier-1 Consulting strategic report.
             2. Integrate the dimension scores into the narrative.
             3. Ensure the report is formatted in clean markdown.
             4. YOU MUST END THE REPORT WITH THE EXACT "Dimension Scores" TABLE BELOW.
@@ -252,11 +252,10 @@ export class ChiefStrategyAgent {
         // 4. Generate Moat Rationale
         const topDimension = Object.entries(finalDimensions).reduce((a, b) => b[1] > a[1] ? b : a);
         const moatPrompt = `
-            Identify why "${topDimension[0]}" is the primary moat for this business based on the analysis.
-            CONTEXT: ${businessContext.slice(0, 500)}
-            SCORE: ${topDimension[1]}/100
-            TASK: Write a 2-sentence 'Moat Rationale'.
-            FORMAT: "Explain that this is the moat because [reason] it represents a [Premium/high-demand/asymmetric] play that [benefit], creating a barrier against generic competitors."
+            <role>Global Executive Strategist</role>
+            <task>Identify why "${topDimension[0]}" is the primary moat for ${orgName}.</task>
+            <context>SCORE: ${topDimension[1]}/100. ${businessContext.slice(0, 500)}</context>
+            <constraint>Return EXACTLY 2 sentences. Use professional, aggressive, and insightful tone. Frame as a Tier-1 Consulting strategic verdict.</constraint>
         `.trim();
 
         emitHeartbeat(sessionId, `◆ CSO: Identifying strategic moat (${topDimension[0]})...`);
@@ -391,7 +390,7 @@ Only include a dimension in mitigation_cards if its stressed score is below 40.
             name: 'stress_test_agent',
             model: 'gemini-2.5-flash',
             description: 'Rapid stress-test recalculation specialist.',
-            instruction: 'You are a McKinsey-level stress-test analyst. Respond ONLY with a raw JSON object as instructed.',
+            instruction: 'You are a Global Executive stress-test analyst. Respond ONLY with a raw JSON object as instructed.',
         });
 
         const runner = new InMemoryRunner({ agent: stressAgent, appName: 'velocity_stress' });

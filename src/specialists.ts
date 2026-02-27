@@ -87,10 +87,10 @@ export const commercialAnalyst = new LlmAgent({
 export const operationsAnalyst = new LlmAgent({
   name: 'operations_analyst',
   model: 'gemini-2.5-flash',
-  description: 'Expert in McKinsey 7S, Value Chain, AI Operating Model, and ESG.',
+  description: 'Expert in Tier-1 Consulting 7S, Value Chain, AI Operating Model, and ESG.',
   instruction: `
     Analyze the provided business context focusing on:
-    - McKinsey 7S Framework.
+    - Tier-1 Consulting 7S Framework.
     - Value Chain Analysis and AI Operating Model Triangle readiness.
     - ESG (Environmental, Social, and Governance) Assessment.
     

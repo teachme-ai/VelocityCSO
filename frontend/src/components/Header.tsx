@@ -6,7 +6,7 @@ export function Header() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-8 py-5"
+            className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-5 backdrop-blur-md"
             style={{ background: 'linear-gradient(to bottom, rgba(5,8,20,0.9) 0%, transparent 100%)' }}
         >
             <div className="flex items-center gap-3">
@@ -39,11 +39,20 @@ export function Header() {
                         <path d="M50 15 L80 25 C80 25 80 65 50 85 L50 15 Z" fill="url(#green_grad_header)" />
 
                         {/* Purple Intersection (The 'Asymmetric Advantage') with Pulsating Glow */}
-                        <path
+                        <motion.path
                             d="M40 35 L50 25 L60 35 L50 80 L40 35 Z"
                             fill="#a855f7"
-                            className="pulse-overlap"
-                            style={{ filter: 'url(#glow-header)' }}
+                            initial={{ opacity: 0.8, scale: 1 }}
+                            animate={{
+                                opacity: [0.8, 1, 0.8],
+                                scale: [1, 1.05, 1],
+                                filter: ['blur(0px)', 'blur(4px)', 'blur(0px)']
+                            }}
+                            transition={{
+                                duration: 3,
+                                repeat: Infinity,
+                                ease: "easeInOut"
+                            }}
                         />
                     </svg>
                 </div>

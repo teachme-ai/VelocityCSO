@@ -37,8 +37,8 @@ export const DimensionGallery = () => {
     const isMobile = width < 640;
     const isTablet = width >= 640 && width < 1024;
 
-    const cols = isMobile ? 2 : (isTablet ? 3 : 5);
-    const rowHeight = isMobile ? 120 : 140;
+    const cols = isMobile ? 1 : (isTablet ? 3 : 5);
+    const rowHeight = isMobile ? 160 : 140; // More vertical space on mobile
     const containerHeight = Math.ceil(dimensions.length / cols) * rowHeight + 100;
 
     const dimensionData = dimensions.map((dim: { name: string; category: string; color: string }, i: number) => {
@@ -47,12 +47,12 @@ export const DimensionGallery = () => {
 
         // Base grid position (%)
         const colWidth = 100 / cols;
-        const baseX = (col * colWidth) + (colWidth / 2);
+        const baseX = isMobile ? 50 : (col * colWidth) + (colWidth / 2);
         const baseY = (row * rowHeight) + (rowHeight / 2);
 
         // Deterministic jitter based on index
-        const jitterX = ((i * 13) % 8) - 4;
-        const jitterY = ((i * 17) % 8) - 4;
+        const jitterX = isMobile ? 0 : ((i * 13) % 8) - 4;
+        const jitterY = isMobile ? 0 : ((i * 17) % 8) - 4;
 
         // Sample Audit Scores (deterministic for demo)
         const scores = [85, 42, 92, 38, 77, 61, 88, 55, 33, 72, 49, 95, 28, 66, 81];
@@ -65,7 +65,7 @@ export const DimensionGallery = () => {
 
         return {
             ...dim,
-            left: `calc(${baseX}% + ${jitterX}px)`,
+            left: isMobile ? `50%` : `calc(${baseX}% + ${jitterX}px)`,
             top: `${baseY + jitterY}px`,
             animationDuration: 4 + ((i * 7) % 3),
             animationDelay: (i * 0.3) % 2,

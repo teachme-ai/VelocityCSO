@@ -38,8 +38,9 @@ const SCENARIO_PROMPTS: Record<string, string> = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function sanitizeText(text: string): string {
     if (!text) return '';
-    // Strip emojis and non-ASCII characters that break standard PDF encoding
-    return text.replace(/[^\x00-\x7F]/g, '').trim();
+    // Strip emojis and non-printable ASCII characters that break standard PDF encoding
+    // Keep space to ~ (standard printable)
+    return text.replace(/[^\x20-\x7E]/g, '').trim();
 }
 function drawHeader(doc: PDFKit.PDFDocument, title: string) {
     const safeTitle = sanitizeText(title).toUpperCase();
