@@ -10,67 +10,38 @@ import type { StressResult } from '../types/stress';
 import { DiagnosticScorecard } from './DiagnosticScorecard';
 import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || '/analyze';
-const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
+import ReactMarkdown from 'react-markdown';
 
-type Phase =
-    | 'idle'
-    | 'discovery'
-    | 'evaluating'
-    | 'clarifying'
-    | 'analyzing'
-    | 'done'
-    | 'error';
+// ─── Strategic UI Components ────────────────────────────────────────────────
+const AsymmetricCard = ({ children }: { children: React.ReactNode }) => (
+    <div className="relative group overflow-hidden rounded-2xl bg-white/5 border border-white/10 p-6 my-6 transition-all duration-500 hover:bg-white/[0.07] hover:border-violet-500/30">
+        <div className="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity">
+            <ShieldAlert className="w-8 h-8 text-violet-400" />
+        </div>
+        <div className="relative z-10 text-gray-200">
+            {children}
+        </div>
+    </div>
+);
 
-type ReportData = {
-    analysis_markdown?: string;
-    dimensions?: Record<string, number>;
-    confidence_score?: number;
-};
+const SavvyRecommendation = ({ children }: { children: React.ReactNode }) => (
+    <div className="border-l-4 border-blue-600 pl-6 my-6 italic bg-blue-600/5 py-4 rounded-r-xl text-blue-100/90 shadow-[inset_1px_0_0_rgba(255,255,255,0.05)]">
+        {children}
+    </div>
+);
 
-type ClarificationState = {
-    sessionId: string;
-    summary: string;
-    gap: string;
-    findings: string;
-    idScore?: number;
-    idBreakdown?: { specificity: number; completeness: number; moat: number };
-    usedLenses?: string[];
-};
-
-const LAST_REPORT_KEY = 'vcso_last_report_id';
-
-function StarField() {
-    return (
-        <Canvas camera={{ position: [0, 0, 1] }} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-            <Stars radius={80} depth={60} count={6000} factor={4} saturation={0} fade speed={0.5} />
-        </Canvas>
-    );
-}
-
-/** Read SSE stream from a POST fetch response */
-async function* readSSE(response: Response): AsyncGenerator<Record<string, unknown>> {
-    const reader = response.body?.getReader();
-    if (!reader) return;
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                try {
-                    yield JSON.parse(line.slice(6));
-                } catch { /* skip malformed */ }
-            }
-        }
-    }
+/**
+ * Regex Stripper: Add a utility to strip all json, markdown, and backtick tags 
+ * from the analysis_markdown string before rendering.
+ */
+function sanitizeReport(text: string): string {
+    return text
+        .replace(/```json[\s\S]*?```/g, '') // Remove json code blocks
+        .replace(/\{[\s\S]*?\}/g, '')       // Remove raw JSON objects
+        .replace(/```markdown/g, '')        // Remove markdown tags
+        .replace(/```/g, '')                // Remove any remaining backticks
+        .replace(/^## Dimension Scores[\s\S]*$/im, '') // Remove dimension scores table (already in sidebar)
+        .trim();
 }
 
 export function HeroSection() {
@@ -351,9 +322,8 @@ export function HeroSection() {
                                     ].map(lens => {
                                         const done = clarification.usedLenses?.includes(lens.id);
                                         return (
-                                            <div key={lens.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-500 ${
-                                                done ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-gray-500 border border-white/10'
-                                            }`}>
+                                            <div key={lens.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-500 ${done ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-gray-500 border border-white/10'
+                                                }`}>
                                                 <span>{lens.icon}</span>
                                                 <span>{lens.label}</span>
                                                 {done && <span>✓</span>}
@@ -515,7 +485,7 @@ export function HeroSection() {
                                         <DiagnosticScorecard
                                             dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
                                             originalDimensions={stressResult ? result.dimensions : undefined}
-                                            onAreaClick={() => {}}
+                                            onAreaClick={() => { }}
                                         />
                                         <div style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>Stress Test Results</div>
                                     </>
@@ -545,27 +515,44 @@ export function HeroSection() {
                                     </div>
                                 )}
                                 <p style={{ fontSize: 11, fontWeight: 700, color: '#34d399', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 16 }}>Executive Synthesis</p>
-                                <div style={{ fontSize: 14, color: '#d1d5db', lineHeight: 1.75 }}>
-                                    {(() => {
-                                        const text = result.analysis_markdown || '';
-                                        const cleaned = text
-                                            .replace(/\{[\s\S]*?\}/g, '')
-                                            .replace(/^## Dimension Scores.*$/im, '')
-                                            .replace(/^(TAM Viability|Target Precision|Trend Adoption|Competitive Defensibility|Model Innovation|Flywheel Potential|Pricing Power|CAC\/LTV Ratio|Market Entry Speed|Execution Speed|Scalability|ESG Posture|ROI Projection|Risk Tolerance|Capital Efficiency)[^\n]*$/gm, '')
-                                            .replace(/\*\*(.+?)\*\*/g, '$1')
-                                            .replace(/^#+\s*/gm, '')
-                                            .replace(/^[-*]\s*/gm, '• ')
-                                            .replace(/\n{3,}/g, '\n\n')
-                                            .trim();
-                                        
-                                        console.log('[UI] Report text cleaned — JSON and markdown removed', { originalLength: text.length, cleanedLength: cleaned.length });
-                                        
-                                        return cleaned.split('\n').map((line, i) => {
-                                            if (line.trim() === '') return <div key={i} style={{ height: 8 }} />;
-                                            if (line.startsWith('• ')) return <p key={i} style={{ display: 'flex', gap: 8, margin: '6px 0' }}><span style={{ color: '#7c3aed', flexShrink: 0 }}>•</span><span>{line.slice(2)}</span></p>;
-                                            return <p key={i} style={{ margin: '6px 0' }}>{line}</p>;
-                                        });
-                                    })()}
+                                <div className="report-content text-sm text-gray-300 leading-relaxed">
+                                    <ReactMarkdown
+                                        components={{
+                                            h1: ({ children }) => <h1 className="text-3xl font-bold text-white mb-6 mt-10">{children}</h1>,
+                                            h2: ({ children }) => <h2 className="text-xl font-bold text-violet-300 mb-4 mt-8 uppercase tracking-wider">{children}</h2>,
+                                            h3: ({ children }) => {
+                                                const text = String(children);
+                                                if (text.toLowerCase().includes('asymmetric play')) {
+                                                    return (
+                                                        <div className="flex items-center gap-2 mb-2 mt-6">
+                                                            <div className="w-1.5 h-6 bg-violet-500 rounded-full" />
+                                                            <h3 className="text-lg font-bold text-white">{children}</h3>
+                                                        </div>
+                                                    );
+                                                }
+                                                return <h3 className="text-lg font-bold text-white mb-3 mt-6">{children}</h3>;
+                                            },
+                                            p: ({ children }) => {
+                                                const text = String(children);
+                                                if (text.toLowerCase().includes('asymmetric play')) {
+                                                    return <AsymmetricCard>{children}</AsymmetricCard>;
+                                                }
+                                                if (text.startsWith('Because ') && (text.includes(' cannot ') || text.includes(' can\'t '))) {
+                                                    return <SavvyRecommendation>{children}</SavvyRecommendation>;
+                                                }
+                                                return <p className="mb-4 leading-relaxed">{children}</p>;
+                                            },
+                                            li: ({ children }) => (
+                                                <li className="flex gap-3 my-2 items-start">
+                                                    <span className="text-violet-500 mt-1.5 flex-shrink-0">•</span>
+                                                    <span>{children}</span>
+                                                </li>
+                                            ),
+                                            ul: ({ children }) => <ul className="my-4">{children}</ul>,
+                                        }}
+                                    >
+                                        {sanitizeReport(result.analysis_markdown || '')}
+                                    </ReactMarkdown>
                                 </div>
                             </div>
                         </div>

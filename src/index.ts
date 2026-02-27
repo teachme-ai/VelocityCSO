@@ -149,30 +149,28 @@ app.post('/analyze', async (req, res) => {
             gaps: discoveryResult.gaps,
         });
 
-        // ── Phase 0.5: Completeness Check — skip if interrogator already cleared ──
-        if (!ir.isAuditable) {
-            const { proceed, gap } = await cso.evaluateCompleteness(discoveryResult, sessionId);
+        // ── Phase 0.5: Completeness Check ──
+        const { proceed, gap } = await cso.evaluateCompleteness(discoveryResult, sessionId);
 
-            if (!proceed && gap) {
-                await saveSession(sessionId, {
-                    originalContext: business_context,
-                    enrichedContext: business_context,
-                    discoveryFindings: discoveryResult.findings,
-                    gaps: discoveryResult.gaps,
-                    turnCount: 0,
-                    usedLenses: [],
-                });
-                tlog({ severity: 'WARNING', message: 'Clarification required — session saved', session_id: sessionId });
-                sseWrite(res, {
-                    type: 'NEED_CLARIFICATION',
-                    sessionId,
-                    summary: discoveryResult.summary,
-                    gap,
-                    findings: discoveryResult.findings,
-                });
-                res.end();
-                return;
-            }
+        if (!proceed && gap) {
+            await saveSession(sessionId, {
+                originalContext: business_context,
+                enrichedContext: business_context,
+                discoveryFindings: discoveryResult.findings,
+                gaps: discoveryResult.gaps,
+                turnCount: 0,
+                usedLenses: [],
+            });
+            tlog({ severity: 'WARNING', message: 'Clarification required — session saved', session_id: sessionId });
+            sseWrite(res, {
+                type: 'NEED_CLARIFICATION',
+                sessionId,
+                summary: discoveryResult.summary,
+                gap,
+                findings: discoveryResult.findings,
+            });
+            res.end();
+            return;
         }
 
         // ── Phase 1–3: Full Analysis ──────────────────────────────────────
@@ -186,10 +184,9 @@ app.post('/analyze', async (req, res) => {
             ? enrichedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
             : enrichedContext;
 
-        const report = await cso.analyze(finalContext, sessionId);
+        const { report, dimensions, specialistOutputs } = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
-        const dimensionScores = extractDimensions(report);
-        tlog({ severity: 'INFO', message: 'Dimension scores extracted', session_id: sessionId, dimension_count: Object.keys(dimensionScores).length, scores: dimensionScores });
+        tlog({ severity: 'INFO', message: 'Analysis complete', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
         // Save to Firestore with structured memory
         let docId = `local-${randomUUID()}`;
@@ -202,7 +199,7 @@ app.post('/analyze', async (req, res) => {
                 business_context,
                 fingerprint,
                 report,
-                dimension_scores: dimensionScores,
+                dimension_scores: dimensions,
                 discovery_findings: discoveryResult.findings,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 expires_at: expiresAt,
@@ -214,8 +211,8 @@ app.post('/analyze', async (req, res) => {
                 reportId: docId,
                 businessContext: business_context,
                 groundedContext: discoveryResult.findings,
-                specialistOutputs: {},
-                dimensionScores,
+                specialistOutputs,
+                dimensionScores: dimensions,
                 report,
                 stressTest: !!stress_test,
             });
@@ -225,7 +222,7 @@ app.post('/analyze', async (req, res) => {
 
         logAuditCost(sessionId, { discovery: discoveryCost.usd, synthesis: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions: dimensionScores });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions });
         res.end();
 
     } catch (error: any) {
@@ -300,10 +297,9 @@ app.post('/analyze/clarify', async (req, res) => {
             : regroundedContext;
 
         sseWrite(res, { type: 'ANALYSIS_START', phase: 'synthesizing' });
-        const report = await cso.analyze(finalContext, sessionId);
+        const { report, dimensions, specialistOutputs } = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
-        const dimensionScores = extractDimensions(report);
-        tlog({ severity: 'INFO', message: 'Dimension scores extracted (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensionScores).length, scores: dimensionScores });
+        tlog({ severity: 'INFO', message: 'Analysis complete (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
         let docId = `local-${randomUUID()}`;
 
@@ -315,7 +311,7 @@ app.post('/analyze/clarify', async (req, res) => {
                 fingerprint,
                 user_clarification: clarification,
                 report,
-                dimension_scores: dimensionScores,
+                dimension_scores: dimensions,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 expires_at: expiresAt,
             });
@@ -325,8 +321,8 @@ app.post('/analyze/clarify', async (req, res) => {
                 reportId: docId,
                 businessContext: session.enrichedContext,
                 groundedContext: session.discoveryFindings,
-                specialistOutputs: {},
-                dimensionScores,
+                specialistOutputs,
+                dimensionScores: dimensions,
                 report,
                 stressTest: !!stress_test,
             });
@@ -337,12 +333,12 @@ app.post('/analyze/clarify', async (req, res) => {
         await deleteSession(sessionId);
         logAuditCost(sessionId, { synthesis_with_clarification: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions: dimensionScores });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions });
         res.end();
 
-        } catch (error: any) {
+    } catch (error: any) {
         tlog({ severity: 'ERROR', message: 'Clarify endpoint failed', error: error.message, session_id: sessionId });
-        await releaseLock(sessionId);
+        await releaseLock(sessionId); // Still needed on catch
         sseWrite(res, { type: 'ERROR', message: error.message });
         res.end();
     }

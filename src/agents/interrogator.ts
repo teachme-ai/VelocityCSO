@@ -95,6 +95,12 @@ export class InterrogatorAgent {
         // Merge deterministically covered lenses with session-tracked ones
         const effectiveUsedLenses = [...new Set([...usedLenses, ...preScore.coveredLenses])];
 
+        // 🚨 STATE LOCK: If all lenses are covered, or (2/3 lenses covered AND pre-score is decent), force audit
+        if (effectiveUsedLenses.length >= 3 || (effectiveUsedLenses.length === 2 && preScore.score >= 50)) {
+            log({ severity: 'INFO', message: 'Interrogator: State Lock triggered (Density reached). Forcing READY_FOR_AUDIT.', agent_id: 'interrogator_agent', session_id: sessionId, score: preScore.score, lenses: effectiveUsedLenses });
+            return { category: 'Strategic Business', question: '', isAuditable: true, strategyContext: groundedContext, idScore: Math.max(70, preScore.score), lensUsed: '', idBreakdown: { specificity: 70, completeness: 70, moat: 70 } };
+        }
+
         // Load asked questions from Firestore for blacklist
         let askedQuestions: string[] = [];
         try {
@@ -135,8 +141,10 @@ export class InterrogatorAgent {
             try {
                 const p = JSON.parse(jsonMatch[0]);
                 const idScore = Math.min(100, p.id_score || 0);
-                const isAuditable = p.is_auditable === true || idScore >= 70;
                 const lensUsed: string = p.lens_used || '';
+
+                // If only one lens was left and we got a decent score, or LLM says auditable
+                const isAuditable = p.is_auditable === true || idScore >= 70 || (effectiveUsedLenses.length === 2 && idScore >= 50);
 
                 if (!isAuditable && p.question) {
                     try {

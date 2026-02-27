@@ -94,89 +94,117 @@ export class ChiefStrategyAgent {
 
     /**
      * Runs the full 15-dimension analysis pipeline.
+     * Uses Promise.all to ensure all specialists finish before synthesis.
      */
-    async analyze(businessContext: string, sessionId: string): Promise<string> {
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number>; specialistOutputs: Record<string, any> }> {
         log({
             severity: 'INFO',
-            message: 'CSO analysis started',
+            message: 'CSO analysis started (Parallel Specialist Mode)',
             agent_id: 'chief_strategy_agent',
             phase: 'synthesis',
             session_id: sessionId,
         });
 
-        const runner = new InMemoryRunner({
-            agent: this.agent,
-            appName: 'velocity_cso',
+        const finalDimensions: Record<string, number> = {};
+        const specialistOutputs: Record<string, any> = {};
+
+        // 1. Run all 5 specialists in parallel
+        const specialistPromises = specialists.map(async (agent) => {
+            const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist' });
+            const internalId = randomUUID();
+            await runner.sessionService.createSession({ appName: 'velocity_specialist', userId: 'cso_internal', sessionId: internalId });
+
+            const eventStream = runner.runAsync({
+                userId: 'cso_internal',
+                sessionId: internalId,
+                newMessage: { role: 'user', parts: [{ text: businessContext }] }
+            });
+
+            let rawOutput = '';
+            for await (const event of eventStream) {
+                if (event.author === agent.name || isFinalResponse(event)) {
+                    const parts = event.content?.parts || [];
+                    const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
+                    if (text) rawOutput += text;
+                }
+            }
+
+            // Extract JSON from specialist output
+            const jsonMatch = rawOutput.match(/\{[\s\S]*?\}/);
+            if (jsonMatch) {
+                try {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    if (parsed.dimensions) {
+                        Object.assign(finalDimensions, parsed.dimensions);
+                    }
+                    specialistOutputs[agent.name!] = parsed;
+                    return parsed;
+                } catch {
+                    log({ severity: 'WARNING', message: `Failed to parse JSON for ${agent.name}`, session_id: sessionId });
+                }
+            }
+            return { analysis_markdown: rawOutput };
         });
 
-        const internalSessionId = randomUUID();
-        const userId = 'api_user';
+        await Promise.all(specialistPromises);
 
-        await runner.sessionService.createSession({
-            appName: 'velocity_cso',
-            userId,
-            sessionId: internalSessionId
-        });
+        // 2. Comprehensive Synthesis by CSO
+        const synthesisPrompt = `
+            You are the Chief Strategy Officer. You have received independent analysis from your specialists.
+            
+            BUSINESS CONTEXT:
+            ${businessContext}
+            
+            SPECIALIST ANALYSES:
+            ${Object.entries(specialistOutputs).map(([name, out]) => `--- ${name} ---\n${out.analysis_markdown}`).join('\n\n')}
+            
+            MERGED DIMENSION SCORES:
+            ${JSON.stringify(finalDimensions, null, 2)}
+            
+            YOUR TASK:
+            1. Synthesize these inputs into a high-end McKinsey-level strategic report.
+            2. Integrate the dimension scores into the narrative.
+            3. Ensure the report is formatted in clean markdown.
+            4. YOU MUST END THE REPORT WITH THE EXACT "Dimension Scores" TABLE BELOW.
+            
+            ## Dimension Scores
+            ${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
+        `.trim();
 
-        const eventStream = runner.runAsync({
-            userId,
-            sessionId: internalSessionId,
-            newMessage: { role: 'user', parts: [{ text: businessContext }] }
+        const csoRunner = new InMemoryRunner({ agent: this.agent, appName: 'velocity_cso_synthesis' });
+        const csoSessionId = randomUUID();
+        await csoRunner.sessionService.createSession({ appName: 'velocity_cso_synthesis', userId: 'cso_user', sessionId: csoSessionId });
+
+        const csoStream = csoRunner.runAsync({
+            userId: 'cso_user',
+            sessionId: csoSessionId,
+            newMessage: { role: 'user', parts: [{ text: synthesisPrompt }] }
         });
 
         let finalReport = '';
-        const allDimensions: Record<string, number> = {};
-
-        for await (const event of eventStream) {
+        for await (const event of csoStream) {
             if (event.author === this.agent.name || isFinalResponse(event)) {
                 const parts = event.content?.parts || [];
-                const text = parts.map((p: { text?: string }) => p.text).filter(Boolean).join('\n');
+                const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
                 if (text) finalReport += text;
             }
         }
 
-        // Extract JSON blocks from specialist outputs and merge dimensions
-        const jsonMatches = finalReport.match(/\{[\s\S]*?\}/g) || [];
-        for (const jsonStr of jsonMatches) {
-            try {
-                const parsed = JSON.parse(jsonStr);
-                if (parsed.dimensions) {
-                    Object.assign(allDimensions, parsed.dimensions);
-                }
-            } catch { /* skip non-JSON or malformed */ }
-        }
-
-        // If we extracted dimensions from JSON, rebuild report as pure markdown
-        if (Object.keys(allDimensions).length > 0) {
-            const dimLines = Object.entries(allDimensions)
-                .map(([dim, score]) => `${dim}: ${score}/100`)
-                .join('\n');
-            
-            // Strip JSON, keep only markdown narrative
-            let cleanReport = finalReport
-                .replace(/\{[\s\S]*?\}/g, '') // Remove all JSON blocks
-                .replace(/^\s*\n/gm, '') // Remove empty lines
-                .trim();
-            
-            // Ensure scoring table is present
-            if (!cleanReport.includes('## Dimension Scores')) {
-                cleanReport += `\n\n## Dimension Scores\n${dimLines}`;
-            }
-            finalReport = cleanReport;
-        }
-
-        const cost = estimateCost('gemini-2.5-pro', businessContext.length, finalReport.length);
+        const cost = estimateCost('gemini-2.5-pro', synthesisPrompt.length, finalReport.length);
         log({
             severity: 'INFO',
             message: 'CSO analysis complete',
             agent_id: 'chief_strategy_agent',
             phase: 'synthesis',
             session_id: sessionId,
-            token_estimate: cost.inputTokens + cost.outputTokens,
             cost_usd: cost.usd,
         });
 
-        return finalReport || 'Strategic analysis failed. No final response generated.';
+        return {
+            report: finalReport || 'Strategic analysis failed.',
+            dimensions: finalDimensions,
+            specialistOutputs
+        };
     }
 
     /**
