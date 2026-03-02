@@ -1,18 +1,73 @@
-import { LlmAgent, InMemoryRunner, isFinalResponse } from '@google/adk';
+import { LlmAgent, InMemoryRunner, isFinalResponse, GOOGLE_SEARCH } from '@google/adk';
 import { randomUUID } from 'crypto';
 import { log, estimateCost } from '../services/logger.js';
 
 export interface DiscoveryResult {
-    findings: string;
+    findings: Array<{
+        signal: string;
+        source: string;
+        date: string;
+        relevance: 'high' | 'medium' | 'low';
+    }>;
     gaps: string[];
     isComplete: boolean;
     summary: string;
+    pestle?: {
+        political: PestleItem;
+        economic: PestleItem;
+        social: PestleItem;
+        technological: PestleItem;
+        legal: PestleItem;
+        environmental: PestleItem;
+    };
+}
+
+interface PestleItem {
+    signal: string;
+    impact: number;   // 0-10
+    likelihood: number; // 0-10
+}
+
+function buildDiscoveryInstruction(): string {
+    return `
+You are a market intelligence analyst. Perform MARKET GROUNDING using Google Search to find REAL, CURRENT information.
+
+SEARCH STRATEGY:
+1. Search for "[company/product name] news 2025 2026"
+2. Search for "[industry] market size 2025 funding"
+3. Search for "[top competitor names] recent announcements"
+4. Search for "[industry] regulatory changes 2025"
+
+For each search, cite the source URL and publication date.
+
+OUTPUT FORMAT (strict JSON):
+{
+  "findings": [
+    {
+      "signal": "string — what was found",
+      "source": "URL or publication name",
+      "date": "YYYY-MM or 'unknown'",
+      "relevance": "high | medium | low"
+    }
+  ],
+  "gaps": ["string — what could not be found via search"],
+  "isComplete": boolean,
+  "summary": "2-3 sentence synthesis of the most important findings",
+  "pestle": {
+    "political": { "signal": "string", "impact": 0-10, "likelihood": 0-10 },
+    "economic": { "signal": "string", "impact": 0-10, "likelihood": 0-10 },
+    "social": { "signal": "string", "impact": 0-10, "likelihood": 0-10 },
+    "technological": { "signal": "string", "impact": 0-10, "likelihood": 0-10 },
+    "legal": { "signal": "string", "impact": 0-10, "likelihood": 0-10 },
+    "environmental": { "signal": "string", "impact": 0-10, "likelihood": 0-10 }
+  }
+}
+`;
 }
 
 /**
  * Agent 0: Discovery Agent
- * Uses gemini-2.0-flash to conduct a 24-month retrospective scan of public
- * business signals before the 15-dimension analysis begins.
+ * Uses gemini-2.0-flash with real-time web search to ground strategic analysis.
  */
 export class DiscoveryAgent {
     private agent: LlmAgent;
@@ -21,45 +76,9 @@ export class DiscoveryAgent {
         this.agent = new LlmAgent({
             name: 'discovery_agent',
             model: 'gemini-2.0-flash',
-            description: 'Rapid business intelligence gatherer with 24-month lookback capability.',
-            instruction: `
-You are a Deep Research Intelligence Agent. Analyse the business described by the user.
-
-TASK: Based on your training knowledge, identify publicly known signals about this business or its market sector from the last 24 months. If the business is unnamed/novel, infer from the sector.
-
-TOKEN EFFICIENCY RULE: If you receive large text blocks of raw data (e.g., from web sources), use code execution to extract ONLY:
-- Revenue figures, percentages, and monetary values
-- Named entities (company names, executive names, product names)
-- Strategic keywords (pivot, launch, acquisition, layoff, expansion, funding)
-Before including anything in your findings, filter it through code to retain only the above.
-
-EXTRACTION TARGETS:
-- Revenue, funding, ARR growth, burn rate signals
-- Product launches, pivots, GTM changes
-- Leadership changes, headcount signals
-- Competitor moves, pricing changes, M&A
-- Market sizing and trend data
-
-COMPLETENESS CHECK: Evaluate if your findings are sufficient to score all 15 dimensions:
-[TAM Viability, Target Precision, Trend Adoption, Competitive Defensibility, Model Innovation,
- Flywheel Potential, Pricing Power, CAC/LTV Ratio, Market Entry Speed, Execution Speed,
- Scalability, ESG Posture, ROI Projection, Risk Tolerance, Capital Efficiency]
-
-CRITICAL OUTPUT RULE: You MUST respond with ONLY a raw JSON object. 
-Do NOT write any text before or after it. Do NOT wrap it in markdown or code blocks.
-Your ENTIRE response must start with { and end with }.
-
-Required JSON structure:
-{
-  "findings": "Rich paragraph of all discovered intelligence with specific data points",
-  "gaps": ["Each gap must be a specific question: e.g. 'What is the current GTM motion — PLG or sales-led?'"],
-  "is_complete": true or false,
-  "summary": "One sentence: what you found and whether gaps exist"
-}
-
-Set is_complete to false if ANY of the 15 dimensions lacks sufficient data.
-For pre-revenue, unnamed, or niche businesses, is_complete should almost always be false.
-`
+            description: 'Market intelligence gatherer with Google Search grounding and PESTLE analysis.',
+            instruction: buildDiscoveryInstruction(),
+            tools: [GOOGLE_SEARCH],
         });
     }
 
@@ -106,35 +125,36 @@ For pre-revenue, unnamed, or niche businesses, is_complete should almost always 
                 const cost = estimateCost('gemini-2.0-flash', businessContext.length, rawOutput.length);
                 log({
                     severity: 'INFO',
-                    message: 'Discovery scan complete',
+                    message: 'Market grounding complete',
                     agent_id: 'discovery_agent',
                     phase: 'discovery',
                     session_id: sessionId,
-                    is_complete: parsed.is_complete,
+                    is_complete: parsed.isComplete,
                     gaps_count: Array.isArray(parsed.gaps) ? parsed.gaps.length : 0,
                     cost_usd: cost.usd,
                 });
                 return {
-                    findings: parsed.findings || rawOutput,
+                    findings: Array.isArray(parsed.findings) ? parsed.findings : [],
                     gaps: Array.isArray(parsed.gaps) ? parsed.gaps : [],
-                    isComplete: parsed.is_complete === true,
-                    summary: parsed.summary || 'Discovery scan complete.'
+                    isComplete: parsed.isComplete === true,
+                    summary: parsed.summary || 'Market grounding complete.',
+                    pestle: parsed.pestle
                 };
             } catch (parseErr) {
                 log({ severity: 'WARNING', message: 'Regex-extracted JSON failed to parse', agent_id: 'discovery_agent', session_id: sessionId, error: String(parseErr) });
             }
         }
 
-        // Fallback: parsing failed entirely — treat as incomplete so clarification triggers
+        // Fallback
         log({ severity: 'WARNING', message: 'Could not extract valid JSON from Discovery output — triggering clarification', agent_id: 'discovery_agent', session_id: sessionId });
         return {
-            findings: rawOutput || 'No structured findings available.',
+            findings: [],
             gaps: [
-                'Could not extract sufficient public data for this business. What is the current revenue model and target customer segment?',
-                'What is the primary GTM motion (PLG, sales-led, or channel) and what is the 12-month growth target?'
+                'Could not extract sufficient market data via search. What is the current revenue model?',
+                'What is the primary GTM motion (PLG or sales-led) and target growth for the next 12 months?'
             ],
             isComplete: false,
-            summary: 'Limited public signals found. A few clarifying questions will sharpen the analysis.'
+            summary: 'Limited web signals found. Clarifying questions required.'
         };
     }
 }

@@ -13,6 +13,8 @@ import { saveAuditMemory, loadAuditMemory } from './services/memory.js';
 import { generatePDF } from './services/pdfService.js';
 import { SCENARIOS, ScenarioId } from './scenarios.js';
 import type { StrategySession } from './services/sessionService.js';
+import { authMiddleware, AuthRequest } from './middleware/auth.js';
+import { registerConnection, unregisterConnection, sseWrite, emitHeartbeat } from './services/sseService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,31 +31,6 @@ app.use(express.static(path.join(__dirname, '../public')));
 const cso = new ChiefStrategyAgent();
 const discovery = new DiscoveryAgent();
 const interrogator = new InterrogatorAgent();
-
-const activeConnections = new Map<string, express.Response>();
-
-// ─── Helper: SSE Sender ──────────────────────────────────────────────────────
-function sseWrite(res: express.Response, data: any) {
-    if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-    }
-}
-
-export function emitHeartbeat(sessionId: string, message: string, type: 'standard' | 'warning' | 'debug' | 'error' = 'standard') {
-    const res = activeConnections.get(sessionId);
-    if (res) {
-        sseWrite(res, {
-            type: 'HEARTBEAT_LOG',
-            log: {
-                id: randomUUID(),
-                timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-                message,
-                type
-            }
-        });
-    }
-}
-
 // ─── Helper: Parse dimension scores from the final report ───────────────────
 function extractDimensions(report: string): Record<string, number> {
     const dimensions: Record<string, number> = {};
@@ -112,8 +89,9 @@ app.get('/report/:id/download', async (req, res) => {
 });
 
 // ─── POST /analyze ───────────────────────────────────────────────────────────
-app.post('/analyze', async (req, res) => {
+app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
     const { business_context, stress_test } = req.body;
+    const userId = req.user?.uid || 'anonymous';
 
     if (!business_context) {
         return res.status(400).json({ error: 'business_context is required' });
@@ -126,7 +104,7 @@ app.post('/analyze', async (req, res) => {
     res.flushHeaders();
 
     const sessionId = randomUUID();
-    activeConnections.set(sessionId, res);
+    registerConnection(sessionId, res);
 
     // Bind a trace-correlated logger to this request
     const tlog = createTraceLogger(
@@ -134,13 +112,13 @@ app.post('/analyze', async (req, res) => {
     );
 
     res.on('close', () => {
-        activeConnections.delete(sessionId);
+        unregisterConnection(sessionId);
         tlog({ severity: 'INFO', message: 'SSE connection closed', session_id: sessionId });
     });
 
     sseWrite(res, { type: 'SESSION_INIT', sessionId });
     emitHeartbeat(sessionId, 'Connection established. Initialization sequence started.');
-    tlog({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, phase: 'discovery' });
+    tlog({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, user_id: userId, phase: 'discovery' });
 
     try {
         // ── Phase 0: Interrogator (ID Scoring) ───────────────────────
@@ -171,7 +149,11 @@ app.post('/analyze', async (req, res) => {
         // ── Phase 0: Discovery ────────────────────────────────────────────
         sseWrite(res, { type: 'DISCOVERY_START' });
         const discoveryResult = await discovery.discover(business_context, sessionId);
-        const discoveryCost = estimateCost('gemini-2.0-flash', business_context.length, discoveryResult.findings.length);
+        const discoveryFindingsStr = discoveryResult.findings
+            .map(f => `[${f.date}] ${f.signal} (Source: ${f.source})`)
+            .join('\n');
+
+        const discoveryCost = estimateCost('gemini-2.0-flash', business_context.length, discoveryFindingsStr.length);
 
         sseWrite(res, {
             type: 'DISCOVERY_COMPLETE',
@@ -186,7 +168,7 @@ app.post('/analyze', async (req, res) => {
             await saveSession(sessionId, {
                 originalContext: business_context,
                 enrichedContext: business_context,
-                discoveryFindings: discoveryResult.findings,
+                discoveryFindings: discoveryFindingsStr,
                 gaps: discoveryResult.gaps,
                 turnCount: 0,
                 usedLenses: [],
@@ -197,7 +179,7 @@ app.post('/analyze', async (req, res) => {
                 sessionId,
                 summary: discoveryResult.summary,
                 gap,
-                findings: discoveryResult.findings,
+                findings: discoveryFindingsStr,
             });
             res.end();
             return;
@@ -207,8 +189,8 @@ app.post('/analyze', async (req, res) => {
         sseWrite(res, { type: 'ANALYSIS_START', phase: 'synthesizing' });
         emitHeartbeat(sessionId, '◆ CSO: initializing 5-specialist tactical audit...');
 
-        const enrichedContext = discoveryResult.findings
-            ? `${business_context}\n\n--- DISCOVERY INTELLIGENCE ---\n${discoveryResult.findings}`
+        const enrichedContext = discoveryFindingsStr
+            ? `${business_context}\n\n--- MARKET GROUNDING INTELLIGENCE ---\n${discoveryFindingsStr}`
             : business_context;
 
         const finalContext = stress_test
@@ -231,9 +213,10 @@ app.post('/analyze', async (req, res) => {
                 fingerprint,
                 report,
                 dimension_scores: dimensions,
-                discovery_findings: discoveryResult.findings,
+                discovery_findings: discoveryFindingsStr,
                 org_name: orgName,
                 moat_rationale: moatRationale,
+                user_id: userId,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 expires_at: expiresAt,
             });
@@ -243,7 +226,7 @@ app.post('/analyze', async (req, res) => {
             await saveAuditMemory(docId, {
                 reportId: docId,
                 businessContext: business_context,
-                groundedContext: discoveryResult.findings,
+                groundedContext: discoveryFindingsStr,
                 specialistOutputs,
                 dimensionScores: dimensions,
                 report,
@@ -268,8 +251,9 @@ app.post('/analyze', async (req, res) => {
 });
 
 // ─── POST /analyze/clarify ───────────────────────────────────────────────────
-app.post('/analyze/clarify', async (req, res) => {
+app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res) => {
     const { sessionId, clarification, stress_test } = req.body;
+    const userId = req.user?.uid || 'anonymous';
 
     if (!sessionId || !clarification) {
         return res.status(400).json({ error: 'sessionId and clarification are required' });
@@ -287,13 +271,13 @@ app.post('/analyze/clarify', async (req, res) => {
     res.flushHeaders();
 
     const tlog = createTraceLogger(req.headers['x-cloud-trace-context'] as string);
-    activeConnections.set(sessionId, res);
+    registerConnection(sessionId, res);
 
     res.on('close', () => {
-        activeConnections.delete(sessionId);
+        unregisterConnection(sessionId);
     });
 
-    tlog({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId });
+    tlog({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId, user_id: userId });
     emitHeartbeat(sessionId, 'Clarification received. Deepening strategic analysis...');
 
     try {
@@ -350,7 +334,7 @@ app.post('/analyze/clarify', async (req, res) => {
         // Automatic Re-audit Trigger (if silent for 10s)
         const safetyReceipt = setTimeout(() => {
             if (!analysisFinished) {
-                tlog({ severity: 'WARNING', message: 'Synthesis heartbeat delayed. Triggering background re-audit receipt.', session_id: sessionId });
+                tlog({ severity: 'INFO', message: 'Synthesis heartbeat delayed. Triggering background re-audit receipt.', session_id: sessionId });
                 sseWrite(res, { type: 'INFO', message: 'Optimizing dimensional accuracy...' });
             }
         }, 10000);
@@ -373,6 +357,7 @@ app.post('/analyze/clarify', async (req, res) => {
                 dimension_scores: dimensions,
                 org_name: orgName,
                 moat_rationale: moatRationale,
+                user_id: userId,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 expires_at: expiresAt,
             });
@@ -415,8 +400,9 @@ app.post('/analyze/clarify', async (req, res) => {
 
 // ─── POST /analyze/stress-test ───────────────────────────────────────────────
 // Fast scenario recalculation — bypasses Discovery, uses Firestore cached context.
-app.post('/analyze/stress-test', async (req, res) => {
+app.post('/analyze/stress-test', authMiddleware as any, async (req: AuthRequest, res) => {
     const { reportId, scenarioId } = req.body;
+    const userId = req.user?.uid || 'anonymous';
 
     if (!reportId || !scenarioId) {
         return res.status(400).json({ error: 'reportId and scenarioId are required' });
@@ -434,7 +420,7 @@ app.post('/analyze/stress-test', async (req, res) => {
     const sessionId = randomUUID();
     const tlog = createTraceLogger(req.headers['x-cloud-trace-context'] as string);
 
-    tlog({ severity: 'INFO', message: 'Stress test request received', session_id: sessionId, report_id: reportId, scenario: scenarioId });
+    tlog({ severity: 'INFO', message: 'Stress test request received', session_id: sessionId, user_id: userId, report_id: reportId, scenario: scenarioId });
     sseWrite(res, { type: 'STRESS_START', scenarioId, scenarioLabel: SCENARIOS[scenarioId as ScenarioId].label });
 
     try {

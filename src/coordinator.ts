@@ -6,10 +6,40 @@ import { DiscoveryResult } from './agents/discovery.js';
 import { log, estimateCost } from './services/logger.js';
 import { SCENARIOS, ScenarioId, StressResult, MitigationCard } from './scenarios.js';
 import { loadAuditMemory } from './services/memory.js';
-import { emitHeartbeat } from './index.js';
+import { emitHeartbeat } from './services/sseService.js';
 
 // Re-export StrategySession type for index.ts
 export type { StrategySession } from './services/sessionService.js';
+
+/**
+ * Robustly extracts and parses JSON from a string that may contain markdown or prose.
+ */
+export function robustParse(agentName: string, raw: string): any {
+    const fallback = {
+        analysis_markdown: raw,
+        dimensions: {},
+        confidence_score: 50,
+        flags: [],
+        requires_rerun: []
+    };
+
+    // 1. Sanitize Markdown backticks if present
+    let sanitized = raw.replace(/```json\s?/, '').replace(/```\s?$/, '').trim();
+
+    // 2. Greedy Extraction
+    const jsonMatch = sanitized.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return fallback;
+
+    try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+            ...fallback,
+            ...parsed,
+        };
+    } catch {
+        return fallback;
+    }
+}
 
 // ─── Chief Strategy Agent ────────────────────────────────────────────────────
 export class ChiefStrategyAgent {
@@ -93,41 +123,32 @@ export class ChiefStrategyAgent {
         return { proceed: false, gap };
     }
 
-    /**
-     * Runs the full 15-dimension analysis pipeline.
-     * Uses Promise.all to ensure all specialists finish before synthesis.
-     */
-    private robustParse(agentName: string, raw: string): any {
-        const fallback = {
-            analysis_markdown: raw,
-            dimensions: {
-                'TAM Viability': 50, 'Target Precision': 50, 'Trend Adoption': 50,
-                'Competitive Defensibility': 50, 'Model Innovation': 50, 'Flywheel Potential': 50,
-                'Pricing Power': 50, 'CAC/LTV Ratio': 50, 'Market Entry Speed': 50,
-                'Execution Speed': 50, 'Scalability': 50, 'ESG Posture': 50,
-                'ROI Projection': 50, 'Risk Tolerance': 50, 'Capital Efficiency': 50
-            },
-            confidence_score: 50
-        };
+    private async runCritic(businessContext: string, specialistOutputs: Record<string, any>, sessionId: string): Promise<any> {
+        emitHeartbeat(sessionId, '◆ Critic: performing cross-functional gap-analysis...');
+        const criticRunner = new InMemoryRunner({ agent: strategicCritic, appName: 'velocity_critic' });
+        const criticId = randomUUID();
+        await criticRunner.sessionService.createSession({ appName: 'velocity_critic', userId: 'cso_internal', sessionId: criticId });
 
-        // 1. Sanitize Markdown backticks if present
-        let sanitized = raw.replace(/```json\s?/, '').replace(/```\s?$/, '').trim();
+        const criticInput = `
+            Review the following specialists for business: ${businessContext.slice(0, 500)}
+            
+            ${Object.entries(specialistOutputs).map(([name, out]) => `--- ${name} ---\n${JSON.stringify(out)}`).join('\n\n')}
+        `.trim();
 
-        // 2. Greedy Extraction
-        const jsonMatch = sanitized.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return fallback;
+        const stream = criticRunner.runAsync({
+            userId: 'cso_internal',
+            sessionId: criticId,
+            newMessage: { role: 'user', parts: [{ text: criticInput }] }
+        });
 
-        try {
-            const parsed = JSON.parse(jsonMatch[0]);
-            // Merge defaults to ensure all 15 dimensions exist
-            return {
-                ...fallback,
-                ...parsed,
-                dimensions: { ...fallback.dimensions, ...(parsed.dimensions || {}) }
-            };
-        } catch {
-            return fallback;
+        let raw = '';
+        for await (const ev of stream) {
+            if (ev.author === 'strategic_critic' || isFinalResponse(ev)) {
+                raw += (ev.content?.parts || []).map((p: any) => p.text).join('');
+            }
         }
+
+        return robustParse('strategic_critic', raw);
     }
 
     async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number>; specialistOutputs: Record<string, any>; orgName: string; moatRationale: string }> {
@@ -174,7 +195,7 @@ export class ChiefStrategyAgent {
                 }
             }
 
-            const result = this.robustParse(agent.name!, rawOutput);
+            const result = robustParse(agent.name!, rawOutput);
             if (result.dimensions) {
                 Object.assign(finalDimensions, result.dimensions);
                 Object.entries(result.dimensions).forEach(([dim, score]) => {
@@ -188,7 +209,41 @@ export class ChiefStrategyAgent {
 
         await Promise.all(specialistPromises);
 
-        // 2. Comprehensive Synthesis by CSO
+        // 2. Strategic Critic Review
+        const criticResult = await this.runCritic(businessContext, specialistOutputs, sessionId);
+
+        if (criticResult.requires_rerun && criticResult.requires_rerun.length > 0) {
+            const rerunTargets = specialists.filter(s => criticResult.requires_rerun.includes(s.name!));
+            emitHeartbeat(sessionId, `◆ Critic: Flagged ${rerunTargets.length} specialists for re-analysis...`);
+
+            const retryPromises = rerunTargets.map(async (agent) => {
+                const feedback = (criticResult.flags || []).find((f: any) => f.specialist === agent.name)?.description || 'Align with other specialists.';
+                const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist_retry' });
+                const internalId = randomUUID();
+                await runner.sessionService.createSession({ appName: 'velocity_specialist_retry', userId: 'cso', sessionId: internalId });
+
+                const stream = runner.runAsync({
+                    userId: 'cso',
+                    sessionId: internalId,
+                    newMessage: { role: 'user', parts: [{ text: `${businessContext}\n\nCRITIC FEEDBACK: ${feedback}\n\nReturn ONLY the JSON.` }] }
+                });
+
+                let raw = '';
+                for await (const ev of stream) {
+                    if (ev.author === agent.name || isFinalResponse(ev)) {
+                        raw += (ev.content?.parts || []).map((p: any) => p.text).join('');
+                    }
+                }
+
+                const result = robustParse(agent.name!, raw);
+                if (result.dimensions) Object.assign(finalDimensions, result.dimensions);
+                specialistOutputs[agent.name!] = result;
+                return result;
+            });
+            await Promise.all(retryPromises);
+        }
+
+        // 3. Comprehensive Synthesis by CSO
         emitHeartbeat(sessionId, '◆ CSO: Initializing strategic synthesis of 15-dimension matrix...');
         emitHeartbeat(sessionId, '◆ Critic: Verifying cross-functional alignment of specialist findings...');
         emitHeartbeat(sessionId, '◆ CSO: Synthesizing narrative for executive board-room delivery...');
@@ -304,7 +359,7 @@ export class ChiefStrategyAgent {
                     }
                 }
 
-                const result = this.robustParse(agent.name!, rawOutput);
+                const result = robustParse(agent.name!, rawOutput);
                 if (result.dimensions) {
                     Object.assign(finalDimensions, result.dimensions);
                 }
@@ -331,13 +386,12 @@ export class ChiefStrategyAgent {
         const scenario = SCENARIOS[scenarioId];
 
         log({
-            severity: 'INFO', message: `Stress test triggered: ${scenario.label
-                }`, agent_id: 'stress_test_agent', phase: 'stress_test', session_id: sessionId, scenario: scenarioId
+            severity: 'INFO', message: `Stress test triggered: ${scenario.label}`, agent_id: 'stress_test_agent', phase: 'stress_test', session_id: sessionId, scenario: scenarioId
         });
 
         // Load cached grounded context from Firestore
         const memory = await loadAuditMemory(reportId);
-        if (!memory) throw new Error(`Report ${reportId} not found in Firestore.Run a full audit first.`);
+        if (!memory) throw new Error(`Report ${reportId} not found in Firestore. Run a full audit first.`);
 
         const DIM_NAMES = [
             'TAM Viability', 'Target Precision', 'Trend Adoption',
@@ -348,12 +402,12 @@ export class ChiefStrategyAgent {
         ];
 
         const stressPrompt = `
-You are a rapid stress - test recalculation engine.You have been given:
+You are a rapid stress-test recalculation engine. You have been given:
 
-1. BUSINESS GROUNDED CONTEXT(from 24 - month discovery sweep):
+1. BUSINESS GROUNDED CONTEXT (from 24-month discovery sweep):
 ${memory.groundedContext || memory.businessContext}
 
-2. ORIGINAL DIMENSION SCORES(baseline):
+2. ORIGINAL DIMENSION SCORES (baseline):
 ${JSON.stringify(memory.dimensionScores, null, 2)}
 
 3. SYNTHETIC CRISIS SCENARIO TO SIMULATE:
@@ -361,15 +415,15 @@ ${scenario.prompt}
 
 YOUR TASK:
 - Recalculate scores for ALL 15 dimensions under this specific crisis.
-- For any dimension scoring below 40, generate 3 concrete mitigation steps and a CSO - level "Crisis Play" recommendation.
-- Return ONLY a valid raw JSON object.No preamble, no markdown, no explanation.
+- For any dimension scoring below 40, generate 3 concrete mitigation steps and a CSO-level "Crisis Play" recommendation.
+- Return ONLY a valid raw JSON object. No preamble, no markdown, no explanation.
 
 Required JSON structure:
 {
     "stressed_scores": {
         "TAM Viability": 62,
-            "Target Precision": 58,
-    ...all 15 dimensions...
+        "Target Precision": 58,
+        ...all 15 dimensions...
     },
     "mitigation_cards": [
         {
@@ -407,7 +461,7 @@ Only include a dimension in mitigation_cards if its stressed score is below 40.
         for await (const event of eventStream) {
             if (event.author === stressAgent.name || isFinalResponse(event)) {
                 const parts = event.content?.parts || [];
-                const text = parts.map((p: { text?: string }) => p.text).filter(Boolean).join('\n');
+                const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
                 if (text) rawOutput += text;
             }
         }

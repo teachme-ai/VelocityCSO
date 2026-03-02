@@ -7,7 +7,10 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon --exec \"node --loader ts-node/esm\" src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --reporter=verbose src/**/*.integration.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -28,8 +31,12 @@
   },
   "devDependencies": {
     "@types/pdfkit": "^0.17.5",
+    "@types/supertest": "^6.0.3",
+    "@vitest/coverage-v8": "^2.1.9",
     "nodemon": "^3.1.13",
-    "ts-node": "^10.9.2"
+    "supertest": "^7.2.2",
+    "ts-node": "^10.9.2",
+    "vitest": "^2.1.9"
   },
   "overrides": {
     "glob": "^11.0.0",

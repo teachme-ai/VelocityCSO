@@ -21,6 +21,30 @@ const asymmetricPlayRule = `
     Frame every insight as: "Because [competitor] cannot [do X], you can [asymmetric move] to lock in [specific customer segment]."
 `;
 
+const SCORING_RUBRICS = {
+  "TAM Viability": "0: Niche/Stagnant (<$10M); 50: Healthy Growth ($1B+); 100: Global Monopoly Potential ($100B+).",
+  "Target Precision": "0: Spray and pray; 50: Defined personas; 100: Laser-focused high-intent beachhead with zero wastage.",
+  "Trend Adoption": "0: Laggard/Obsolete; 50: Riding current waves; 100: Defining the next 5-year paradigm.",
+  "Competitive Defensibility": "0: Generic/Commodity; 50: Brand/IP moats; 100: Unassailable structural/network effect advantage.",
+  "Model Innovation": "0: Traditional/Linear; 50: Modern SaaS/Platform; 100: Radical architectural shift (e.g., AI-native autonomous).",
+  "Flywheel Potential": "0: Single transaction; 50: Recurring revenue; 100: Every user/action makes the product/data exponentially better.",
+  "Pricing Power": "0: Price taker (commodity); 50: Value-based pricing; 100: Inelastic demand / 'Tax on industry' status.",
+  "CAC/LTV Ratio": "0: Uneconomic (>1.0); 50: Healthy (3.0x); 100: Viral/Organic growth (>10x).",
+  "Market Entry Speed": "0: Years to launch; 50: 6-month GTM; 100: Instant deployment / Zero-friction adoption.",
+  "Execution Speed": "0: Bureaucratic; 50: Agile/Sprint-based; 100: Real-time iteration/Continuous deployment mindset.",
+  "Scalability": "0: Labor intensive; 50: Standard software scaling; 100: Near-zero marginal cost of replication.",
+  "ESG Posture": "0: High risk/Regulatory target; 50: Compliant; 100: Sustainability as a core competitive advantage.",
+  "ROI Projection": "0: Unclear/Negative; 50: PE-standard (15-20%); 100: Venture-scale (10x+ potential).",
+  "Risk Tolerance": "0: Fragile; 50: Balanced/Hedged; 100: Anti-fragile/Crisis as a catalyst.",
+  "Capital Efficiency": "0: Cash incinerator; 50: Default alive; 100: High cash yield per dollar invested (Bootstrapped scale)."
+};
+
+const rubricRule = (dims: string[]) => `
+  SCORING RUBRICS:
+  ${dims.map(d => `- ${d}: ${(SCORING_RUBRICS as any)[d]}`).join('\n  ')}
+  Use these hard benchmarks. Do not give scores above 80 unless the business is transformational.
+`;
+
 export const marketAnalyst = new LlmAgent({
   name: 'market_analyst',
   model: 'gemini-2.5-flash',
@@ -32,6 +56,7 @@ export const marketAnalyst = new LlmAgent({
     - Current and Emergent Industry Trends.
     
     ${asymmetricPlayRule}
+    ${rubricRule(["TAM Viability", "Target Precision", "Trend Adoption"])}
 
     You must extract and score the following 3 dimensions (0-100):
     1. "TAM Viability"
@@ -53,6 +78,7 @@ export const innovationAnalyst = new LlmAgent({
     - Three Horizons of Growth Framework.
     
     ${asymmetricPlayRule}
+    ${rubricRule(["Competitive Defensibility", "Model Innovation", "Flywheel Potential"])}
 
     You must extract and score the following 3 dimensions (0-100):
     1. "Competitive Defensibility"
@@ -74,6 +100,7 @@ export const commercialAnalyst = new LlmAgent({
     - Market Entry/Expansion Plans.
     
     ${asymmetricPlayRule}
+    ${rubricRule(["Pricing Power", "CAC/LTV Ratio", "Market Entry Speed"])}
 
     You must extract and score the following 3 dimensions (0-100):
     1. "Pricing Power"
@@ -95,6 +122,7 @@ export const operationsAnalyst = new LlmAgent({
     - ESG (Environmental, Social, and Governance) Assessment.
     
     ${asymmetricPlayRule}
+    ${rubricRule(["Execution Speed", "Scalability", "ESG Posture"])}
 
     You must extract and score the following 3 dimensions (0-100):
     1. "Execution Speed"
@@ -116,6 +144,7 @@ export const financeAnalyst = new LlmAgent({
     - M&A and Inorganic Growth Opportunities.
     
     ${asymmetricPlayRule}
+    ${rubricRule(["ROI Projection", "Risk Tolerance", "Capital Efficiency"])}
 
     You must extract and score the following 3 dimensions (0-100):
     1. "ROI Projection"

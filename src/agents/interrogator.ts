@@ -2,7 +2,7 @@ import { LlmAgent, InMemoryRunner, isFinalResponse } from '@google/adk';
 import { randomUUID } from 'crypto';
 import { log, estimateCost } from '../services/logger.js';
 import admin from 'firebase-admin';
-import { emitHeartbeat } from '../index.js';
+import { emitHeartbeat } from '../services/sseService.js';
 
 export interface InterrogatorResult {
     category: string;
