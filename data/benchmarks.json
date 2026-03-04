@@ -1,0 +1,42 @@
+{
+    "SaaS": {
+        "avg_cac_payback_months": 12,
+        "avg_ltv_cac": 3.5,
+        "avg_churn_rate": 0.05,
+        "growth_benchmark_top_quartile": 1.0,
+        "market_multiple_range": [
+            6,
+            12
+        ]
+    },
+    "Fintech": {
+        "avg_cac_payback_months": 18,
+        "avg_ltv_cac": 4.0,
+        "avg_churn_rate": 0.08,
+        "growth_benchmark_top_quartile": 0.8,
+        "market_multiple_range": [
+            4,
+            10
+        ]
+    },
+    "Healthtech": {
+        "avg_cac_payback_months": 24,
+        "avg_ltv_cac": 5.0,
+        "avg_churn_rate": 0.03,
+        "growth_benchmark_top_quartile": 0.5,
+        "market_multiple_range": [
+            5,
+            15
+        ]
+    },
+    "Default": {
+        "avg_cac_payback_months": 15,
+        "avg_ltv_cac": 3.0,
+        "avg_churn_rate": 0.06,
+        "growth_benchmark_top_quartile": 0.6,
+        "market_multiple_range": [
+            5,
+            10
+        ]
+    }
+}

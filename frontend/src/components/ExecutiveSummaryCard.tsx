@@ -1,24 +1,29 @@
 import { motion } from 'framer-motion';
 import { Award, Zap, Shield, TrendingUp } from 'lucide-react';
+import type { RichDimensionData } from './DiagnosticScorecard';
 
 interface ExecutiveSummaryProps {
     orgName: string;
     moatRationale: string;
-    dimensions: Record<string, number>;
-    richDimensions?: Record<string, any>;
+    dimensions: Record<string, number | null>;
+    richDimensions?: Record<string, RichDimensionData>;
 }
 
 export const ExecutiveSummaryCard = ({ orgName, moatRationale, dimensions, richDimensions }: ExecutiveSummaryProps) => {
     // Get top 3 dimensions
     const developingMoats = Object.entries(dimensions)
-        .sort((a, b) => b[1] - a[1])
+        .filter(([, score]) => score !== null)
+        .sort((a, b) => (b[1] as number) - (a[1] as number))
         .slice(0, 3)
-        .map(([name, score]) => ({ name, score }));
+        .map(([name, score]) => ({ name, score: score as number }));
 
     // Get critical improvement actions
     const criticalActions = Object.entries(richDimensions || {})
-        .filter(([_, data]) => data.score < 65 && data.improvement_action)
-        .sort((a, b) => a[1].score - b[1].score)
+        .filter(([name, data]) => {
+            const score = dimensions[name];
+            return score !== null && score !== undefined && score < 65 && data.improvement_action;
+        })
+        .sort((a, b) => ((dimensions[a[0]] as number) || 0) - ((dimensions[b[0]] as number) || 0))
         .slice(0, 2)
         .map(([name, data]) => ({ name, action: data.improvement_action }));
 
@@ -102,7 +107,7 @@ export const ExecutiveSummaryCard = ({ orgName, moatRationale, dimensions, richD
 
             <div className="mt-auto pt-6 border-t border-zinc-800/50">
                 <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-medium">
-                    Asymmetric Advantage Analysis · CSO v2.5
+                    Asymmetric Advantage Analysis · CSO v4.0
                 </p>
             </div>
         </motion.div>

@@ -14,6 +14,28 @@ import { emitHeartbeat } from './services/sseService.js';
 // Re-export StrategySession type for index.ts
 export type { StrategySession } from './services/sessionService.js';
 
+// ─── Helper: Title case conversion ──────────────────────────────────────────
+function toTitleCase(str: string): string {
+    return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
+}
+
+// ─── Helper: Extract Org Name mnemonic heuristic ───────────────────────────
+function extractOrgName(context: string): string {
+    // Pattern 1: Named entity — "VelocityCSO is a..." or "Medically Inc builds..."
+    const namedEntity = context.match(/^([A-Z][a-zA-Z0-9\s&\-\.]{2,40}?)\s+(?:is|are|was|builds|provides|offers|helps)/);
+    if (namedEntity) return namedEntity[1].trim();
+
+    // Pattern 2: "a platform for X" → derive from the service noun
+    const serviceNoun = context.match(/\b(?:platform|app|service|tool|system|marketplace|network)\s+for\s+([a-z\s]+?)(?:\.|,|that|which|$)/i);
+    if (serviceNoun) return toTitleCase(serviceNoun[1].trim()) + ' Platform';
+
+    // Pattern 3: "we help X" → derive from the domain
+    const weHelp = context.match(/we help\s+([a-z\s]+?)(?:\s+to|\s+with|\.|,|$)/i);
+    if (weHelp) return toTitleCase(weHelp[1].trim());
+
+    return 'The Venture';
+}
+
 /**
  * Robustly extracts and parses JSON from a string that may contain markdown or prose.
  */
@@ -300,7 +322,7 @@ export class ChiefStrategyAgent {
         return result;
     }
 
-    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; frameworks: any; orgName: string; moatRationale: string }> {
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; frameworks: any; orgName: string; moatRationale: string }> {
         log({
             severity: 'INFO',
             message: 'CSO analysis started (Parallel Specialist Mode)',
@@ -310,14 +332,14 @@ export class ChiefStrategyAgent {
         });
         emitHeartbeat(sessionId, '◆ CSO: analysis started (Parallel Specialist Mode)');
 
-        const finalDimensions: Record<string, number> = {
-            'TAM Viability': 0, 'Target Precision': 0, 'Trend Adoption': 0,
-            'Competitive Defensibility': 0, 'Model Innovation': 0, 'Flywheel Potential': 0,
-            'Pricing Power': 0, 'CAC/LTV Ratio': 0, 'Market Entry Speed': 0,
-            'Execution Speed': 0, 'Scalability': 0, 'ESG Posture': 0,
-            'ROI Projection': 0, 'Risk Tolerance': 0, 'Capital Efficiency': 0,
-            'Team / Founder Strength': 0, 'Network Effects Strength': 0,
-            'Data Asset Quality': 0, 'Regulatory Readiness': 0, 'Customer Concentration Risk': 0
+        const finalDimensions: Record<string, number | null> = {
+            'TAM Viability': null, 'Target Precision': null, 'Trend Adoption': null,
+            'Competitive Defensibility': null, 'Model Innovation': null, 'Flywheel Potential': null,
+            'Pricing Power': null, 'CAC/LTV Ratio': null, 'Market Entry Speed': null,
+            'Execution Speed': null, 'Scalability': null, 'ESG Posture': null,
+            'ROI Projection': null, 'Risk Tolerance': null, 'Capital Efficiency': null,
+            'Team / Founder Strength': null, 'Network Effects Strength': null,
+            'Data Asset Quality': null, 'Regulatory Readiness': null, 'Customer Concentration Risk': null
         };
         const richDimensions: Record<string, any> = {};
         const specialistOutputs: Record<string, any> = {};
@@ -441,7 +463,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         }
 
         // 3. Comprehensive Synthesis by CSO
-        emitHeartbeat(sessionId, '◆ CSO: Initializing strategic synthesis of 15-dimension matrix...');
+        emitHeartbeat(sessionId, '◆ CSO: Initializing strategic synthesis of 20-dimension matrix...');
         emitHeartbeat(sessionId, '◆ Critic: Verifying cross-functional alignment of specialist findings...');
         emitHeartbeat(sessionId, '◆ CSO: Synthesizing narrative for executive board-room delivery...');
 
@@ -467,7 +489,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
             ${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
         `.trim();
 
-        emitHeartbeat(sessionId, '◆ CSO: merging 15-dimension matrix...');
+        emitHeartbeat(sessionId, '◆ CSO: merging 20-dimension matrix...');
         const synthesisStartTime = Date.now();
         const csoRunner = new InMemoryRunner({ agent: this.agent, appName: 'velocity_cso_synthesis' });
         const csoSessionId = randomUUID();
@@ -505,11 +527,12 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         });
 
         // 3. Extract Organisation Name
-        const nameMatch = businessContext.match(/^([A-Z][a-zA-Z\s&]{2,40})/);
-        const orgName = nameMatch ? nameMatch[1].trim() : 'The Venture';
+        const orgName = extractOrgName(businessContext);
 
         // 4. Generate Moat Rationale
-        const topDimension = Object.entries(finalDimensions).reduce((a, b) => b[1] > a[1] ? b : a);
+        const topDimension = Object.entries(finalDimensions)
+            .filter(([_, v]) => v !== null)
+            .reduce((a, b) => (b[1] as number) > (a[1] as number) ? b : a, ['N/A', 0]);
         const moatPrompt = `
             <role>Global Executive Strategist</role>
             <task>Identify why "${topDimension[0]}" is the primary moat for ${orgName}.</task>
@@ -534,6 +557,11 @@ OPERATIONS: ${operationsResult.analysis_markdown}
                 moatRationale += (ev.content?.parts || []).map((p: any) => p.text).join('');
             }
         }
+
+        if (!moatRationale.trim()) {
+            log({ severity: 'WARNING', message: 'Moat agent returned empty — using fallback', session_id: sessionId });
+            moatRationale = `${orgName}'s primary competitive advantage is its ${topDimension[0]} (${topDimension[1]}/100), which positions it defensibly against well-funded incumbents. Sustained investment in this dimension represents the highest-leverage strategic priority.`;
+        }
         const moatLatency = Date.now() - moatStartTime;
         const moatCost = estimateCost('gemini-2.0-flash', moatPrompt.length, moatRationale.length);
 
@@ -552,7 +580,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         });
 
         // 3. Safety Receipt Check: If dimensions are empty or generic, trigger a re-audit
-        const isGeneric = Object.values(finalDimensions).every(v => v === 0 || v === 50);
+        const isGeneric = Object.values(finalDimensions).every(v => v === null || v === 0 || v === 50);
         if (isGeneric) {
             log({ severity: 'WARNING', message: 'Dimensions appear generic — potential parsing failure. Triggering specialized re-audit.', session_id: sessionId });
 
@@ -608,7 +636,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
      * Discovery is bypassed — uses cached Firestore grounded context.
      * Uses gemini-2.5-flash for speed and minimal cost.
      */
-    async triggerStressTest(reportId: string, scenarioId: ScenarioId, sessionId: string): Promise<StressResult> {
+    async triggerStressTest(reportId: string, scenarioId: ScenarioId, sessionId: string): Promise<{ scenarioId: string; scenarioLabel: string; originalScores: Record<string, number | null>; stressedScores: Record<string, number>; riskDeltas: Record<string, number>; mitigationCards: MitigationCard[] }> {
         const scenario = SCENARIOS[scenarioId];
 
         log({

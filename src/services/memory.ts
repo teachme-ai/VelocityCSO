@@ -5,7 +5,7 @@ export interface SpecialistOutput {
     analysis_markdown?: string;
     confidence_score?: number;
     data_sources?: string[];
-    dimensions?: Record<string, number>;
+    dimensions?: Record<string, number | null>;
     richDimensions?: Record<string, any>;
 }
 
@@ -14,7 +14,7 @@ export interface AuditMemory {
     businessContext: string;
     groundedContext: string;           // Discovery findings
     specialistOutputs: Record<string, SpecialistOutput>; // keyed by agent name
-    dimensionScores: Record<string, number>; // merged 20-dimension scores
+    dimensionScores: Record<string, number | null>; // merged 20-dimension scores
     richDimensions: Record<string, any>;   // aggregated CoT metadata
     report: string;                    // Final Markdown report
     stressTest: boolean;

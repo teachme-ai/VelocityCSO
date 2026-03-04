@@ -5,8 +5,8 @@ import {
 import { motion } from 'framer-motion';
 
 interface StrategyRadarProps {
-    dimensions: Record<string, number>;
-    originalDimensions?: Record<string, number>;
+    dimensions: Record<string, number | null>;
+    originalDimensions?: Record<string, number | null>;
 }
 
 export const StrategyRadar: React.FC<StrategyRadarProps> = ({ dimensions, originalDimensions }) => {
@@ -33,18 +33,19 @@ export const StrategyRadar: React.FC<StrategyRadarProps> = ({ dimensions, origin
         'Customer Concentration Risk': 'Conc'
     };
 
-    // Transform Record<string, number> to Array for Recharts
+    // Transform Record<string, number | null> to Array for Recharts
     const radarData = Object.entries(dimensions).map(([key, value]) => ({
         subject: ABBREVIATIONS[key] || key.slice(0, 5),
-        A: value,
-        baseline: originalDimensions ? (originalDimensions[key] ?? value) : value,
+        A: value ?? 0,
+        baseline: originalDimensions ? (originalDimensions[key] ?? (value ?? 50)) : (value ?? 50),
         parity: 50, // Industry Parity "Ghost" Level
         fullMark: 100,
     }));
 
     const isStressMode = !!originalDimensions;
 
-    const avgScore = Math.round(Object.values(dimensions).reduce((a, b) => a + b, 0) / Object.values(dimensions).length);
+    const dimValues = Object.values(dimensions).filter((v): v is number => v !== null && v !== undefined);
+    const avgScore = dimValues.length > 0 ? Math.round(dimValues.reduce((a, b) => a + b, 0) / dimValues.length) : 0;
 
     return (
         <motion.div

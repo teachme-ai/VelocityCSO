@@ -11,7 +11,7 @@ import { StressTestPanel } from './StressTestPanel';
 import type { StatusEvent } from './AgentStatus';
 import type { StressResult } from '../types/stress';
 import { DiagnosticScorecard, type RichDimensionData } from './DiagnosticScorecard';
-import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send } from 'lucide-react';
+import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send, Globe, Paperclip } from 'lucide-react';
 import { StrategyRadar } from './StrategyRadar';
 import { AgentHeartbeat } from './AgentHeartbeat';
 import { type HeartbeatLog } from './HeartbeatTerminal';
@@ -38,9 +38,14 @@ type Phase =
     | 'done'
     | 'error';
 
+type MonteCarloData = {
+    distributions: any[];
+    risk_drivers: any[];
+};
+
 type ReportData = {
     analysis_markdown?: string;
-    dimensions?: Record<string, number>;
+    dimensions?: Record<string, number | null>;
     confidence_score?: number;
     orgName?: string;
     moatRationale?: string;
@@ -50,7 +55,7 @@ type ReportData = {
         five_forces?: FiveForcesData;
         wardley?: WardleyResult;
         blue_ocean?: BlueOceanResult;
-        monte_carlo?: unknown; // Assuming MonteCarloChart handles its own typing or we add it later
+        monte_carlo?: MonteCarloData;
     };
 };
 
@@ -134,6 +139,16 @@ function sanitizeReport(text: string): string {
         .trim();
 }
 
+const PlaceholderCard = ({ title, description, icon: Icon }: { title: string, description: string, icon: React.ComponentType<any> }) => (
+    <div className="bg-zinc-900/30 border border-zinc-800/50 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center opacity-60 h-full min-h-[300px]">
+        <div className="w-12 h-12 rounded-full bg-zinc-800/50 flex items-center justify-center mb-4">
+            <Icon className="w-6 h-6 text-zinc-500" />
+        </div>
+        <h4 className="text-zinc-400 font-bold mb-2">{title}</h4>
+        <p className="text-zinc-500 text-sm max-w-xs">{description}</p>
+    </div>
+);
+
 export function HeroSection() {
     const [context, setContext] = useState('');
     const [stressTest, setStressTest] = useState(false);
@@ -149,11 +164,85 @@ export function HeroSection() {
     const [currentReportToken, setCurrentReportToken] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<TabId>('overview');
     const [heartbeatLogs, setHeartbeatLogs] = useState<HeartbeatLog[]>([]);
+    const [companyUrl, setCompanyUrl] = useState('');
+    const [urlEnriching, setUrlEnriching] = useState(false);
+    const [urlEnriched, setUrlEnriched] = useState(false);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+
+    const enrichFromUrl = async () => {
+        if (!companyUrl) return;
+        setUrlEnriching(true);
+        setUrlEnriched(false);
+        setError('');
+
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/enrich/url`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: companyUrl }),
+            });
+            const result = await res.json();
+
+            if (!res.ok) throw new Error(result.error || 'Enrichment failed');
+
+            const data = result.data;
+            const enrichedText = `
+WEBSITE CONTEXT (scraped from ${companyUrl}):
+Title: ${data.title}
+Description: ${data.description}
+Products: ${data.product_pages?.join(', ')}
+Pricing: ${data.pricing_signals?.join(', ')}
+Tech: ${data.technology_signals?.join(', ')}
+
+${context}`.trim();
+
+            setContext(enrichedText);
+            setUrlEnriched(true);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setUrlEnriching(false);
+        }
+    };
+
+    const handleFileUpload = async (file: File) => {
+        const formData = new FormData();
+        formData.append('document', file);
+
+        setPhaseLabel(`Parsing ${file.name}...`);
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/enrich/document`, {
+                method: 'POST',
+                // Note: Don't set Content-Type header when using FormData; the browser will set it with the boundary
+                body: formData,
+            });
+            const result = await res.json();
+
+            if (!res.ok) throw new Error(result.error || 'Upload failed');
+
+            const data = result.data;
+            const enrichedText = `
+DOCUMENT: ${data.filename}
+${data.text}
+
+${context}`.trim();
+
+            setContext(enrichedText);
+            setPhaseLabel('Context enriched from document.');
+            setTimeout(() => setPhaseLabel(''), 3000);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Unknown error');
+        }
+    };
 
 
     const addEvent = (event: StatusEvent) =>
         setSseEvents(prev => [...prev, event]);
+
+    const handleStressResult = (result: StressResult) => {
+        setStressResult(result);
+        setActiveTab('matrix');
+    };
 
     // Maps ADK status to AgentOrbs status prop
     const agentStatus = phase === 'analyzing' ? 'cso'
@@ -240,7 +329,7 @@ export function HeroSection() {
 
                     case 'REPORT_COMPLETE': {
                         const reportId = event.id as string;
-                        const dims = event.dimensions as Record<string, number> | undefined;
+                        const dims = event.dimensions as Record<string, number | null> | undefined;
                         const raw = event.report as string;
                         const parsed: ReportData = {
                             analysis_markdown: raw,
@@ -389,6 +478,40 @@ export function HeroSection() {
                             className="w-full max-w-2xl"
                         >
                             <form onSubmit={handleAudit} className="glass-card glow-purple p-6 flex flex-col gap-4">
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                                        <input
+                                            type="url"
+                                            placeholder="https://company.com (Auto-fill context)"
+                                            value={companyUrl}
+                                            onChange={e => setCompanyUrl(e.target.value)}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors"
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={enrichFromUrl}
+                                        disabled={!companyUrl || urlEnriching}
+                                        className="px-4 py-2 text-xs bg-violet-600/20 border border-violet-500/30 rounded-lg text-violet-300 hover:bg-violet-600/40 disabled:opacity-50 transition-colors flex items-center gap-2 whitespace-nowrap"
+                                    >
+                                        {urlEnriching ? 'Scraping...' : urlEnriched ? '✓ Enriched' : 'Auto-fill'}
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center gap-4 px-1">
+                                    <label className="cursor-pointer flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 transition-colors">
+                                        <input
+                                            type="file"
+                                            className="hidden"
+                                            accept=".pdf,.txt,.md"
+                                            onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                                        />
+                                        <Paperclip size={14} className="text-violet-400" />
+                                        <span>Attach pitch deck or memo</span>
+                                    </label>
+                                </div>
+
                                 <textarea
                                     ref={inputRef}
                                     className="w-full h-36 md:h-36 bg-transparent border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none text-base md:text-sm leading-relaxed"
@@ -662,9 +785,9 @@ export function HeroSection() {
 
                                         <div className="space-y-6">
                                             <StressTestPanel
-                                                onStressTest={handleStressTest}
-                                                isSubmitting={isStressing}
-                                                dimensions={result.dimensions || {}}
+                                                reportId={currentReportId || ''}
+                                                onStressResult={handleStressResult}
+                                                apiBase={import.meta.env.VITE_API_URL || ''}
                                             />
                                         </div>
                                     </section>
@@ -709,17 +832,37 @@ export function HeroSection() {
                                     animate={{ opacity: 1, y: 0 }}
                                     className="max-w-7xl mx-auto w-full space-y-12"
                                 >
-                                    {result.frameworks?.unit_economics && (
+                                    {result.frameworks?.unit_economics ? (
                                         <UnitEconomicsDashboard data={result.frameworks.unit_economics} />
+                                    ) : (
+                                        <PlaceholderCard
+                                            icon={ShieldAlert}
+                                            title="Unit Economics Blocked"
+                                            description="Insufficient LTV/CAC signal depth to model unit economics. Provide specific pricing and customer acquisition data to unlock this view."
+                                        />
                                     )}
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                         {result.frameworks?.five_forces && <FiveForces data={result.frameworks.five_forces} />}
-                                        {result.frameworks?.wardley && <WardleyMap data={result.frameworks.wardley} />}
+                                        {result.frameworks?.wardley && (
+                                            <WardleyMap
+                                                capabilities={result.frameworks.wardley.capabilities}
+                                                warnings={result.frameworks.wardley.strategic_warnings}
+                                            />
+                                        )}
                                     </div>
 
-                                    {result.frameworks?.monte_carlo && (
-                                        <MonteCarloChart data={result.frameworks.monte_carlo} />
+                                    {result.frameworks?.monte_carlo ? (
+                                        <MonteCarloChart
+                                            distributions={result.frameworks.monte_carlo.distributions}
+                                            riskDrivers={result.frameworks.monte_carlo.risk_drivers}
+                                        />
+                                    ) : (
+                                        <PlaceholderCard
+                                            icon={ShieldAlert}
+                                            title="Monte Carlo Blocked"
+                                            description="Probabilistic risk modeling requires revenue and growth rate distributions. Add financial targets to simulate variance scenarios."
+                                        />
                                     )}
                                 </motion.div>
                             )}
@@ -731,10 +874,7 @@ export function HeroSection() {
                                     className="max-w-7xl mx-auto w-full"
                                 >
                                     {result.frameworks?.blue_ocean && (
-                                        <BlueOceanCanvas
-                                            findings={result.frameworks.blue_ocean.findings}
-                                            strategy={result.frameworks.blue_ocean.strategy}
-                                        />
+                                        <BlueOceanCanvas data={result.frameworks.blue_ocean} />
                                     )}
                                 </motion.div>
                             )}

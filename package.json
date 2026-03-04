@@ -26,10 +26,14 @@
     "express": "^5.2.1",
     "firebase-admin": "^13.6.1",
     "genkit": "^1.28.0",
+    "multer": "^2.1.0",
+    "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "@types/multer": "^2.0.0",
+    "@types/pdf-parse": "^1.1.5",
     "@types/pdfkit": "^0.17.5",
     "@types/supertest": "^6.0.3",
     "@vitest/coverage-v8": "^2.1.9",

@@ -107,7 +107,7 @@ export type ScenarioId = keyof typeof SCENARIOS;
 export interface StressResult {
     scenarioId: ScenarioId;
     scenarioLabel: string;
-    originalScores: Record<string, number>;
+    originalScores: Record<string, number | null>;
     stressedScores: Record<string, number>;
     riskDeltas: Record<string, number>;
     mitigationCards: MitigationCard[];

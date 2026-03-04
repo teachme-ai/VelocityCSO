@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 interface CategorySummaryProps {
-    dimensions: Record<string, number>;
+    dimensions: Record<string, number | null>;
 }
 
 const CATEGORIES: Record<string, string[]> = {
@@ -15,8 +15,10 @@ const CATEGORIES: Record<string, string[]> = {
 
 export const CategorySummary: React.FC<CategorySummaryProps> = ({ dimensions }) => {
     const categoryAverages = Object.entries(CATEGORIES).map(([cat, dims]) => {
-        const scores = dims.map(d => dimensions[d] || 0);
-        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / Math.max(scores.length, 1));
+        const scores = dims.map(d => dimensions[d]).filter((v): v is number => v !== null && v !== undefined);
+        const avg = scores.length > 0
+            ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+            : 0;
         return { name: cat, avg };
     });
 

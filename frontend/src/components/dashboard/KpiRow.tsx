@@ -2,19 +2,22 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Activity, Star, AlertTriangle, ShieldCheck } from 'lucide-react';
 
+import type { RichDimensionData } from '../DiagnosticScorecard';
+
 interface KpiRowProps {
-    dimensions: Record<string, number>;
-    richDimensions?: Record<string, any>;
+    dimensions: Record<string, number | null>;
+    richDimensions?: Record<string, RichDimensionData>;
 }
 
 export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions }) => {
-    const dimValues = Object.values(dimensions);
+    const dimValues = Object.values(dimensions).filter((v): v is number => v !== null && v !== undefined);
     const overallScore = dimValues.length > 0
         ? Math.round(dimValues.reduce((a, b) => a + b, 0) / dimValues.length)
         : 0;
 
-    const topStrength = Object.entries(dimensions).sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
-    const keyRisk = Object.entries(dimensions).sort((a, b) => a[1] - b[1])[0] || ['N/A', 0];
+    const availableEntries = Object.entries(dimensions).filter((entry): entry is [string, number] => entry[1] !== null && entry[1] !== undefined);
+    const topStrength = [...availableEntries].sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
+    const keyRisk = [...availableEntries].sort((a, b) => a[1] - b[1])[0] || ['N/A', 0];
 
     const richDims = Object.values(richDimensions || {});
     const confidence = richDims.length > 0

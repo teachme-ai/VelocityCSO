@@ -328,139 +328,14 @@ async function handleFileUpload(file: File) {
 
 ---
 
-## Task 4.3 — Real-Time Market Data APIs
+## Task 4.3 — ~~Real-Time Market Data APIs~~ (REMOVED)
 
-### Install dependencies
-
-```bash
-npm install node-fetch
-# API keys stored in environment variables
-```
-
-### New file: `src/services/marketDataService.ts`
-
-```typescript
-// src/services/marketDataService.ts
-// Aggregates real-time market signals from multiple sources
-
-export interface MarketSignals {
-  news_headlines: Array<{ title: string; source: string; date: string; url: string }>;
-  funding_data?: { last_round: string; amount: string; investors: string[] };
-  web_traffic?: { monthly_visits: string; growth_trend: string };
-  competitor_signals: Array<{ name: string; signal: string; date: string }>;
-}
-
-export async function fetchNewsSignals(
-  companyName: string,
-  industry: string
-): Promise<Array<{ title: string; source: string; date: string; url: string }>> {
-  const apiKey = process.env.NEWS_API_KEY;
-  if (!apiKey) return [];
-
-  const query = encodeURIComponent(`"${companyName}" OR "${industry} startup" OR "${industry} market"`);
-  const url = `https://newsapi.org/v2/everything?q=${query}&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
-
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    const data = await res.json() as any;
-
-    return (data.articles ?? []).map((a: any) => ({
-      title: a.title,
-      source: a.source.name,
-      date: a.publishedAt?.slice(0, 10) ?? 'unknown',
-      url: a.url,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export async function fetchCrunchbaseSignals(
-  companyName: string
-): Promise<{ last_round?: string; amount?: string; investors?: string[] } | null> {
-  const apiKey = process.env.CRUNCHBASE_API_KEY;
-  if (!apiKey) return null;
-
-  // Crunchbase Basic API (free tier)
-  const encoded = encodeURIComponent(companyName.toLowerCase().replace(/\s+/g, '-'));
-  const url = `https://api.crunchbase.com/api/v4/entities/organizations/${encoded}?field_ids=short_description,funding_total,last_funding_type,last_funding_at,investor_identifiers&user_key=${apiKey}`;
-
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return null;
-    const data = await res.json() as any;
-    const props = data.properties ?? {};
-
-    return {
-      last_round: props.last_funding_type ?? 'unknown',
-      amount: props.funding_total?.value_usd
-        ? `$${(props.funding_total.value_usd / 1e6).toFixed(1)}M`
-        : 'undisclosed',
-      investors: (props.investor_identifiers ?? []).slice(0, 5).map((i: any) => i.value),
-    };
-  } catch {
-    return null;
-  }
-}
-
-// Assemble all signals for injection into discovery context
-export async function assembleMarketSignals(
-  companyName: string,
-  industry: string
-): Promise<string> {
-  const [news, funding] = await Promise.all([
-    fetchNewsSignals(companyName, industry),
-    fetchCrunchbaseSignals(companyName),
-  ]);
-
-  const parts: string[] = [];
-
-  if (news.length > 0) {
-    parts.push('RECENT NEWS:');
-    news.forEach(n => parts.push(`- ${n.title} (${n.source}, ${n.date})`));
-  }
-
-  if (funding) {
-    parts.push('\nFUNDING DATA (Crunchbase):');
-    parts.push(`- Last round: ${funding.last_round}, Amount: ${funding.amount}`);
-    if (funding.investors?.length) {
-      parts.push(`- Investors: ${funding.investors.join(', ')}`);
-    }
-  }
-
-  return parts.length > 0
-    ? `REAL-TIME MARKET SIGNALS:\n${parts.join('\n')}`
-    : '';
-}
-```
-
-### Integration in `src/index.ts` — inject before Discovery Agent
-
-```typescript
-// src/index.ts — in the /analyze handler, before running discoveryAgent:
-
-const { assembleMarketSignals } = await import('./services/marketDataService.js');
-
-// Extract company name from context (use interrogator's org name extraction)
-const orgName = context.match(/^([A-Z][a-zA-Z\s&]{2,40})/)?.[1]?.trim() ?? '';
-const industry = context.match(/\b(saas|fintech|healthtech|edtech|marketplace|ecommerce|logistics)\b/i)?.[0] ?? '';
-
-const marketSignals = await assembleMarketSignals(orgName, industry);
-
-// Enrich the context sent to Discovery Agent:
-const enrichedContext = marketSignals
-  ? `${context}\n\n${marketSignals}`
-  : context;
-```
-
-### Environment variables to add
-
-```bash
-# .env (backend) — add:
-NEWS_API_KEY=your_newsapi_key_here          # newsapi.org (free tier: 100 requests/day)
-CRUNCHBASE_API_KEY=your_crunchbase_key      # Crunchbase Basic API (free with account)
-JINA_API_KEY=your_jina_key                 # jina.ai reader API (free tier available)
-```
+> **Decision:** NewsAPI and Crunchbase removed. NewsAPI free tier blocks production domains (localhost only). Crunchbase free tier is 200 calls/month and requires paid access for meaningful data. Neither is worth the cost or complexity.
+>
+> URL scraping via Jina AI Reader (Task 4.1) covers the same enrichment use case at zero cost. Google Search Grounding in the Discovery Agent (Phase 1) handles real-time market signals.
+>
+> **`src/services/marketDataService.ts` — do not create.**
+> **No env vars needed for this task.**
 
 ---
 
@@ -568,15 +443,13 @@ Use these benchmarks to calibrate your scoring and unit economics calculations.
 
 ## Phase 4 Completion Checklist
 
-- [ ] `scraperService.ts` uses Jina AI Reader to scrape company URLs
+- [ ] `scraperService.ts` uses Jina AI Reader to scrape company URLs (no API key needed)
 - [ ] `POST /enrich/url` endpoint works and returns structured `ScrapeResult`
 - [ ] Frontend URL input field enriches the context textarea
 - [ ] `documentParser.ts` extracts text from PDF and TXT files
 - [ ] `POST /enrich/document` file upload endpoint works
 - [ ] Frontend file attachment button appears in audit input form
-- [ ] `marketDataService.ts` fetches from NewsAPI and Crunchbase
-- [ ] Market signals are prepended to Discovery Agent context
 - [ ] `benchmarks.ts` data file created with 5 industry profiles
 - [ ] Benchmarks injected into `financeAnalyst` context
-- [ ] `NEWS_API_KEY`, `CRUNCHBASE_API_KEY`, `JINA_API_KEY` documented in `.env.example`
-- [ ] All data enrichment is additive (system works without API keys)
+- [ ] No external API keys required for Phase 4 to function
+- [ ] All data enrichment is additive (system works without Jina API key too)

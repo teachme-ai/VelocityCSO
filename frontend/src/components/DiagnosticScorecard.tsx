@@ -7,11 +7,12 @@ export interface RichDimensionData {
     improvement_action?: string;
     remediation?: string;
     key_assumption?: string;
+    confidence_score?: number;
 }
 
 interface ScorecardProps {
-    dimensions: Record<string, number>;
-    originalDimensions?: Record<string, number>;
+    dimensions: Record<string, number | null>;
+    originalDimensions?: Record<string, number | null>;
     richDimensions?: Record<string, RichDimensionData>;
     onAreaClick: (area: string) => void;
 }
@@ -62,10 +63,11 @@ export const DiagnosticScorecard = ({ dimensions, originalDimensions, richDimens
                 <div key={cat} style={{ marginBottom: 8 }}>
                     <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 6, marginTop: 10 }}>{cat}</p>
                     {dims.map(dim => {
-                        const score = dimensions[dim] ?? 0;
-                        const baseline = originalDimensions?.[dim] ?? score;
-                        const dropped = isStressMode && (baseline - score) > 15;
-                        const color = score >= 70 ? '#16a34a' : score >= 40 ? '#2563eb' : '#dc2626';
+                        const score = dimensions[dim];
+                        const isAvailable = score !== null && score !== undefined;
+                        const baseline = originalDimensions?.[dim] ?? (isAvailable ? score : 50);
+                        const dropped = isStressMode && isAvailable && (baseline - score) > 15;
+                        const color = !isAvailable ? '#6b7280' : score >= 70 ? '#16a34a' : score >= 40 ? '#2563eb' : '#dc2626';
                         return (
                             <div key={dim}>
                                 <div
@@ -90,9 +92,11 @@ export const DiagnosticScorecard = ({ dimensions, originalDimensions, richDimens
                                         {dropped ? `⚠ ${dim}` : dim}
                                     </span>
                                     <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 9999, overflow: 'hidden' }}>
-                                        <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: 9999, transition: 'width 0.7s' }} />
+                                        <div style={{ width: `${isAvailable ? score : 0}%`, height: '100%', background: color, borderRadius: 9999, transition: 'width 0.7s', opacity: isAvailable ? 1 : 0.3 }} />
                                     </div>
-                                    <span style={{ fontSize: 11, fontFamily: 'monospace', width: 26, textAlign: 'right', flexShrink: 0, color }}>{score}</span>
+                                    <span style={{ fontSize: 11, fontFamily: 'monospace', width: 26, textAlign: 'right', flexShrink: 0, color, opacity: isAvailable ? 1 : 0.5 }}>
+                                        {isAvailable ? score : '—'}
+                                    </span>
                                     {isStressMode && dropped && (
                                         <span style={{ fontSize: 9, color: '#f87171', flexShrink: 0, width: 28 }}>↓{baseline - score}</span>
                                     )}

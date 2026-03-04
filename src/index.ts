@@ -15,13 +15,23 @@ import { SCENARIOS, ScenarioId } from './scenarios.js';
 import type { StrategySession } from './services/sessionService.js';
 import { authMiddleware, AuthRequest } from './middleware/auth.js';
 import { registerConnection, unregisterConnection, sseWrite, emitHeartbeat } from './services/sseService.js';
+import multer from 'multer';
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: (_req, file, cb) => {
+        const allowed = ['application/pdf', 'text/plain', 'text/markdown'];
+        cb(null, allowed.includes(file.mimetype));
+    }
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 admin.initializeApp();
 
-const app = express();
+export const app = express();
 const port = Number(process.env.PORT) || 8080;
 
 app.use(cors());
@@ -90,6 +100,49 @@ app.get('/report/:id/download', async (req, res) => {
     }
 });
 
+// ─── POST /enrich/url ────────────────────────────────────────────────────────
+app.post('/enrich/url', authMiddleware as any, async (req: AuthRequest, res) => {
+    const { url } = req.body as { url: string };
+
+    if (!url) {
+        return res.status(400).json({ error: 'url is required' });
+    }
+
+    try {
+        const { scrapeCompanyUrl } = await import('./services/scraperService.js');
+        const result = await scrapeCompanyUrl(url);
+        res.json({ success: true, data: result });
+    } catch (err: any) {
+        log({ severity: 'ERROR', message: `Enrichment failed for ${url}: ${err.message}` });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── POST /enrich/document ──────────────────────────────────────────────────
+app.post('/enrich/document',
+    authMiddleware as any,
+    upload.single('document'),
+    async (req: AuthRequest, res) => {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded or invalid format' });
+        }
+
+        try {
+            const { parsePDF, parseTextFile } = await import('./services/documentParser.js');
+            let result;
+            if (req.file.mimetype === 'application/pdf') {
+                result = await parsePDF(req.file.buffer, req.file.originalname);
+            } else {
+                result = parseTextFile(req.file.buffer, req.file.originalname);
+            }
+            res.json({ success: true, data: result });
+        } catch (err: any) {
+            log({ severity: 'ERROR', message: `Document parsing failed: ${err.message}` });
+            res.status(500).json({ error: err.message });
+        }
+    }
+);
+
 // ─── POST /analyze ───────────────────────────────────────────────────────────
 app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
     const { business_context, stress_test } = req.body;
@@ -148,9 +201,32 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
 
         sseWrite(res, { type: 'READY_FOR_AUDIT', idScore: ir.idScore, category: ir.category });
 
+        // ── Phase 0.1: Market Data Enrichment ───────────────────────
+        let contextWithMarketSignals = business_context;
+        try {
+            const { assembleMarketSignals } = await import('./services/marketDataService.js');
+            // Extract company name and industry with simple heuristics
+            const orgNameMatch = business_context.match(/^([A-Z][a-zA-Z\s&]{2,40})/);
+            const orgName = orgNameMatch ? orgNameMatch[1].trim() : '';
+            const industryMatch = business_context.match(/\b(saas|fintech|healthtech|edtech|marketplace|ecommerce|logistics|ai|security|energy)\b/i);
+            const industry = industryMatch ? industryMatch[0].toLowerCase() : '';
+
+            if (orgName || industry) {
+                emitHeartbeat(sessionId, '📡 Market Intelligence: Scanning for real-time news and funding signals...');
+                const marketSignals = await assembleMarketSignals(orgName, industry);
+                if (marketSignals) {
+                    contextWithMarketSignals = `${business_context}\n\n${marketSignals}`;
+                    emitHeartbeat(sessionId, '✓ Market signals injected into discovery context.');
+                    tlog({ severity: 'INFO', message: 'Market signals enriched', session_id: sessionId, orgName, industry });
+                }
+            }
+        } catch (err: any) {
+            log({ severity: 'WARNING', message: `Market enrichment skipped: ${err.message}` });
+        }
+
         // ── Phase 0: Discovery ────────────────────────────────────────────
         sseWrite(res, { type: 'DISCOVERY_START' });
-        const discoveryResult = await discovery.discover(business_context, sessionId);
+        const discoveryResult = await discovery.discover(contextWithMarketSignals, sessionId);
         const discoveryFindingsStr = discoveryResult.findings
             .map(f => `[${f.date}] ${f.signal} (Source: ${f.source})`)
             .join('\n');
@@ -187,12 +263,29 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             return;
         }
 
+        // ── Phase 0.6: Industry Benchmarking ──────────────────────────
+        let benchmarkContext = '';
+        try {
+            const { getBenchmarkForSector } = await import('./services/benchmarkService.js');
+            const industryMatch = business_context.match(/\b(saas|fintech|healthtech|edtech|marketplace|ecommerce|logistics|ai|security|energy)\b/i);
+            const sector = industryMatch ? industryMatch[0] : 'SaaS';
+            const benchmark = await getBenchmarkForSector(sector);
+            benchmarkContext = `\n\n--- ${sector.toUpperCase()} INDUSTRY BENCHMARKS ---\n` +
+                `- Avg CAC Payback: ${benchmark.avg_cac_payback_months} months\n` +
+                `- Avg LTV/CAC: ${benchmark.avg_ltv_cac}x\n` +
+                `- Top Quartile Growth: ${benchmark.growth_benchmark_top_quartile * 100}%\n` +
+                `- Market Multiples: ${benchmark.market_multiple_range[0]}x - ${benchmark.market_multiple_range[1]}x\n`;
+            emitHeartbeat(sessionId, `✓ Industry Calibration: Loaded ${sector} benchmarks.`);
+        } catch (err: any) {
+            log({ severity: 'WARNING', message: `Benchmarking skipped: ${err.message}` });
+        }
+
         // ── Phase 1–3: Full Analysis ──────────────────────────────────────
         sseWrite(res, { type: 'ANALYSIS_START', phase: 'synthesizing' });
         emitHeartbeat(sessionId, '◆ CSO: initializing 5-specialist tactical audit...');
 
-        const enrichedContext = discoveryFindingsStr
-            ? `${business_context}\n\n--- MARKET GROUNDING INTELLIGENCE ---\n${discoveryFindingsStr}`
+        const enrichedContext = (discoveryFindingsStr || benchmarkContext)
+            ? `${business_context}${benchmarkContext}\n\n--- MARKET GROUNDING INTELLIGENCE ---\n${discoveryFindingsStr}`
             : business_context;
 
         const finalContext = stress_test
@@ -398,7 +491,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
         logAuditCost(sessionId, { synthesis_with_clarification: csoCost.usd });
 
         // THE RECEIPT CHECK: Ensure dimensions are not entirely zeroed if possible
-        const hasDimensions = Object.values(dimensions).some(v => v > 0);
+        const hasDimensions = Object.values(dimensions).some(v => (v ?? 0) > 0);
         if (!hasDimensions) {
             tlog({ severity: 'WARNING', message: 'Dimensions still empty at emit time', session_id: sessionId });
         }
@@ -472,6 +565,8 @@ app.get('/{*path}', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-app.listen(port, '0.0.0.0', () => {
-    log({ severity: 'INFO', message: `VelocityCSO server started on port ${port} [v4.0.0]`, agent_id: 'system' });
-});
+if (process.env.NODE_ENV !== 'test') {
+    app.listen(port, '0.0.0.0', () => {
+        log({ severity: 'INFO', message: `VelocityCSO server started on port ${port} [v4.0.0]`, agent_id: 'system' });
+    });
+}
