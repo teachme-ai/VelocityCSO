@@ -26,7 +26,7 @@ export interface BlueOceanResult {
 
 export const blueOceanAgent = new LlmAgent({
   name: 'blue_ocean_analyst',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-2.0-flash-001',
   instruction: `
 You are a Blue Ocean Strategy analyst. Identify uncontested market space.
 

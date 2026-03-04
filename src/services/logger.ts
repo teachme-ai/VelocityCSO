@@ -72,8 +72,12 @@ export function createTraceLogger(traceHeader?: string, projectId?: string) {
 // https://ai.google.dev/pricing
 const MODEL_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
     'gemini-1.5-pro': { inputPer1M: 1.25, outputPer1M: 10.00 },
-    'gemini-1.5-flash': { inputPer1M: 0.075, outputPer1M: 0.30 }, // Updated pricing
+    'gemini-1.5-pro-001': { inputPer1M: 1.25, outputPer1M: 10.00 },
+    'gemini-1.5-flash': { inputPer1M: 0.075, outputPer1M: 0.30 },
     'gemini-2.0-flash': { inputPer1M: 0.10, outputPer1M: 0.40 },
+    'gemini-2.0-flash-001': { inputPer1M: 0.10, outputPer1M: 0.40 },
+    'gemini-2.5-flash': { inputPer1M: 0.15, outputPer1M: 0.60 },
+    'gemini-2.5-pro-preview-05-06': { inputPer1M: 1.25, outputPer1M: 10.00 },
 };
 
 /**

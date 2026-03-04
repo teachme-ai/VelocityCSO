@@ -67,7 +67,7 @@ OUTPUT FORMAT (strict JSON):
 
 /**
  * Agent 0: Discovery Agent
- * Uses gemini-2.0-flash with real-time web search to ground strategic analysis.
+ * Uses gemini-2.0-flash-001 with real-time web search to ground strategic analysis.
  */
 export class DiscoveryAgent {
     private agent: LlmAgent;
@@ -75,7 +75,7 @@ export class DiscoveryAgent {
     constructor() {
         this.agent = new LlmAgent({
             name: 'discovery_agent',
-            model: 'gemini-2.0-flash',
+            model: 'gemini-2.0-flash-001',
             description: 'Market intelligence gatherer with Google Search grounding and PESTLE analysis.',
             instruction: buildDiscoveryInstruction(),
             tools: [GOOGLE_SEARCH],
@@ -122,7 +122,7 @@ export class DiscoveryAgent {
         if (jsonMatch) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]);
-                const cost = estimateCost('gemini-2.0-flash', businessContext.length, rawOutput.length);
+                const cost = estimateCost('gemini-2.0-flash-001', businessContext.length, rawOutput.length);
                 log({
                     severity: 'INFO',
                     message: 'Market grounding complete',

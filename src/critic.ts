@@ -2,7 +2,7 @@ import { LlmAgent } from '@google/adk';
 
 export const strategicCritic = new LlmAgent({
   name: 'strategic_critic',
-  model: 'gemini-1.5-pro',
+  model: 'gemini-1.5-pro-001',
   instruction: `
 You are the Strategic Critic. Your job is to find errors, contradictions, and
 unsubstantiated claims in specialist analysis BEFORE the CSO synthesizes them.

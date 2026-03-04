@@ -151,7 +151,7 @@ export class InterrogatorAgent {
 
         const agent = new LlmAgent({
             name: 'interrogator_agent',
-            model: 'gemini-2.0-flash',
+            model: 'gemini-2.0-flash-001',
             description: 'Strategic Filter with Information Density scoring.',
             instruction: buildInstruction(effectiveUsedLenses, [...new Set(askedQuestions)]),
         });
@@ -212,7 +212,7 @@ export class InterrogatorAgent {
                     } catch { /* non-critical */ }
                 }
 
-                const cost = estimateCost('gemini-2.0-flash', groundedContext.length, rawOutput.length);
+                const cost = estimateCost('gemini-2.0-flash-001', groundedContext.length, rawOutput.length);
                 log({ severity: 'INFO', message: 'ID score calculated', agent_id: 'interrogator_agent', session_id: sessionId, id_score: idScore, lens: lensUsed, cost_usd: cost.usd });
 
                 return {

@@ -24,7 +24,7 @@ export interface WardleyResult {
 
 export const wardleyAgent = new LlmAgent({
   name: 'wardley_analyst',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-2.0-flash-001',
   instruction: `
 You are a Wardley Mapping specialist. Map the business's capability landscape.
 
