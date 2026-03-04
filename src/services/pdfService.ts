@@ -108,7 +108,7 @@ function extractKillerMove(report: string): string {
 async function runStressScenario(
     scenarioId: string,
     businessContext: string,
-    dimensionScores: Record<string, number>
+    dimensionScores: Record<string, number | null>
 ): Promise<{ stressedScores: Record<string, number>; mitigationCards: any[] }> {
     try {
         const { LlmAgent, InMemoryRunner, isFinalResponse } = await import('@google/adk');
@@ -163,7 +163,7 @@ Dimensions: ${dimNames.join(', ')}`.trim();
     const deltas: Record<string, number> = { RECESSION: -18, PRICE_WAR: -15, SCALE_UP: -12, TALENT: -10 };
     const delta = deltas[scenarioId] || -12;
     for (const [dim, score] of Object.entries(dimensionScores)) {
-        stressedScores[dim] = Math.max(0, score + delta);
+        stressedScores[dim] = Math.max(0, (score ?? 0) + delta);
     }
     return { stressedScores, mitigationCards: [] };
 }
@@ -196,8 +196,9 @@ function _buildPDF(
     const orgName = sanitizeText(memory.orgName || extractOrgName(memory.businessContext || ''));
     const killerMove = extractKillerMove(memory.report);
     const dims = memory.dimensionScores;
-    const overallScore = Object.values(dims).length
-        ? Math.round(Object.values(dims).reduce((a, b) => a + b, 0) / Object.values(dims).length)
+    const scoredValues = Object.values(dims).filter((v): v is number => v !== null);
+    const overallScore = scoredValues.length
+        ? Math.round(scoredValues.reduce((a, b) => a + b, 0) / scoredValues.length)
         : 0;
     const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     let page = 1;
@@ -253,7 +254,7 @@ function _buildPDF(
         doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text(cat.toUpperCase(), 40, leftHalfY);
         leftHalfY += 14;
         for (const dim of dimList) {
-            leftHalfY = scoreBar(doc, dim, dims[dim] ?? 0, undefined, leftHalfY, 40, midPoint - 60);
+            leftHalfY = scoreBar(doc, dim, dims[dim] ?? 0, dims[dim] === null ? undefined : (dims[dim] ?? 0), leftHalfY, 40, midPoint - 60);
         }
         leftHalfY += 10;
     }
@@ -264,7 +265,7 @@ function _buildPDF(
         doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text(cat.toUpperCase(), midPoint + 10, rightHalfY);
         rightHalfY += 14;
         for (const dim of dimList) {
-            rightHalfY = scoreBar(doc, dim, dims[dim] ?? 0, undefined, rightHalfY, midPoint + 10, midPoint - 50);
+            rightHalfY = scoreBar(doc, dim, dims[dim] ?? 0, dims[dim] === null ? undefined : (dims[dim] ?? 0), rightHalfY, midPoint + 10, midPoint - 50);
         }
         rightHalfY += 10;
     }
@@ -319,8 +320,8 @@ function _buildPDF(
 
     // ── STRATEGY RECOMMENDATIONS (90-Day Actions) ─────────────────────────────
     const criticalActions = Object.entries(memory.richDimensions || {})
-        .filter(([_, data]) => data.score < 65 && data.improvement_action)
-        .map(([dim, data]) => ({ dim, action: data.improvement_action, score: data.score, justification: data.justification }));
+        .filter(([_, data]) => (data.score ?? 0) < 65 && data.improvement_action)
+        .map(([dim, data]) => ({ dim, action: data.improvement_action, score: data.score ?? 0, justification: data.justification }));
 
     if (criticalActions.length > 0) {
         y = addPage(doc, orgName);
@@ -380,7 +381,7 @@ function _buildPDF(
         for (let i = 0; i < allDims.length; i++) {
             if (curY > pageBottom - 20) { drawFooter(doc, page++); curY = addPage(doc, orgName); }
             const dim = allDims[i];
-            curY = scoreBar(doc, dim, result.stressedScores[dim] ?? 0, dims[dim], curY);
+            curY = scoreBar(doc, dim, result.stressedScores[dim] ?? 0, dims[dim] ?? undefined, curY);
         }
         y = curY + 20;
 
