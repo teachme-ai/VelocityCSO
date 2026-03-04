@@ -389,68 +389,53 @@ export const MARKET_ANALYST_INSTRUCTION = `
 // Call 1: Frameworks only (Porter's + Ansoff + VRIO). No dimensions, no CoT prose.
 // Target output: ~1,800 tokens. Hard-capped at 2,048 tokens via maxOutputTokens.
 export const INNOVATION_FRAMEWORKS_INSTRUCTION = `
-    You are a competitive strategy expert. Analyze the business context and return ONLY a raw JSON object.
-    Keep ALL text fields (primary_driver, rationale, killer_move, evidence, verdict_rationale) to ONE sentence each.
-    Return ONLY the JSON below — no prose, no markdown, no explanation outside the JSON.
+You are a competitive strategy expert. Analyze the business context provided and output a single raw JSON object — no markdown fences, no prose outside the JSON.
 
-    {
-      "portersFiveForces": {
-        "scores": {
-          "competitive_rivalry":      { "score": 0, "primary_driver": "1 sentence" },
-          "threat_of_new_entrants":   { "score": 0, "primary_driver": "1 sentence" },
-          "threat_of_substitutes":    { "score": 0, "primary_driver": "1 sentence" },
-          "buyer_power":              { "score": 0, "primary_driver": "1 sentence" },
-          "supplier_power":           { "score": 0, "primary_driver": "1 sentence" }
-        },
-        "structural_attractiveness_score": 0,
-        "interaction_effect_warning": null
-      },
-      "ansoffMatrix": {
-        "market_penetration":  { "score": 0, "rationale": "1 sentence", "killer_move": "1 sentence" },
-        "market_development":  { "score": 0, "rationale": "1 sentence", "killer_move": "1 sentence" },
-        "product_development": { "score": 0, "rationale": "1 sentence", "killer_move": "1 sentence" },
-        "diversification":     { "score": 0, "rationale": "1 sentence", "killer_move": "1 sentence" },
-        "primary_vector": "market_penetration|market_development|product_development|diversification",
-        "strategic_verdict": "1 sentence"
-      },
-      "vrioAnalysis": {
-        "resource_evaluated": "name of primary advantage",
-        "valuable":    { "score": 0, "evidence": "1 sentence" },
-        "rare":        { "score": 0, "evidence": "1 sentence" },
-        "inimitable":  { "score": 0, "evidence": "1 sentence" },
-        "organised":   { "score": 0, "evidence": "1 sentence" },
-        "verdict": "Sustained Competitive Advantage|Temporary Advantage|Competitive Parity|No Advantage",
-        "verdict_rationale": "1 sentence"
-      }
-    }
+Keep every text field to ONE sentence maximum.
 
-    PORTER scoring: Higher = more intense pressure. Rivalry 25%, Entrants 20%, Substitutes 20%, Buyers 20%, Suppliers 15%.
-    ANSOFF scoring: Higher = more attractive given current position.
-    VRIO scoring: 0 = no advantage, 100 = unassailable.
+PORTER'S FIVE FORCES: Score each force 0-100 (higher = more competitive pressure on the business).
+- competitive_rivalry: rivals, differentiation, price wars
+- threat_of_new_entrants: barriers to entry, capital, regulation
+- threat_of_substitutes: alternatives, switching costs
+- buyer_power: buyer concentration, switching ease
+- supplier_power: supplier concentration, forward integration
+structural_attractiveness_score = 100 minus weighted average (Rivalry 25%, Entrants 20%, Substitutes 20%, Buyers 20%, Suppliers 15%).
+
+ANSOFF MATRIX: Score each vector 0-100 for attractiveness given current position.
+- market_penetration: existing product × existing market
+- market_development: existing product × new market
+- product_development: new product × existing market
+- diversification: new product × new market
+Pick the highest-scoring as primary_vector.
+
+VRIO: Evaluate the business's primary claimed competitive advantage.
+- valuable, rare, inimitable, organised: each scored 0-100
+- verdict: one of "Sustained Competitive Advantage", "Temporary Advantage", "Competitive Parity", "No Advantage"
+
+OUTPUT SCHEMA (fill every field with real values — do not output placeholder text):
+portersFiveForces.scores: object with keys competitive_rivalry, threat_of_new_entrants, threat_of_substitutes, buyer_power, supplier_power — each has score (number) and primary_driver (string).
+portersFiveForces.structural_attractiveness_score: number.
+portersFiveForces.interaction_effect_warning: string or null.
+ansoffMatrix: object with keys market_penetration, market_development, product_development, diversification — each has score (number), rationale (string), killer_move (string). Also primary_vector (string) and strategic_verdict (string).
+vrioAnalysis: object with resource_evaluated (string), valuable/rare/inimitable/organised each having score (number) and evidence (string), verdict (string), verdict_rationale (string).
 `;
 
 // Call 2: Dimensions + brief analysis. No frameworks. Target output: ~1,500 tokens.
 export const INNOVATION_ANALYST_INSTRUCTION = `
-    You are a competitive strategy expert. Analyze the business context and return ONLY a raw JSON object.
-    Keep "analysis_markdown" under 200 words. Keep "justification" and "improvement_action" to 1-2 sentences each.
+You are a competitive strategy expert. Analyze the business context provided and output a single raw JSON object — no markdown fences, no prose outside the JSON.
 
-    ${rubricRule(["Competitive Defensibility", "Model Innovation", "Flywheel Potential", "Network Effects Strength", "Data Asset Quality"])}
+Do NOT include Porter's Five Forces, Ansoff Matrix, or VRIO — those are handled by a separate call.
 
-    Score these 5 dimensions (0-100). Do NOT include Porter's, Ansoff, or VRIO — those are handled separately.
+${rubricRule(["Competitive Defensibility", "Model Innovation", "Flywheel Potential", "Network Effects Strength", "Data Asset Quality"])}
 
-    {
-      "analysis_markdown": "Brief 2-paragraph competitive summary (max 200 words)",
-      "confidence_score": 0,
-      "data_sources": ["source1"],
-      "missing_signals": ["gap1"],
-      "dimensions": {
-        "Competitive Defensibility": { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" },
-        "Model Innovation":          { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" },
-        "Flywheel Potential":        { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" },
-        "Network Effects Strength":  { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" },
-        "Data Asset Quality":        { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" }
-      }
-    }
+Score these 5 dimensions 0-100. Keep analysis_markdown under 200 words. Keep justification and improvement_action to 1-2 sentences each.
+
+OUTPUT SCHEMA (fill every field with real values — do not output placeholder text):
+analysis_markdown: string (2-paragraph competitive summary, max 200 words).
+confidence_score: number 0-100.
+data_sources: array of strings.
+missing_signals: array of strings.
+dimensions: object with keys "Competitive Defensibility", "Model Innovation", "Flywheel Potential", "Network Effects Strength", "Data Asset Quality" — each containing score (number), justification (string), key_assumption (string), improvement_action (string).
 `;
 
 export const COMMERCIAL_ANALYST_INSTRUCTION = `
