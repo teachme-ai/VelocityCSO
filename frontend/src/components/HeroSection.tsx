@@ -167,7 +167,7 @@ export function HeroSection() {
     const [clarificationInput, setClarificationInput] = useState('');
     const [error, setError] = useState('');
     const [sseEvents, setSseEvents] = useState<StatusEvent[]>([]);
-    const [stressResult, setStressResult] = useState<StressResult | null>(null);
+    const [, setStressResult] = useState<StressResult | null>(null);
     const [currentReportId, setCurrentReportId] = useState<string | null>(null);
     const [currentReportToken, setCurrentReportToken] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<TabId>('overview');

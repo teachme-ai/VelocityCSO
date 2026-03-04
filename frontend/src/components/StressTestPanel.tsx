@@ -65,10 +65,9 @@ interface DimTableProps {
     dimensions: Record<string, number | null>;
     originalDimensions?: Record<string, number | null>;
     showDelta: boolean;
-    scenarioColor?: string;
 }
 
-function DimensionTable({ dimensions, originalDimensions, showDelta, scenarioColor }: DimTableProps) {
+function DimensionTable({ dimensions, originalDimensions, showDelta }: DimTableProps) {
     const dimNames = Object.keys(dimensions);
     return (
         <div className="space-y-1.5 mt-3">
@@ -383,7 +382,6 @@ export function StressTestPanel({ reportId, onStressResult, apiBase, originalDim
                                             dimensions={dimsForStressed}
                                             originalDimensions={dimsForOriginal}
                                             showDelta={true}
-                                            scenarioColor={activeMeta?.color}
                                         />
                                     </motion.div>
                                 )}
