@@ -60,7 +60,7 @@ const rubricRule = (dims: string[]) => `
 
 export const marketAnalyst = new LlmAgent({
   name: 'market_analyst',
-  model: 'gemini-2.0-flash-001',
+  model: 'gemini-2.5-flash',
   description: 'Expert in Market Analysis, TAM/SAM/SOM, and Industry Trends.',
   instruction: `
     Analyze the provided business context focusing on:
@@ -84,7 +84,7 @@ export const marketAnalyst = new LlmAgent({
 
 export const innovationAnalyst = new LlmAgent({
   name: 'innovation_analyst',
-  model: 'gemini-2.0-flash-001',
+  model: 'gemini-2.5-flash',
   description: "Expert in Competitive Landscape, SWOT, Porter's Five Forces, and Three Horizons of Growth.",
   instruction: `
     Analyze the provided business context focusing on:
@@ -224,7 +224,7 @@ export const innovationAnalyst = new LlmAgent({
 
 export const commercialAnalyst = new LlmAgent({
   name: 'commercial_analyst',
-  model: 'gemini-2.0-flash-001',
+  model: 'gemini-2.5-flash',
   description: 'Expert in Pricing Strategy, Go-To-Market (GTM), and Market Entry.',
   instruction: `
     Analyze the provided business context focusing on:
@@ -247,7 +247,7 @@ export const commercialAnalyst = new LlmAgent({
 
 export const operationsAnalyst = new LlmAgent({
   name: 'operations_analyst',
-  model: 'gemini-2.0-flash-001',
+  model: 'gemini-2.5-flash',
   description: 'Expert in Tier-1 Consulting 7S, Value Chain, AI Operating Model, and ESG.',
   instruction: `
     Analyze the provided business context focusing on:
@@ -270,7 +270,7 @@ export const operationsAnalyst = new LlmAgent({
 
 export const financeAnalyst = new LlmAgent({
   name: 'finance_analyst',
-  model: 'gemini-2.0-flash-001',
+  model: 'gemini-2.5-flash',
   description: 'Expert in Financial Modeling, Risk Assessment, and M&A.',
   instruction: `
     Analyze the provided business context focusing on:

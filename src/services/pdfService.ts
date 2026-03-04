@@ -138,7 +138,7 @@ Dimensions: ${dimNames.join(', ')}`.trim();
 
         const agent = new LlmAgent({
             name: 'pdf_stress_agent',
-            model: 'gemini-2.0-flash-001',
+            model: 'gemini-2.5-flash',
             description: 'Stress test for PDF',
             instruction: 'Return only raw JSON as instructed.',
         });

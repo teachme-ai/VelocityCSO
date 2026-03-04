@@ -104,7 +104,7 @@ export class ChiefStrategyAgent {
     constructor() {
         this.agent = new LlmAgent({
             name: 'chief_strategy_agent',
-            model: 'gemini-1.5-pro-001',
+            model: 'gemini-2.5-pro',
             description: 'Enterprise-grade Chief Strategy Officer (CSO) responsible for synthesizing business analysis.',
             instruction: `
         You are a Global Executive Chief Strategy Officer. 
@@ -191,13 +191,13 @@ export class ChiefStrategyAgent {
         const systemInstruction = 'Compress the following strategic findings into a high-density executive summary. Focus on structural advantages, risks, and core metrics. Max 300 words.';
         let summary = '';
         try {
-            summary = await callGemini('gemini-2.0-flash-001', systemInstruction, content);
+            summary = await callGemini('gemini-2.5-flash', systemInstruction, content);
         } catch (e) {
             log({ severity: 'WARNING', message: 'Summarizer failed — using empty summary', session_id: sessionId, error: String(e) });
         }
 
         const latency = Date.now() - startTime;
-        const cost = estimateCost('gemini-2.0-flash-001', content.length, summary.length);
+        const cost = estimateCost('gemini-2.5-flash', content.length, summary.length);
 
         log({
             severity: 'INFO',
@@ -224,7 +224,7 @@ export class ChiefStrategyAgent {
         emitHeartbeat(sessionId, `◆ ${agentName}: sensing market signals and identifying asymmetric plays...`);
         let rawOutput = '';
         try {
-            rawOutput = await callGemini('gemini-2.0-flash-001', systemInstruction, userPrompt);
+            rawOutput = await callGemini('gemini-2.5-flash', systemInstruction, userPrompt);
         } catch (e: any) {
             log({
                 severity: 'ERROR',
@@ -238,7 +238,7 @@ export class ChiefStrategyAgent {
         const result = robustParse(agentName, rawOutput, sessionId);
         const latency = Date.now() - startTime;
         const outChars = JSON.stringify(result).length;
-        const cost = estimateCost('gemini-2.0-flash-001', context.length, outChars);
+        const cost = estimateCost('gemini-2.5-flash', context.length, outChars);
 
         log({
             severity: 'INFO',
@@ -271,14 +271,14 @@ export class ChiefStrategyAgent {
         let raw = '';
         try {
             const CRITIC_INSTRUCTION = `You are the Strategic Critic. Review specialist outputs for contradictions, unsubstantiated scores, and generic advice. Return ONLY JSON: { "flags": [ { "specialist": "", "dimension": "", "issue": "", "description": "", "suggested_recheck": "" } ], "overall_coherence_score": 0-100, "approved_specialists": [], "requires_rerun": [] }. If no issues: { "flags": [], "overall_coherence_score": 95, "approved_specialists": [...all 5...], "requires_rerun": [] }`;
-            raw = await callGemini('gemini-1.5-pro-001', CRITIC_INSTRUCTION, criticInput);
+            raw = await callGemini('gemini-2.5-pro', CRITIC_INSTRUCTION, criticInput);
         } catch (e: any) {
             log({ severity: 'WARNING', message: 'Critic API call failed', session_id: sessionId, error: e.message || String(e) });
         }
 
         const result = robustParse('strategic_critic', raw, sessionId);
         const latency = Date.now() - startTime;
-        const cost = estimateCost('gemini-1.5-pro-001', criticInput.length, raw.length);
+        const cost = estimateCost('gemini-2.5-pro', criticInput.length, raw.length);
 
         log({
             severity: 'INFO',
@@ -419,7 +419,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
                 let raw = '';
                 try {
                     raw = await callGemini(
-                        'gemini-2.0-flash-001',
+                        'gemini-2.5-flash',
                         systemInstruction,
                         `${businessContext}\n\nCRITIC FEEDBACK: ${feedback}\n\nReturn ONLY the JSON.`
                     );
@@ -527,13 +527,13 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         let finalReport = '';
         try {
             const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
-            finalReport = await callGemini('gemini-1.5-pro-001', csoInstruction, synthesisPrompt);
+            finalReport = await callGemini('gemini-2.5-pro', csoInstruction, synthesisPrompt);
         } catch (e) {
             log({ severity: 'ERROR', message: 'CSO synthesis API call failed', session_id: sessionId, error: String(e) });
         }
 
         const synthesisLatency = Date.now() - synthesisStartTime;
-        const synthesisCost = estimateCost('gemini-1.5-pro-001', synthesisPrompt.length, finalReport.length);
+        const synthesisCost = estimateCost('gemini-2.5-pro', synthesisPrompt.length, finalReport.length);
         log({
             severity: 'INFO',
             message: 'CSO synthesis complete',
@@ -567,7 +567,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         let moatRationale = '';
         try {
             moatRationale = await callGemini(
-                'gemini-2.0-flash-001',
+                'gemini-2.5-flash',
                 'Write a concise 2-sentence Moat Rationale. Use professional, aggressive, insightful tone. Frame as a Tier-1 Consulting strategic verdict.',
                 moatPrompt
             );
@@ -580,7 +580,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
             moatRationale = `${orgName}'s primary competitive advantage is its ${topDimension[0]} (${topDimension[1]}/100), which positions it defensibly against well-funded incumbents. Sustained investment in this dimension represents the highest-leverage strategic priority.`;
         }
         const moatLatency = Date.now() - moatStartTime;
-        const moatCost = estimateCost('gemini-2.0-flash-001', moatPrompt.length, moatRationale.length);
+        const moatCost = estimateCost('gemini-2.5-flash', moatPrompt.length, moatRationale.length);
 
         log({
             severity: 'INFO',
@@ -611,7 +611,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
 
                 let rawOutput = '';
                 try {
-                    rawOutput = await callGemini('gemini-2.0-flash-001', systemInstruction, userPrompt);
+                    rawOutput = await callGemini('gemini-2.5-flash', systemInstruction, userPrompt);
                 } catch (e) {
                     log({ severity: 'ERROR', message: `Re-audit API call failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e) });
                 }
@@ -706,7 +706,7 @@ Only include a dimension in mitigation_cards if its stressed score is below 40.
         let rawOutput = '';
         try {
             rawOutput = await callGemini(
-                'gemini-2.0-flash-001',
+                'gemini-2.5-flash',
                 'You are a Global Executive stress-test analyst. Respond ONLY with a raw JSON object as instructed.',
                 stressPrompt
             );
@@ -743,7 +743,7 @@ Only include a dimension in mitigation_cards if its stressed score is below 40.
             riskDeltas[dim] = stressed - original; // negative = worse
         }
 
-        const cost = estimateCost('gemini-2.0-flash-001', stressPrompt.length, rawOutput.length);
+        const cost = estimateCost('gemini-2.5-flash', stressPrompt.length, rawOutput.length);
         log({ severity: 'INFO', message: 'Stress test complete', agent_id: 'stress_test_agent', phase: 'stress_test', session_id: sessionId, cost_usd: cost.usd, scenario: scenarioId });
 
         return {
