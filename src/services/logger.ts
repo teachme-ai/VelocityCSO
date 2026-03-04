@@ -24,6 +24,13 @@ interface LogEntry {
     token_estimate?: number;
     /** Estimated USD cost for this agent call */
     cost_usd?: number;
+    /** NEW: Detailed Agent Telemetry */
+    agent_input?: unknown;
+    agent_output?: unknown;
+    latency_ms?: number;
+    tokens_in?: number;
+    tokens_out?: number;
+    reasoning_steps?: string[];
     /** Any extra structured fields */
     [key: string]: unknown;
 }

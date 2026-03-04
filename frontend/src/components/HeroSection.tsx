@@ -1,13 +1,17 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-// import { Canvas } from '@react-three/fiber';
-// import { Stars } from '@react-three/drei';
+import type {
+    UnitEconomicsData,
+    FiveForcesData,
+    WardleyResult,
+    BlueOceanResult
+} from '../types/frameworks';
 import { AgentOrbs } from './AgentOrbs';
 import { StressTestPanel } from './StressTestPanel';
 import type { StatusEvent } from './AgentStatus';
 import type { StressResult } from '../types/stress';
-import { DiagnosticScorecard } from './DiagnosticScorecard';
-import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send, Zap } from 'lucide-react';
+import { DiagnosticScorecard, type RichDimensionData } from './DiagnosticScorecard';
+import { ShieldAlert, ChevronRight, X, Search, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { StrategyRadar } from './StrategyRadar';
 import { AgentHeartbeat } from './AgentHeartbeat';
 import { type HeartbeatLog } from './HeartbeatTerminal';
@@ -17,6 +21,10 @@ import { UnitEconomicsDashboard } from './UnitEconomicsDashboard';
 import { FiveForces } from './FiveForces';
 import { WardleyMap } from './WardleyMap';
 import { MonteCarloChart } from './MonteCarloChart';
+import { KpiRow } from './dashboard/KpiRow';
+import { CategorySummary } from './dashboard/CategorySummary';
+import { ReportTabs } from './dashboard/ReportTabs';
+import type { TabId } from './dashboard/ReportTabs';
 
 const API_URL = import.meta.env.VITE_API_URL || '/analyze';
 const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
@@ -36,8 +44,14 @@ type ReportData = {
     confidence_score?: number;
     orgName?: string;
     moatRationale?: string;
-    richDimensions?: Record<string, any>;
-    frameworks?: any;
+    richDimensions?: Record<string, RichDimensionData>;
+    frameworks?: {
+        unit_economics?: UnitEconomicsData;
+        five_forces?: FiveForcesData;
+        wardley?: WardleyResult;
+        blue_ocean?: BlueOceanResult;
+        monte_carlo?: unknown; // Assuming MonteCarloChart handles its own typing or we add it later
+    };
 };
 
 type ClarificationState = {
@@ -115,8 +129,8 @@ function sanitizeReport(text: string): string {
         .replace(/\{[\s\S]*?\}/g, '')       // Remove raw JSON objects
         .replace(/```markdown/g, '')        // Remove markdown tags
         .replace(/```/g, '')                // Remove any remaining backticks
-        .replace(/^## Dimension Scores[\s\S]*$/im, '')
-        .replace(/Dimension Scores:[\s\S]*$/im, '')
+        .replace(/#{1,4}\s*Dimension Scores[\s\S]*$/im, '') // any heading level
+        .replace(/Dimension Scores:?[\s\S]*$/im, '')
         .trim();
 }
 
@@ -133,6 +147,7 @@ export function HeroSection() {
     const [stressResult, setStressResult] = useState<StressResult | null>(null);
     const [currentReportId, setCurrentReportId] = useState<string | null>(null);
     const [currentReportToken, setCurrentReportToken] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<TabId>('overview');
     const [heartbeatLogs, setHeartbeatLogs] = useState<HeartbeatLog[]>([]);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -220,7 +235,7 @@ export function HeroSection() {
 
                     case 'ANALYSIS_START':
                         setPhase('analyzing');
-                        setPhaseLabel('Running 15-dimension diagnostic...');
+                        setPhaseLabel('Running 20-dimension diagnostic...');
                         break;
 
                     case 'REPORT_COMPLETE': {
@@ -232,8 +247,8 @@ export function HeroSection() {
                             dimensions: dims || {},
                             orgName: event.orgName as string,
                             moatRationale: event.moatRationale as string,
-                            richDimensions: event.richDimensions as any,
-                            frameworks: event.frameworks as any,
+                            richDimensions: event.richDimensions as Record<string, RichDimensionData>,
+                            frameworks: event.frameworks as Record<string, unknown>,
                         };
                         if (reportId) {
                             // setLastReportId(reportId);
@@ -316,8 +331,8 @@ export function HeroSection() {
                         dimensions: dims || {},
                         orgName,
                         moatRationale,
-                        richDimensions: event.richDimensions as any,
-                        frameworks: event.frameworks as any,
+                        richDimensions: event.richDimensions as Record<string, RichDimensionData>,
+                        frameworks: event.frameworks as Record<string, any>,
                     });
                     if (reportId) {
                         setCurrentReportId(reportId);
@@ -576,216 +591,158 @@ export function HeroSection() {
                         </div>
 
                         {/* Body: Responsive Dashboard Layout */}
-                        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-12 bg-[radial-gradient(circle_at_50%_-20%,rgba(124,58,237,0.05),transparent)]">
+                        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 bg-[radial-gradient(circle_at_50%_-20%,rgba(124,58,237,0.05),transparent)]">
 
-                            {/* Zone 1: Executive Glance (Above the Fold) */}
-                            <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 items-stretch max-w-7xl mx-auto w-full relative">
-                                <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-6 md:p-10 backdrop-blur-xl flex flex-col items-center justify-center min-h-[400px] lg:min-h-[500px] max-h-[300px] sm:max-h-none">
-                                    <div className="w-full flex justify-between items-center mb-6">
-                                        <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Strategic Position Matrix</h3>
-                                        <div className="px-2 py-1 rounded bg-purple-500/10 border border-purple-500/20 text-[9px] text-purple-400 font-bold uppercase tracking-wider">Live Audit</div>
-                                    </div>
-                                    <div className="flex-1 flex items-center justify-center w-full">
-                                        <StrategyRadar
-                                            dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
-                                            originalDimensions={stressResult ? result.dimensions : undefined}
-                                        />
-                                    </div>
-                                </div>
-
-                                <ExecutiveSummaryCard
-                                    orgName={result.orgName || 'Strategic Audit Result'}
-                                    moatRationale={result.moatRationale || 'Top-tier competitive moat identified through asymmetric multi-agentic analysis.'}
-                                    dimensions={result.dimensions || {}}
+                            {/* Dashboard Shell: KPI & Category Strips */}
+                            <div className="w-full max-w-7xl mx-auto space-y-4">
+                                <KpiRow
+                                    dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
                                     richDimensions={result.richDimensions}
                                 />
+                                <CategorySummary dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})} />
+                                <ReportTabs activeTab={activeTab} onTabChange={setActiveTab} />
+                            </div>
 
-                                {/* Executive Analysis Scroll Hint Notch */}
+                            {activeTab === 'overview' && (
                                 <motion.div
-                                    initial={{ opacity: 0, y: 10 }}
+                                    initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: 2, duration: 1 }}
-                                    className="absolute -bottom-16 left-1/2 -translate-x-1/2 hidden lg:flex flex-col items-center gap-2 cursor-pointer group"
-                                    onClick={() => document.getElementById('strategic-synthesis')?.scrollIntoView({ behavior: 'smooth' })}
+                                    className="space-y-12"
                                 >
-                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.3em] group-hover:text-violet-400 transition-colors">Executive Analysis Below</span>
-                                    <div className="w-px h-12 bg-gradient-to-b from-violet-500/50 to-transparent group-hover:from-violet-400 transition-all" />
-                                </motion.div>
-                            </section>
-
-                            {/* Zone 2: Risk Dashboard (Side-by-Side Panel) */}
-                            <section className="max-w-7xl mx-auto w-full border-t border-zinc-800/50 pt-12">
-                                <div className="flex items-center gap-3 mb-8">
-                                    <div className="p-2 bg-amber-500/10 rounded-lg">
-                                        <ShieldAlert className="w-5 h-5 text-amber-500" />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xl font-bold text-white tracking-tight">Risk Dashboard</h2>
-                                        <p className="text-xs text-zinc-500 uppercase tracking-widest font-medium mt-1">Stress Testing & Defensive Resilience</p>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                                    {/* Left Panel: Stress Chamber */}
-                                    <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
-                                        <div className="mb-6">
-                                            <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-[0.15em] mb-2 flex items-center gap-2">
-                                                <Zap className="w-3 h-3 text-amber-500" />
-                                                Stress Chamber
-                                            </h3>
-                                            <p className="text-sm text-zinc-500 leading-relaxed">
-                                                Simulate macro-shifts & monitor defensive moats. Select a crisis scenario to observe dimensional decay.
-                                            </p>
+                                    {/* Zone 1: Executive Glance */}
+                                    <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 items-stretch max-w-7xl mx-auto w-full relative">
+                                        <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-6 md:p-10 backdrop-blur-xl flex flex-col items-center justify-center min-h-[400px] lg:min-h-[500px]">
+                                            <div className="w-full flex justify-between items-center mb-6">
+                                                <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">Strategic Position Matrix</h3>
+                                                <div className="px-2 py-1 rounded bg-purple-500/10 border border-purple-500/20 text-[9px] text-purple-400 font-bold uppercase tracking-wider">Live Audit</div>
+                                            </div>
+                                            <div className="flex-1 flex items-center justify-center w-full">
+                                                <StrategyRadar
+                                                    dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
+                                                    originalDimensions={stressResult ? result.dimensions : undefined}
+                                                />
+                                            </div>
                                         </div>
 
-                                        {currentReportId && (
+                                        <ExecutiveSummaryCard
+                                            orgName={result.orgName || 'Strategic Audit Result'}
+                                            moatRationale={result.moatRationale || 'Top-tier competitive moat identified through asymmetric multi-agentic analysis.'}
+                                            dimensions={result.dimensions || {}}
+                                            richDimensions={result.richDimensions}
+                                        />
+                                    </section>
+
+                                    {/* Zone 2: Deep Analysis & Risk Propagation */}
+                                    <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-start max-w-7xl mx-auto w-full">
+                                        <div className="space-y-6">
+                                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 backdrop-blur-xl">
+                                                <div className="report-content prose prose-invert prose-sm max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-p:text-zinc-300 prose-p:leading-relaxed prose-strong:text-white prose-pre:bg-zinc-900">
+                                                    <ReactMarkdown
+                                                        components={{
+                                                            h1: ({ children }) => <h1 className="text-3xl font-bold text-white mb-6 mt-10">{children}</h1>,
+                                                            h2: ({ children }) => <h2 className="text-xl font-bold text-violet-300 mb-4 mt-8 uppercase tracking-wider">{children}</h2>,
+                                                            h3: ({ children }) => <h3 className="text-lg font-bold text-white mb-3 mt-6">{children}</h3>,
+                                                            p: ({ children }) => {
+                                                                const text = String(children);
+                                                                if (text.toLowerCase().includes('asymmetric play')) {
+                                                                    return <AsymmetricCard>{children}</AsymmetricCard>;
+                                                                }
+                                                                if (text.startsWith('Because ') && (text.includes(' cannot ') || text.includes(' can\'t '))) {
+                                                                    return <SavvyRecommendation>{children}</SavvyRecommendation>;
+                                                                }
+                                                                return <p className="mb-4 leading-relaxed">{children}</p>;
+                                                            }
+                                                        }}
+                                                    >
+                                                        {sanitizeReport(result.analysis_markdown || '')}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-6">
                                             <StressTestPanel
-                                                reportId={currentReportId}
-                                                onStressResult={setStressResult}
-                                                apiBase={import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : ''}
+                                                onStressTest={handleStressTest}
+                                                isSubmitting={isStressing}
+                                                dimensions={result.dimensions || {}}
                                             />
-                                        )}
-                                    </div>
-
-                                    {/* Right Panel: Failing Dimensions Panel */}
-                                    <div className="space-y-6">
-                                        {stressResult ? (
-                                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 backdrop-blur-xl animate-in fade-in slide-in-from-right-4 duration-500">
-                                                <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-800/50">
-                                                    <div>
-                                                        <h3 className="text-white font-bold text-lg">{stressResult.scenarioLabel}</h3>
-                                                        <p className="text-xs text-rose-500 font-bold uppercase tracking-widest mt-1">Dimensional Decay Detected</p>
-                                                    </div>
-                                                    <div className="px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-full">
-                                                        <span className="text-rose-400 text-[10px] font-bold tracking-wider uppercase">Impact Analysis</span>
-                                                    </div>
-                                                </div>
-
-                                                <DiagnosticScorecard
-                                                    dimensions={stressResult.stressedScores}
-                                                    originalDimensions={stressResult.originalScores}
-                                                    richDimensions={result.richDimensions}
-                                                    onAreaClick={(dim: string) => console.log('Stress Area:', dim)}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <div className="bg-zinc-900/20 border border-dashed border-zinc-800/50 rounded-2xl p-12 flex flex-col items-center justify-center text-center opacity-60 h-full min-h-[400px]">
-                                                <div className="w-12 h-12 rounded-full border border-zinc-800 flex items-center justify-center mb-4">
-                                                    <ShieldAlert className="w-6 h-6 text-zinc-700" />
-                                                </div>
-                                                <h3 className="text-zinc-500 font-medium tracking-tight">Waiting for Stress Signal</h3>
-                                                <p className="text-xs text-zinc-600 mt-2 max-w-[200px]">
-                                                    Initialize a crisis scenario to view the risk propagation map.
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </section>
-
-                            {/* Zone 3: Strategic Frameworks */}
-                            {result?.frameworks && (
-                                <section className="max-w-7xl mx-auto w-full border-t border-zinc-800/50 pt-12">
-                                    <div className="flex items-center gap-3 mb-8">
-                                        <div className="p-2 bg-blue-500/10 rounded-lg">
-                                            <Search className="w-5 h-5 text-blue-500" />
                                         </div>
-                                        <div>
-                                            <h2 className="text-xl font-bold text-white tracking-tight">Strategic Frameworks</h2>
-                                            <p className="text-xs text-zinc-500 uppercase tracking-widest font-medium mt-1">Deep Dive Diagnostics</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Row 1: Blue Ocean & Five Forces */}
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                                        {result.frameworks.blueOcean && (
-                                            <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
-                                                <BlueOceanCanvas data={result.frameworks.blueOcean} />
-                                            </div>
-                                        )}
-                                        {result.frameworks.fiveForces && (
-                                            <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
-                                                <FiveForces data={result.frameworks.fiveForces} />
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Row 2: Wardley Mapping */}
-                                    {result.frameworks.wardley && (
-                                        <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md mb-8">
-                                            <WardleyMap capabilities={result.frameworks.wardley.capabilities || []} warnings={result.frameworks.wardley.strategic_warnings || []} />
-                                        </div>
-                                    )}
-
-                                    {/* Row 3: Financials (Unit Economics + Monte Carlo) */}
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                        {result.frameworks.unitEconomics && (
-                                            <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
-                                                <UnitEconomicsDashboard data={result.frameworks.unitEconomics} />
-                                            </div>
-                                        )}
-                                        {result.frameworks.monteCarlo && (
-                                            <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
-                                                <MonteCarloChart
-                                                    distributions={result.frameworks.monteCarlo.distributions}
-                                                    riskDrivers={result.frameworks.monteCarlo.risk_drivers}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                </section>
+                                    </section>
+                                </motion.div>
                             )}
 
-                            <div id="strategic-synthesis" className="max-w-5xl mx-auto w-full pb-20 border-t border-zinc-800/50 pt-12">
-                                <div className="flex items-center gap-3 mb-10">
-                                    <Search size={22} className="text-violet-400" />
-                                    <h2 className="text-2xl font-bold text-white tracking-tight uppercase">Executive Strategic Synthesis</h2>
-                                </div>
+                            {activeTab === 'matrix' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="max-w-7xl mx-auto w-full"
+                                >
+                                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 backdrop-blur-xl">
+                                        <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-800/50">
+                                            <div>
+                                                <h3 className="text-white font-bold text-xl">
+                                                    {stressResult ? stressResult.scenarioLabel : 'Detailed Dimension Matrix'}
+                                                </h3>
+                                                <p className={`text-xs font-bold uppercase tracking-widest mt-1 ${stressResult ? 'text-rose-500' : 'text-zinc-500'}`}>
+                                                    {stressResult ? 'Dimensional Decay Analysis' : 'Full Strategic Coverage'}
+                                                </p>
+                                            </div>
+                                            <div className={`px-4 py-1.5 rounded-full border ${stressResult ? 'bg-rose-500/10 border-rose-500/20' : 'bg-zinc-500/10 border-zinc-500/20'}`}>
+                                                <span className={`text-[10px] font-bold tracking-wider uppercase ${stressResult ? 'text-rose-400' : 'text-zinc-400'}`}>
+                                                    {stressResult ? 'Crisis Impact' : 'Baseline Verified'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <DiagnosticScorecard
+                                            dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
+                                            originalDimensions={stressResult ? result.dimensions : undefined}
+                                            richDimensions={result.richDimensions}
+                                            onAreaClick={(dim: string) => console.log('Matrix Area:', dim)}
+                                        />
+                                    </div>
+                                </motion.div>
+                            )}
 
-                                <div className="report-content text-sm text-gray-300 leading-relaxed max-w-5xl mx-auto">
-                                    <ReactMarkdown
-                                        components={{
-                                            h1: ({ children }) => <h1 className="text-3xl font-bold text-white mb-6 mt-10">{children}</h1>,
-                                            h2: ({ children }) => <h2 className="text-xl font-bold text-violet-300 mb-4 mt-8 uppercase tracking-wider">{children}</h2>,
-                                            h3: ({ children }) => {
-                                                const text = String(children);
-                                                if (text.toLowerCase().includes('asymmetric play')) {
-                                                    return (
-                                                        <div className="flex items-center gap-2 mb-2 mt-6">
-                                                            <div className="w-1.5 h-6 bg-violet-500 rounded-full" />
-                                                            <h3 className="text-lg font-bold text-white">{children}</h3>
-                                                        </div>
-                                                    );
-                                                }
-                                                return <h3 className="text-lg font-bold text-white mb-3 mt-6">{children}</h3>;
-                                            },
-                                            p: ({ children }) => {
-                                                const text = String(children);
-                                                if (text.toLowerCase().includes('asymmetric play')) {
-                                                    return <AsymmetricCard>{children}</AsymmetricCard>;
-                                                }
-                                                if (text.startsWith('Because ') && (text.includes(' cannot ') || text.includes(' can\'t '))) {
-                                                    return <SavvyRecommendation>{children}</SavvyRecommendation>;
-                                                }
-                                                return <p className="mb-4 leading-relaxed">{children}</p>;
-                                            },
-                                            li: ({ children }) => (
-                                                <li className="flex gap-3 my-2 items-start">
-                                                    <span className="text-violet-500 mt-1.5 flex-shrink-0">•</span>
-                                                    <span>{children}</span>
-                                                </li>
-                                            ),
-                                            ul: ({ children }) => <ul className="my-4">{children}</ul>,
-                                        }}
-                                    >
-                                        {sanitizeReport(result.analysis_markdown || '')}
-                                    </ReactMarkdown>
-                                </div>
-                            </div>
+                            {activeTab === 'frameworks' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="max-w-7xl mx-auto w-full space-y-12"
+                                >
+                                    {result.frameworks?.unit_economics && (
+                                        <UnitEconomicsDashboard data={result.frameworks.unit_economics} />
+                                    )}
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                        {result.frameworks?.five_forces && <FiveForces data={result.frameworks.five_forces} />}
+                                        {result.frameworks?.wardley && <WardleyMap data={result.frameworks.wardley} />}
+                                    </div>
+
+                                    {result.frameworks?.monte_carlo && (
+                                        <MonteCarloChart data={result.frameworks.monte_carlo} />
+                                    )}
+                                </motion.div>
+                            )}
+
+                            {activeTab === 'synthesis' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="max-w-7xl mx-auto w-full"
+                                >
+                                    {result.frameworks?.blue_ocean && (
+                                        <BlueOceanCanvas
+                                            findings={result.frameworks.blue_ocean.findings}
+                                            strategy={result.frameworks.blue_ocean.strategy}
+                                        />
+                                    )}
+                                </motion.div>
+                            )}
                         </div>
                     </motion.div>
-                )}
-            </AnimatePresence>
-        </section>
+                )
+                }
+            </AnimatePresence >
+        </section >
     );
 }

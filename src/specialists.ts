@@ -1,30 +1,25 @@
 import { LlmAgent } from '@google/adk';
 
 const jsonInstruction = `
-    IMPORTANT: You must output your response EXACTLY as a JSON object matching this structure. Do NOT wrap it in markdown blocks (\`\`\`json), just the raw JSON:
+    IMPORTANT: Return ONLY a raw JSON object (no markdown blocks):
     {
-      "analysis_markdown": "Your detailed markdown formatted analysis (following the COT protocol).",
-      "confidence_score": <number 0-100>,
-      "data_sources": ["Array of specific evidence or benchmarks used"],
-      "missing_signals": ["Gaps in info that lowered your confidence"],
+      "analysis_markdown": "Detailed markdown COT analysis.",
+      "confidence_score": 0-100,
+      "data_sources": ["evidence"],
+      "missing_signals": ["gaps"],
       "dimensions": {
-        "<Dimension Name>": {
-          "score": <number 0-100>,
-          "justification": "One-sentence evidence reference.",
-          "key_assumption": "What this score depends on.",
-          "improvement_action": "Required if score < 60: One specific 90-day task."
-        }
+        "Name": { "score": 0-100, "justification": "...", "key_assumption": "...", "improvement_action": "..." }
       }
     }
 `;
 
 const COT_SCAFFOLD = `
-    REASONING PROTOCOL (Use this for your analysis_markdown):
-    1. EVIDENCE EXTRACTION: List every specific signal or data point found in the context related to your lens.
-    2. GAP IDENTIFICATION: List what is MISSING or ambiguous.
-    3. PRE-SCORE JUSTIFICATION: For each dimension, explain WHY it deserves its score based on the benchmarks.
-    4. ADVERSARIAL CHECK: Challenge your own score—why might you be wrong?
-    5. FINAL SYNTHESIS: Provide the executive summary and "Killer Move" recommendation.
+    REASONING:
+    1. EVIDENCE: Signals found.
+    2. GAPS: Missing info.
+    3. JUSTIFICATION: Dimension logic.
+    4. ADVERSARIAL: Self-challenge.
+    5. SYNTHESIS: Exec summary + Killer Move.
 `;
 
 const asymmetricPlayRule = `
@@ -65,7 +60,7 @@ const rubricRule = (dims: string[]) => `
 
 export const marketAnalyst = new LlmAgent({
   name: 'market_analyst',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-2.0-flash',
   description: 'Expert in Market Analysis, TAM/SAM/SOM, and Industry Trends.',
   instruction: `
     Analyze the provided business context focusing on:
@@ -89,7 +84,7 @@ export const marketAnalyst = new LlmAgent({
 
 export const innovationAnalyst = new LlmAgent({
   name: 'innovation_analyst',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-2.0-flash',
   description: "Expert in Competitive Landscape, SWOT, Porter's Five Forces, and Three Horizons of Growth.",
   instruction: `
     Analyze the provided business context focusing on:
@@ -167,7 +162,7 @@ export const innovationAnalyst = new LlmAgent({
 
 export const commercialAnalyst = new LlmAgent({
   name: 'commercial_analyst',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-2.0-flash',
   description: 'Expert in Pricing Strategy, Go-To-Market (GTM), and Market Entry.',
   instruction: `
     Analyze the provided business context focusing on:
@@ -190,7 +185,7 @@ export const commercialAnalyst = new LlmAgent({
 
 export const operationsAnalyst = new LlmAgent({
   name: 'operations_analyst',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-2.0-flash',
   description: 'Expert in Tier-1 Consulting 7S, Value Chain, AI Operating Model, and ESG.',
   instruction: `
     Analyze the provided business context focusing on:

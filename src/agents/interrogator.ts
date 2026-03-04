@@ -131,20 +131,29 @@ export class InterrogatorAgent {
             };
         }
 
-        // Load asked questions from Firestore for blacklist
+        // Load existing gaps and asked questions from the unified session
         let askedQuestions: string[] = [];
         try {
+            const sessionDoc = await admin.firestore().collection('velocity_cso_sessions').doc(sessionId).get();
+            if (sessionDoc.exists) {
+                const sessionData = sessionDoc.data();
+                // Add initial discovery gaps to blacklist
+                if (Array.isArray(sessionData?.gaps)) {
+                    askedQuestions.push(...sessionData.gaps);
+                }
+            }
+
             const snap = await admin.firestore()
-                .collection('discovery_sessions').doc(sessionId)
+                .collection('velocity_cso_sessions').doc(sessionId)
                 .collection('asked_questions').get();
-            askedQuestions = snap.docs.map(d => d.data().question as string).filter(Boolean);
-        } catch { /* first call */ }
+            askedQuestions.push(...snap.docs.map(d => d.data().question as string).filter(Boolean));
+        } catch { /* first call or session missing */ }
 
         const agent = new LlmAgent({
             name: 'interrogator_agent',
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-2.0-flash',
             description: 'Strategic Filter with Information Density scoring.',
-            instruction: buildInstruction(effectiveUsedLenses, askedQuestions),
+            instruction: buildInstruction(effectiveUsedLenses, [...new Set(askedQuestions)]),
         });
 
         const runner = new InMemoryRunner({ agent, appName: 'velocity_interrogator' });
@@ -182,7 +191,7 @@ export class InterrogatorAgent {
                     emitHeartbeat(sessionId, `[DEBUG] Turn ${turnCount}: Generating deepening question for ${p.lens_used}.`, 'debug');
                     try {
                         const existingQuestonsSnap = await admin.firestore()
-                            .collection('discovery_sessions').doc(sessionId)
+                            .collection('velocity_cso_sessions').doc(sessionId)
                             .collection('asked_questions')
                             .where('question', '==', p.question)
                             .get();
@@ -194,7 +203,7 @@ export class InterrogatorAgent {
                         }
 
                         await admin.firestore()
-                            .collection('discovery_sessions').doc(sessionId)
+                            .collection('velocity_cso_sessions').doc(sessionId)
                             .collection('asked_questions').add({
                                 question: p.question,
                                 lens: lensUsed,

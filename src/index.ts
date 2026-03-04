@@ -245,7 +245,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
 
         logAuditCost(sessionId, { discovery: discoveryCost.usd, synthesis: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, frameworks, orgName, moatRationale });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale });
         res.end();
 
     } catch (error: any) {
@@ -403,7 +403,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             tlog({ severity: 'WARNING', message: 'Dimensions still empty at emit time', session_id: sessionId });
         }
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, frameworks, orgName, moatRationale });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale });
         res.end();
 
     } catch (error: any) {

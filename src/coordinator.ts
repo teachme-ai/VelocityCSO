@@ -146,7 +146,7 @@ export class ChiefStrategyAgent {
             return { proceed: true };
         }
 
-        const gap = discovery.gaps.slice(0, 2).join('. ');
+        const gap = discovery.gaps.slice(0, 5).join('. ');
         log({
             severity: 'WARNING',
             message: 'Discovery gap detected — triggering conversational clarification',
@@ -158,7 +158,55 @@ export class ChiefStrategyAgent {
         return { proceed: false, gap };
     }
 
+    /**
+     * Summarizes agent findings to keep the context window tight.
+     */
+    private async summarize(content: string, sessionId: string): Promise<string> {
+        const startTime = Date.now();
+        const summarizerAgent = new LlmAgent({
+            name: 'summarizer_agent',
+            model: 'gemini-2.0-flash',
+            description: 'Strategic summary engine to optimize context usage.',
+            instruction: 'Compress the following strategic findings into a high-density executive summary. Focus on structural advantages, risks, and core metrics. Max 300 words.'
+        });
+
+        const runner = new InMemoryRunner({ agent: summarizerAgent, appName: 'velocity_summarizer' });
+        const internalId = randomUUID();
+        await runner.sessionService.createSession({ appName: 'velocity_summarizer', userId: 'cso_internal', sessionId: internalId });
+
+        const stream = runner.runAsync({
+            userId: 'cso_internal',
+            sessionId: internalId,
+            newMessage: { role: 'user', parts: [{ text: content }] }
+        });
+
+        let summary = '';
+        for await (const ev of stream) {
+            if (ev.author === 'summarizer_agent' || isFinalResponse(ev)) {
+                summary += (ev.content?.parts || []).map((p: any) => p.text).join('');
+            }
+        }
+
+        const latency = Date.now() - startTime;
+        const cost = estimateCost('gemini-2.0-flash', content.length, summary.length);
+
+        log({
+            severity: 'INFO',
+            message: 'Context summarization complete',
+            agent_id: 'summarizer_agent',
+            phase: 'optimization',
+            session_id: sessionId,
+            latency_ms: latency,
+            cost_usd: cost.usd,
+            tokens_in: cost.inputTokens,
+            tokens_out: cost.outputTokens
+        });
+
+        return summary;
+    }
+
     private async runSpecialist(agent: LlmAgent, context: string, sessionId: string): Promise<any> {
+        const startTime = Date.now();
         const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist' });
         const internalId = randomUUID();
         await runner.sessionService.createSession({ appName: 'velocity_specialist', userId: 'cso_internal', sessionId: internalId });
@@ -183,11 +231,30 @@ export class ChiefStrategyAgent {
         }
 
         const result = robustParse(agent.name!, rawOutput);
+        const latency = Date.now() - startTime;
+        const outChars = JSON.stringify(result).length;
+        const cost = estimateCost('gemini-2.0-flash', context.length, outChars);
+
+        log({
+            severity: 'INFO',
+            message: `Specialist complete: ${agent.name}`,
+            agent_id: agent.name,
+            phase: 'specialist_run',
+            session_id: sessionId,
+            latency_ms: latency,
+            agent_input: context.slice(0, 1000) + '...', // Truncate for log safety
+            agent_output: result,
+            cost_usd: cost.usd,
+            tokens_in: cost.inputTokens,
+            tokens_out: cost.outputTokens
+        });
+
         emitHeartbeat(sessionId, `◆ ${agent.name}: analysis complete. alignment verified.`);
         return result;
     }
 
     private async runCritic(businessContext: string, specialistOutputs: Record<string, any>, sessionId: string): Promise<any> {
+        const startTime = Date.now();
         emitHeartbeat(sessionId, '◆ Critic: performing cross-functional gap-analysis...');
         const criticRunner = new InMemoryRunner({ agent: strategicCritic, appName: 'velocity_critic' });
         const criticId = randomUUID();
@@ -212,7 +279,25 @@ export class ChiefStrategyAgent {
             }
         }
 
-        return robustParse('strategic_critic', raw);
+        const result = robustParse('strategic_critic', raw);
+        const latency = Date.now() - startTime;
+        const cost = estimateCost('gemini-2.5-pro', criticInput.length, raw.length);
+
+        log({
+            severity: 'INFO',
+            message: 'Critic review complete',
+            agent_id: 'strategic_critic',
+            phase: 'critic_run',
+            session_id: sessionId,
+            latency_ms: latency,
+            agent_input: criticInput.slice(0, 1000) + '...',
+            agent_output: result,
+            cost_usd: cost.usd,
+            tokens_in: cost.inputTokens,
+            tokens_out: cost.outputTokens
+        });
+
+        return result;
     }
 
     async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; frameworks: any; orgName: string; moatRationale: string }> {
@@ -256,8 +341,11 @@ MARKET: ${marketResult.analysis_markdown}
 INNOVATION: ${innovationResult.analysis_markdown}
         `.trim();
 
+        emitHeartbeat(sessionId, '◆ CSO: optimizing Phase A intelligence for downstream consumption...');
+        const summarizedPhaseA = await this.summarize(phaseAFindings, sessionId);
+
         emitHeartbeat(sessionId, '◆ CSO Phase B: Commercial & Operations analysis...');
-        const phaseBContext = `${businessContext}\n\n${phaseAFindings}`;
+        const phaseBContext = `${businessContext}\n\nPHASE A SUMMARY:\n${summarizedPhaseA}`;
         const [commercialResult, operationsResult] = await Promise.all([
             this.runSpecialist(specialists.find(s => s.name === 'commercial_analyst')!, phaseBContext, sessionId),
             this.runSpecialist(specialists.find(s => s.name === 'operations_analyst')!, phaseBContext, sessionId)
@@ -270,15 +358,17 @@ INNOVATION: ${innovationResult.analysis_markdown}
 
         // ── PHASE C: Finance (consumes Phase A + B) ──────────────────────────────
         const phaseBFindings = `
-${phaseAFindings}
 COMMERCIAL: ${commercialResult.analysis_markdown}
 OPERATIONS: ${operationsResult.analysis_markdown}
         `.trim();
 
+        emitHeartbeat(sessionId, '◆ CSO: optimizing Phase B intelligence for financial modeling...');
+        const summarizedPhaseB = await this.summarize(`${phaseAFindings}\n\n${phaseBFindings}`, sessionId);
+
         emitHeartbeat(sessionId, '◆ CSO Phase C: Financial structure analysis...');
         const financeResult = await this.runSpecialist(
             specialists.find(s => s.name === 'finance_analyst')!,
-            `${businessContext}\n\n${phaseBFindings}`,
+            `${businessContext}\n\nPHASE A+B SUMMARY:\n${summarizedPhaseB}`,
             sessionId
         );
 
@@ -378,6 +468,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         `.trim();
 
         emitHeartbeat(sessionId, '◆ CSO: merging 15-dimension matrix...');
+        const synthesisStartTime = Date.now();
         const csoRunner = new InMemoryRunner({ agent: this.agent, appName: 'velocity_cso_synthesis' });
         const csoSessionId = randomUUID();
         await csoRunner.sessionService.createSession({ appName: 'velocity_cso_synthesis', userId: 'cso_user', sessionId: csoSessionId });
@@ -397,14 +488,20 @@ OPERATIONS: ${operationsResult.analysis_markdown}
             }
         }
 
-        const cost = estimateCost('gemini-2.5-pro', synthesisPrompt.length, finalReport.length);
+        const synthesisLatency = Date.now() - synthesisStartTime;
+        const synthesisCost = estimateCost('gemini-2.5-pro', synthesisPrompt.length, finalReport.length);
         log({
             severity: 'INFO',
-            message: 'CSO analysis complete',
+            message: 'CSO synthesis complete',
             agent_id: 'chief_strategy_agent',
             phase: 'synthesis',
             session_id: sessionId,
-            cost_usd: cost.usd,
+            latency_ms: synthesisLatency,
+            agent_input: synthesisPrompt.slice(0, 500) + '...',
+            agent_output: finalReport.slice(0, 500) + '...',
+            cost_usd: synthesisCost.usd,
+            tokens_in: synthesisCost.inputTokens,
+            tokens_out: synthesisCost.outputTokens
         });
 
         // 3. Extract Organisation Name
@@ -421,9 +518,10 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         `.trim();
 
         emitHeartbeat(sessionId, `◆ CSO: Identifying strategic moat (${topDimension[0]})...`);
+        const moatStartTime = Date.now();
         const moatAgent = new LlmAgent({
             name: 'moat_analyst',
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-2.0-flash',
             instruction: 'Write a concise 2-sentence Moat Rationale.'
         });
         const moatRunner = new InMemoryRunner({ agent: moatAgent, appName: 'moat_logic' });
@@ -436,6 +534,22 @@ OPERATIONS: ${operationsResult.analysis_markdown}
                 moatRationale += (ev.content?.parts || []).map((p: any) => p.text).join('');
             }
         }
+        const moatLatency = Date.now() - moatStartTime;
+        const moatCost = estimateCost('gemini-2.0-flash', moatPrompt.length, moatRationale.length);
+
+        log({
+            severity: 'INFO',
+            message: 'Moat rationale complete',
+            agent_id: 'moat_analyst',
+            phase: 'moat_rationale',
+            session_id: sessionId,
+            latency_ms: moatLatency,
+            agent_input: moatPrompt,
+            agent_output: moatRationale,
+            cost_usd: moatCost.usd,
+            tokens_in: moatCost.inputTokens,
+            tokens_out: moatCost.outputTokens
+        });
 
         // 3. Safety Receipt Check: If dimensions are empty or generic, trigger a re-audit
         const isGeneric = Object.values(finalDimensions).every(v => v === 0 || v === 50);

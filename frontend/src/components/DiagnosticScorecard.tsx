@@ -1,9 +1,18 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
+
+export interface RichDimensionData {
+    justification?: string;
+    justification_rationale?: string;
+    improvement_action?: string;
+    remediation?: string;
+    key_assumption?: string;
+}
 
 interface ScorecardProps {
     dimensions: Record<string, number>;
     originalDimensions?: Record<string, number>;
-    richDimensions?: Record<string, any>;
+    richDimensions?: Record<string, RichDimensionData>;
     onAreaClick: (area: string) => void;
 }
 
@@ -89,19 +98,28 @@ export const DiagnosticScorecard = ({ dimensions, originalDimensions, richDimens
                                     )}
                                 </div>
                                 {selectedDim === dim && richDimensions?.[dim] && (
-                                    <div style={{ marginLeft: 8, marginBottom: 12, padding: '12px', background: 'rgba(255,255,255,0.03)', borderLeft: `2px solid ${color}`, borderRadius: '0 8px 8px 0', border: '1px solid rgba(255,255,255,0.05)', borderLeftWidth: 2 }}>
-                                        {richDimensions[dim].justification && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        style={{ marginLeft: 8, marginBottom: 12, padding: '12px', background: 'rgba(255,255,255,0.03)', borderLeft: `2px solid ${color}`, borderRadius: '0 8px 8px 0', border: '1px solid rgba(255,255,255,0.05)', borderLeftWidth: 2, overflow: 'hidden' }}
+                                    >
+                                        {(richDimensions[dim].justification || richDimensions[dim].justification_rationale) && (
                                             <p style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.5, marginBottom: 8 }}>
-                                                <span style={{ color: '#fff', fontWeight: 600 }}>Rationale:</span> {richDimensions[dim].justification}
+                                                <span style={{ color: '#fff', fontWeight: 600 }}>Rationale:</span> {richDimensions[dim].justification || richDimensions[dim].justification_rationale}
                                             </p>
                                         )}
-                                        {richDimensions[dim].improvement_action && (
-                                            <div style={{ padding: '8px 10px', background: 'rgba(37,99,235,0.1)', border: '1px solid rgba(37,99,235,0.2)', borderRadius: 6 }}>
-                                                <p style={{ fontSize: 10, color: '#93c5fd', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>90-Day Tactical Move</p>
-                                                <p style={{ fontSize: 11, color: '#bfdbfe', lineHeight: 1.4 }}>{richDimensions[dim].improvement_action}</p>
+                                        {(richDimensions[dim].improvement_action || richDimensions[dim].remediation) && (
+                                            <div style={{ padding: '8px 10px', background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.1)', borderRadius: 6 }}>
+                                                <p style={{ fontSize: 10, color: '#10b981', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>90-Day Tactical Move</p>
+                                                <p style={{ fontSize: 11, color: '#a7f3d0', lineHeight: 1.4 }}>{richDimensions[dim].improvement_action || richDimensions[dim].remediation}</p>
                                             </div>
                                         )}
-                                    </div>
+                                        {richDimensions[dim].key_assumption && (
+                                            <p style={{ fontSize: 10, color: '#6b7280', marginTop: 8, fontStyle: 'italic' }}>
+                                                Key Assumption: {richDimensions[dim].key_assumption}
+                                            </p>
+                                        )}
+                                    </motion.div>
                                 )}
                             </div>
                         );
