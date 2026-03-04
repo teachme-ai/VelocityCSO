@@ -76,17 +76,47 @@ export function robustParse(agentName: string, raw: string, sessionId?: string):
     };
 
     const leniencySanitize = (s: string): string => {
-        // Replace unescaped double-quotes inside string values by scanning char-by-char.
-        // Strategy: replace any " that is NOT preceded by \ and NOT a structural quote
-        // with \". We do this only inside string values by using a regex that matches
-        // string tokens and escapes internal quotes.
-        return s
-            // Fix unescaped backslashes first (must be before quote fixes)
-            .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
-            // Fix unescaped newlines / tabs embedded literally inside strings
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '\\r')
-            .replace(/\t/g, '\\t');
+        // Fix common model JSON encoding errors:
+        // 1. Unescaped backslashes
+        // 2. Literal control characters (\n \r \t) inside strings
+        // 3. Unescaped double-quotes inside string values
+        //
+        // Strategy for (3): tokenize by scanning character-by-character.
+        // Inside a JSON string, any " not preceded by \ is structural (closes the string).
+        // We re-build the output, and when we detect a premature close (next non-space char
+        // is not : , ] } — i.e. it looks like it continues text), we treat it as an escaped quote.
+        let out = '';
+        let inStr = false;
+        let i = 0;
+        while (i < s.length) {
+            const c = s[i];
+            if (!inStr) {
+                out += c;
+                if (c === '"') inStr = true;
+                i++;
+            } else {
+                if (c === '\\') {
+                    const n = s[i + 1] ?? '';
+                    if ('"\\/bfnrtu'.includes(n)) {
+                        out += c + n; i += 2; // valid escape — keep as-is
+                    } else {
+                        out += '\\\\'; i++; // bare backslash — escape it
+                    }
+                } else if (c === '"') {
+                    // Look ahead: if the next meaningful char is : , ] } or end → structural close
+                    const rest = s.slice(i + 1).trimStart();
+                    if (/^[,\]}\n\r]|^$/.test(rest) || rest.startsWith(':')) {
+                        out += '"'; inStr = false; i++; // legitimate closing quote
+                    } else {
+                        out += '\\"'; i++; // inner quote — escape it
+                    }
+                } else if (c === '\n') { out += '\\n'; i++;
+                } else if (c === '\r') { out += '\\r'; i++;
+                } else if (c === '\t') { out += '\\t'; i++;
+                } else { out += c; i++; }
+            }
+        }
+        return out;
     };
 
     let parsed = tryParse(jsonMatch[0]);
