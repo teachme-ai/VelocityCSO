@@ -24,6 +24,7 @@ interface StressTestPanelProps {
     reportId: string;
     onStressResult: (result: StressResult) => void;
     apiBase: string;
+    originalDimensions?: Record<string, number | null>;
 }
 
 interface StressResult {
@@ -54,22 +55,76 @@ async function* readSSE(response: Response): AsyncGenerator<Record<string, unkno
     }
 }
 
-export function StressTestPanel({ reportId, onStressResult, apiBase }: StressTestPanelProps) {
+function scoreColor(score: number): string {
+    if (score >= 70) return '#16a34a';
+    if (score >= 40) return '#2563eb';
+    return '#dc2626';
+}
+
+interface DimTableProps {
+    dimensions: Record<string, number | null>;
+    originalDimensions?: Record<string, number | null>;
+    showDelta: boolean;
+    scenarioColor?: string;
+}
+
+function DimensionTable({ dimensions, originalDimensions, showDelta, scenarioColor }: DimTableProps) {
+    const dimNames = Object.keys(dimensions);
+    return (
+        <div className="space-y-1.5 mt-3">
+            {dimNames.map((dim) => {
+                const score = dimensions[dim] ?? 0;
+                const orig = originalDimensions?.[dim] ?? score;
+                const delta = Math.round((score as number) - (orig as number));
+                const color = scoreColor(score as number);
+                const barW = Math.max(0, Math.min(100, score as number));
+
+                return (
+                    <div key={dim} className="flex items-center gap-2">
+                        <span className="text-[10px] text-zinc-400 w-36 flex-shrink-0 truncate" title={dim}>{dim}</span>
+                        <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                            <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${barW}%`, background: color }}
+                            />
+                        </div>
+                        <span className="text-[10px] font-bold w-7 text-right flex-shrink-0" style={{ color }}>{score}</span>
+                        {showDelta && delta !== 0 && (
+                            <span className={`text-[10px] font-bold w-8 flex-shrink-0 ${delta < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                {delta > 0 ? `+${delta}` : delta}
+                            </span>
+                        )}
+                        {showDelta && delta === 0 && (
+                            <span className="text-[10px] text-zinc-600 w-8 flex-shrink-0">—</span>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+export function StressTestPanel({ reportId, onStressResult, apiBase, originalDimensions }: StressTestPanelProps) {
     const [activeScenario, setActiveScenario] = useState<ScenarioId | null>(null);
     const [loadingScenario, setLoadingScenario] = useState<ScenarioId | null>(null);
     const [expandedCard, setExpandedCard] = useState<string | null>(null);
     const [mitigationCards, setMitigationCards] = useState<MitigationCard[]>([]);
+    const [stressResult, setStressResult] = useState<StressResult | null>(null);
+    const [dimTab, setDimTab] = useState<'original' | 'stressed'>('original');
 
     const handleToggle = async (scenarioId: ScenarioId) => {
-        // Toggle off if already active
         if (activeScenario === scenarioId) {
             setActiveScenario(null);
             setMitigationCards([]);
+            setStressResult(null);
+            setDimTab('original');
+            onStressResult({ scenarioId, scenarioLabel: '', originalScores: {}, stressedScores: {}, riskDeltas: {}, mitigationCards: [] });
             return;
         }
 
         setLoadingScenario(scenarioId);
         setMitigationCards([]);
+        setStressResult(null);
 
         try {
             const response = await fetch(`${apiBase}/analyze/stress-test`, {
@@ -83,6 +138,8 @@ export function StressTestPanel({ reportId, onStressResult, apiBase }: StressTes
                     const result = event as unknown as StressResult;
                     setActiveScenario(scenarioId);
                     setMitigationCards(result.mitigationCards || []);
+                    setStressResult(result);
+                    setDimTab('stressed');
                     onStressResult(result);
                 }
             }
@@ -92,6 +149,10 @@ export function StressTestPanel({ reportId, onStressResult, apiBase }: StressTes
             setLoadingScenario(null);
         }
     };
+
+    const activeMeta = activeScenario ? SCENARIO_META[activeScenario] : null;
+    const dimsForOriginal = stressResult ? stressResult.originalScores : (originalDimensions as Record<string, number> | undefined);
+    const dimsForStressed = stressResult?.stressedScores;
 
     return (
         <div className="w-full max-w-6xl space-y-6">
@@ -267,6 +328,70 @@ export function StressTestPanel({ reportId, onStressResult, apiBase }: StressTes
                     </AnimatePresence>
                 </div>
             </div>
+
+            {/* Dimension View — expands when a stress result is available */}
+            <AnimatePresence>
+                {stressResult && dimsForOriginal && dimsForStressed && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        className="rounded-2xl border border-zinc-800 bg-zinc-900/50 backdrop-blur-xl overflow-hidden"
+                    >
+                        {/* Sub-tab header */}
+                        <div className="flex items-center justify-between px-5 pt-4 pb-0">
+                            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Dimension Impact</p>
+                            <div className="flex items-center gap-1 bg-zinc-800/60 rounded-lg p-0.5">
+                                <button
+                                    onClick={() => setDimTab('original')}
+                                    className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${dimTab === 'original' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                >
+                                    Original
+                                </button>
+                                <button
+                                    onClick={() => setDimTab('stressed')}
+                                    className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${dimTab === 'stressed' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                    style={dimTab === 'stressed' ? { background: activeMeta ? `${activeMeta.color}30` : undefined, color: activeMeta?.color } : {}}
+                                >
+                                    Stressed
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="px-5 pb-5">
+                            <AnimatePresence mode="wait">
+                                {dimTab === 'original' ? (
+                                    <motion.div key="orig" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                        <DimensionTable
+                                            dimensions={dimsForOriginal}
+                                            showDelta={false}
+                                        />
+                                    </motion.div>
+                                ) : (
+                                    <motion.div key="stress" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                        <div className="flex items-center gap-2 mt-3 mb-1">
+                                            {activeMeta && (
+                                                <>
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: activeMeta.color }}>
+                                                        {activeMeta.label}
+                                                    </span>
+                                                    <span className="text-[10px] text-zinc-600">— delta vs baseline</span>
+                                                </>
+                                            )}
+                                        </div>
+                                        <DimensionTable
+                                            dimensions={dimsForStressed}
+                                            originalDimensions={dimsForOriginal}
+                                            showDelta={true}
+                                            scenarioColor={activeMeta?.color}
+                                        />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

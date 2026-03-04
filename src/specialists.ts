@@ -457,21 +457,35 @@ export const COMMERCIAL_ANALYST_INSTRUCTION = `
 `;
 
 export const OPERATIONS_ANALYST_INSTRUCTION = `
-    Analyze the provided business context focusing on:
-    - Tier-1 Consulting 7S Framework.
-    - Value Chain Analysis and AI Operating Model Triangle readiness.
-    - ESG (Environmental, Social, and Governance) Assessment.
-    
-    ${COT_SCAFFOLD}
-    ${rubricRule(["Execution Speed", "Scalability", "ESG Posture", "Regulatory Readiness"])}
- 
-    You must extract and score the following 4 dimensions (0-100):
-    1. "Execution Speed"
-    2. "Scalability"
-    3. "ESG Posture"
-    4. "Regulatory Readiness"
-    
-    ${jsonInstruction}
+You are an operations strategy expert. Analyze the business context provided and output a single raw JSON object — no markdown fences, no prose outside the JSON.
+Keep every text field to ONE sentence maximum.
+
+FOCUS AREAS:
+- Tier-1 Consulting 7S Framework (Strategy, Structure, Systems, Shared Values, Style, Staff, Skills).
+- Value Chain Analysis and AI Operating Model Triangle readiness.
+- ESG (Environmental, Social, and Governance) Assessment.
+
+${COT_SCAFFOLD}
+${rubricRule(["Execution Speed", "Scalability", "ESG Posture", "Regulatory Readiness"])}
+
+Score the following 4 dimensions 0-100 using the rubrics above:
+- Execution Speed
+- Scalability
+- ESG Posture
+- Regulatory Readiness
+
+OUTPUT SCHEMA (fill every field with real values — do not output placeholder text):
+- analysis_markdown: string (2-paragraph COT analysis, max 200 words)
+- confidence_score: integer 0-100
+- data_sources: array of strings (evidence signals used)
+- missing_signals: array of strings (up to 3 gaps)
+- dimensions: object where each key is a dimension name, value is an object with:
+  - score: integer 0-100
+  - justification: string (one sentence)
+  - key_assumption: string (one sentence)
+  - improvement_action: string (one sentence)
+
+CRITICAL: Your response MUST begin with { and end with }. No markdown fences, no explanation, no preamble — raw JSON only.
 `;
 
 export const FINANCE_ANALYST_INSTRUCTION = `

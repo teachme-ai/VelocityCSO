@@ -16,11 +16,11 @@ export function Header() {
                     <img
                         src={VelocityLogo}
                         alt="VelocityCSO"
-                        className="h-10 w-auto object-contain rounded-sm"
+                        className="h-14 w-auto object-contain rounded-sm"
                     />
                     {/* Subtle Pulsating Glow behind the logo */}
                     <motion.div
-                        className="absolute inset-0 bg-violet-500/10 blur-xl -z-10 rounded-full"
+                        className="absolute inset-x-0 -inset-y-2 bg-violet-500/10 blur-2xl -z-10 rounded-full"
                         animate={{
                             opacity: [0.1, 0.3, 0.1],
                             scale: [1, 1.2, 1]

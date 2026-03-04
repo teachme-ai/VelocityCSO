@@ -30,6 +30,7 @@ import { KpiRow } from './dashboard/KpiRow';
 import { CategorySummary } from './dashboard/CategorySummary';
 import { ReportTabs } from './dashboard/ReportTabs';
 import type { TabId } from './dashboard/ReportTabs';
+import VelocityLogo from '../assets/VelocityCSO_logo_v4.png';
 
 const API_URL = import.meta.env.VITE_API_URL || '/analyze';
 const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
@@ -261,7 +262,7 @@ ${context}`.trim();
 
     const handleStressResult = (result: StressResult) => {
         setStressResult(result);
-        setActiveTab('matrix');
+        // Stress dimensions are shown inline in StressTestPanel — stay on current tab
     };
 
     // Maps ADK status to AgentOrbs status prop
@@ -501,11 +502,28 @@ ${context}`.trim();
             </div>
 
             <div className="relative z-10 text-center w-full max-w-4xl mx-auto flex flex-col items-center gap-10">
-                {/* Wordmark */}
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
-                    <span className="text-sm font-medium tracking-[0.3em] uppercase text-violet-300" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Velocity CSO</span>
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" style={{ animationDelay: '0.5s' }} />
+                {/* Branding Logo */}
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+                    className="flex flex-col items-center gap-4"
+                >
+                    <img
+                        src={VelocityLogo}
+                        alt="VelocityCSO"
+                        className="h-16 md:h-24 w-auto object-contain drop-shadow-[0_0_30px_rgba(139,92,246,0.2)]"
+                    />
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.5, duration: 1 }}
+                        className="flex items-center gap-2"
+                    >
+                        <div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+                        <span className="text-[10px] tracking-[0.4em] uppercase text-violet-400/60 font-medium">Enterprise Intelligence Suite</span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" style={{ animationDelay: '0.5s' }} />
+                    </motion.div>
                 </motion.div>
 
                 {/* Headline */}
@@ -823,10 +841,10 @@ ${context}`.trim();
                             {/* Dashboard Shell: KPI & Category Strips */}
                             <div className="w-full max-w-7xl mx-auto space-y-4">
                                 <KpiRow
-                                    dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
+                                    dimensions={result.dimensions || {}}
                                     richDimensions={result.richDimensions}
                                 />
-                                <CategorySummary dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})} />
+                                <CategorySummary dimensions={result.dimensions || {}} />
                                 <ReportTabs activeTab={activeTab} onTabChange={setActiveTab} />
                             </div>
 
@@ -916,8 +934,7 @@ ${context}`.trim();
                                             </div>
                                             <div className="flex-1 flex items-center justify-center w-full">
                                                 <StrategyRadar
-                                                    dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
-                                                    originalDimensions={stressResult ? result.dimensions : undefined}
+                                                    dimensions={result.dimensions || {}}
                                                 />
                                             </div>
                                         </div>
@@ -942,22 +959,15 @@ ${context}`.trim();
                                     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 backdrop-blur-xl">
                                         <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-800/50">
                                             <div>
-                                                <h3 className="text-white font-bold text-xl">
-                                                    {stressResult ? stressResult.scenarioLabel : 'Detailed Dimension Matrix'}
-                                                </h3>
-                                                <p className={`text-xs font-bold uppercase tracking-widest mt-1 ${stressResult ? 'text-rose-500' : 'text-zinc-500'}`}>
-                                                    {stressResult ? 'Dimensional Decay Analysis' : 'Full Strategic Coverage'}
-                                                </p>
+                                                <h3 className="text-white font-bold text-xl">Detailed Dimension Matrix</h3>
+                                                <p className="text-xs font-bold uppercase tracking-widest mt-1 text-zinc-500">Full Strategic Coverage</p>
                                             </div>
-                                            <div className={`px-4 py-1.5 rounded-full border ${stressResult ? 'bg-rose-500/10 border-rose-500/20' : 'bg-zinc-500/10 border-zinc-500/20'}`}>
-                                                <span className={`text-[10px] font-bold tracking-wider uppercase ${stressResult ? 'text-rose-400' : 'text-zinc-400'}`}>
-                                                    {stressResult ? 'Crisis Impact' : 'Baseline Verified'}
-                                                </span>
+                                            <div className="px-4 py-1.5 rounded-full border bg-zinc-500/10 border-zinc-500/20">
+                                                <span className="text-[10px] font-bold tracking-wider uppercase text-zinc-400">Baseline Verified</span>
                                             </div>
                                         </div>
                                         <DiagnosticScorecard
-                                            dimensions={stressResult ? stressResult.stressedScores : (result.dimensions || {})}
-                                            originalDimensions={stressResult ? result.dimensions : undefined}
+                                            dimensions={result.dimensions || {}}
                                             richDimensions={result.richDimensions}
                                             onAreaClick={(dim: string) => console.log('Matrix Area:', dim)}
                                         />
@@ -1087,6 +1097,7 @@ ${context}`.trim();
                                                 reportId={currentReportId || ''}
                                                 onStressResult={handleStressResult}
                                                 apiBase={import.meta.env.VITE_API_URL || ''}
+                                                originalDimensions={result.dimensions || {}}
                                             />
                                         </div>
                                     </section>
