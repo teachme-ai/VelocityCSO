@@ -189,6 +189,7 @@ export function HeroSection() {
         if (!/^https?:\/\//i.test(urlTarget)) {
             urlTarget = `https://${urlTarget}`;
         }
+        setCompanyUrl(urlTarget);
 
         setUrlEnriching(true);
         setUrlEnriched(false);
@@ -533,8 +534,8 @@ ${context}`.trim();
                                     <div className="relative flex-1">
                                         <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                                         <input
-                                            type="url"
-                                            placeholder="https://company.com (Auto-fill context)"
+                                            type="text"
+                                            placeholder="company.com (Auto-fill context)"
                                             value={companyUrl}
                                             onChange={e => setCompanyUrl(e.target.value)}
                                             className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors"
