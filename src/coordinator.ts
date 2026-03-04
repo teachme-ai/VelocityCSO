@@ -292,7 +292,7 @@ export class ChiefStrategyAgent {
     private async runSpecialistDirect(agentName: string, context: string, sessionId: string, maxOutputTokens?: number): Promise<any> {
         const startTime = Date.now();
         const systemInstruction = (specialistInstructions[agentName] || '').toString();
-        const userPrompt = `${context}\n\nCRITICAL: Return ONLY a raw JSON object. No markdown, no prose outside JSON.`;
+        const userPrompt = `${context}\n\nCRITICAL: Your response MUST begin with { and end with }. No markdown fences, no explanation, no preamble — raw JSON only.`;
 
         emitHeartbeat(sessionId, `◆ ${agentName}: running focused analysis...`);
         let rawOutput = '';
@@ -394,8 +394,8 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         emitHeartbeat(sessionId, '◆ CSO Phase A: Market & Innovation analysis...');
         const [marketResult, innovationResult, innovationFrameworks] = await Promise.all([
             this.runSpecialist(specialists.find(s => s.name === 'market_analyst')!, businessContext, sessionId),
-            this.runSpecialistDirect('innovation_analyst', businessContext, sessionId, 2048),
-            this.runSpecialistDirect('innovation_frameworks', businessContext, sessionId, 2048),
+            this.runSpecialistDirect('innovation_analyst', businessContext, sessionId),
+            this.runSpecialistDirect('innovation_frameworks', businessContext, sessionId),
         ]);
 
         specialistOutputs['market_analyst'] = marketResult;
