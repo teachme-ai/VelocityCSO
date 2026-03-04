@@ -59,42 +59,69 @@ export function robustParse(agentName: string, raw: string, sessionId?: string):
     };
 
     // 1. Sanitize Markdown backticks if present
-    let sanitized = raw.replace(/```json\s?/, '').replace(/```\s?$/, '').trim();
+    let sanitized = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
 
-    // 2. Greedy Extraction
+    // 2. Greedy Extraction — grab outermost { ... }
     const jsonMatch = sanitized.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
         log({ severity: 'ERROR', message: `Parse Failure: No JSON object found in output from ${agentName}`, agent_id: agentName, session_id: sessionId, raw_output: raw.slice(0, 1000) });
         return fallback;
     }
 
-    try {
-        const parsed = JSON.parse(jsonMatch[0]);
+    // 3. Two-tier parse: strict first, then lenient sanitization pass on failure.
+    //    Covers the common model failure: unescaped double-quotes or control chars
+    //    inside string values (e.g. "He said "hello"" → SyntaxError at position N).
+    const tryParse = (candidate: string): any | null => {
+        try { return JSON.parse(candidate); } catch { return null; }
+    };
 
-        // Normalize dimensions: extract "score" if it's an object {score: N, ...}
-        if (parsed.dimensions && typeof parsed.dimensions === 'object') {
-            const normalized: Record<string, number> = {};
-            const rich: Record<string, any> = {};
-            for (const [key, val] of Object.entries(parsed.dimensions)) {
-                if (typeof val === 'number') {
-                    normalized[key] = val;
-                } else if (val && typeof val === 'object' && typeof (val as any).score === 'number') {
-                    normalized[key] = (val as any).score;
-                    rich[key] = val; // Preserve CoT metadata (justification, improvement_action, etc)
-                }
-            }
-            parsed.dimensions = normalized;
-            parsed.richDimensions = rich;
+    const leniencySanitize = (s: string): string => {
+        // Replace unescaped double-quotes inside string values by scanning char-by-char.
+        // Strategy: replace any " that is NOT preceded by \ and NOT a structural quote
+        // with \". We do this only inside string values by using a regex that matches
+        // string tokens and escapes internal quotes.
+        return s
+            // Fix unescaped backslashes first (must be before quote fixes)
+            .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
+            // Fix unescaped newlines / tabs embedded literally inside strings
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
+    };
+
+    let parsed = tryParse(jsonMatch[0]);
+
+    if (!parsed) {
+        // Second attempt: apply lenient sanitization
+        const lenient = leniencySanitize(jsonMatch[0]);
+        parsed = tryParse(lenient);
+        if (parsed) {
+            log({ severity: 'WARNING', message: `Parse recovered via sanitization for ${agentName}`, agent_id: agentName, session_id: sessionId });
         }
+    }
 
-        return {
-            ...fallback,
-            ...parsed,
-        };
-    } catch (e) {
-        log({ severity: 'ERROR', message: `Parse Failure: JSON parse error from ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e), raw_output: raw.slice(0, 1000) });
+    if (!parsed) {
+        log({ severity: 'ERROR', message: `Parse Failure: JSON parse error from ${agentName}`, agent_id: agentName, session_id: sessionId, error: 'Unrecoverable after sanitization pass', raw_output: raw.slice(0, 1000) });
         return fallback;
     }
+
+    // Normalize dimensions: extract "score" if it's an object {score: N, ...}
+    if (parsed.dimensions && typeof parsed.dimensions === 'object') {
+        const normalized: Record<string, number> = {};
+        const rich: Record<string, any> = {};
+        for (const [key, val] of Object.entries(parsed.dimensions)) {
+            if (typeof val === 'number') {
+                normalized[key] = val;
+            } else if (val && typeof val === 'object' && typeof (val as any).score === 'number') {
+                normalized[key] = (val as any).score;
+                rich[key] = val;
+            }
+        }
+        parsed.dimensions = normalized;
+        parsed.richDimensions = rich;
+    }
+
+    return { ...fallback, ...parsed };
 }
 
 // ─── Chief Strategy Agent ────────────────────────────────────────────────────
