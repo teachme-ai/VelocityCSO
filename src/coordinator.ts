@@ -207,9 +207,8 @@ export class ChiefStrategyAgent {
 
         let summary = '';
         for await (const ev of stream) {
-            if (ev.author === 'summarizer_agent' || isFinalResponse(ev)) {
-                summary += (ev.content?.parts || []).map((p: any) => p.text).join('');
-            }
+            const text = (ev.content?.parts || []).map((p: any) => p.text).filter(Boolean).join('');
+            if (text) summary += text;
         }
 
         const latency = Date.now() - startTime;
@@ -248,11 +247,11 @@ export class ChiefStrategyAgent {
         emitHeartbeat(sessionId, `◆ ${agent.name}: sensing market signals and identifying asymmetric plays...`);
         let rawOutput = '';
         for await (const event of eventStream) {
-            if (event.author === agent.name || isFinalResponse(event)) {
-                const parts = event.content?.parts || [];
-                const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
-                if (text) rawOutput += text;
-            }
+            // Capture text from ANY event — ADK may emit final output on events
+            // where event.author differs from the agent name (e.g. 'model' events).
+            const parts = event.content?.parts || [];
+            const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
+            if (text) rawOutput += text;
         }
 
         const result = robustParse(agent.name!, rawOutput, sessionId);
@@ -299,9 +298,8 @@ export class ChiefStrategyAgent {
 
         let raw = '';
         for await (const ev of stream) {
-            if (ev.author === 'strategic_critic' || isFinalResponse(ev)) {
-                raw += (ev.content?.parts || []).map((p: any) => p.text).join('');
-            }
+            const text = (ev.content?.parts || []).map((p: any) => p.text).filter(Boolean).join('');
+            if (text) raw += text;
         }
 
         const result = robustParse('strategic_critic', raw, sessionId);
@@ -454,9 +452,8 @@ OPERATIONS: ${operationsResult.analysis_markdown}
 
                 let raw = '';
                 for await (const ev of stream) {
-                    if (ev.author === agent.name || isFinalResponse(ev)) {
-                        raw += (ev.content?.parts || []).map((p: any) => p.text).join('');
-                    }
+                    const text = (ev.content?.parts || []).map((p: any) => p.text).filter(Boolean).join('');
+                    if (text) raw += text;
                 }
 
                 const result = robustParse(agent.name!, raw);
@@ -567,11 +564,9 @@ OPERATIONS: ${operationsResult.analysis_markdown}
 
         let finalReport = '';
         for await (const event of csoStream) {
-            if (event.author === this.agent.name || isFinalResponse(event)) {
-                const parts = event.content?.parts || [];
-                const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
-                if (text) finalReport += text;
-            }
+            const parts = event.content?.parts || [];
+            const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
+            if (text) finalReport += text;
         }
 
         const synthesisLatency = Date.now() - synthesisStartTime;
@@ -617,9 +612,8 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         const moatStream = moatRunner.runAsync({ userId: 'cso', sessionId: moatId, newMessage: { role: 'user', parts: [{ text: moatPrompt }] } });
         let moatRationale = '';
         for await (const ev of moatStream) {
-            if (ev.author === 'moat_analyst' || isFinalResponse(ev)) {
-                moatRationale += (ev.content?.parts || []).map((p: any) => p.text).join('');
-            }
+            const text = (ev.content?.parts || []).map((p: any) => p.text).filter(Boolean).join('');
+            if (text) moatRationale += text;
         }
 
         if (!moatRationale.trim()) {
