@@ -511,24 +511,13 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             return;
         }
 
-        const { turnCount: newTurnCount, usedLenses } = turnResult;
-        const ir = await interrogator.evaluateInformationDensity(cumulativeContext, newTurnCount, sessionId, usedLenses);
+        const { turnCount: newTurnCount } = turnResult;
+        const ir = await interrogator.evaluateInformationDensity(cumulativeContext, newTurnCount, sessionId);
 
-        const updatedLenses = ir.lensUsed && !usedLenses.includes(ir.lensUsed)
-            ? [...usedLenses, ir.lensUsed]
-            : usedLenses;
-
-        // Persist the lens used so next turn rotates
-        if (ir.lensUsed && !usedLenses.includes(ir.lensUsed)) {
-            try {
-                await admin.firestore().collection('velocity_cso_sessions').doc(sessionId).update({ usedLenses: updatedLenses });
-            } catch { /* non-critical */ }
-        }
-
-        sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable, usedLenses: updatedLenses });
+        sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable });
 
         if (!ir.isAuditable) {
-            sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown, usedLenses: updatedLenses });
+            sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown });
             await releaseLock(sessionId);
             res.end();
             return;
