@@ -19,6 +19,7 @@
   "dependencies": {
     "@genkit-ai/googleai": "^1.28.0",
     "@google/adk": "^0.3.0",
+    "@sendgrid/mail": "^8.1.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.3.0",

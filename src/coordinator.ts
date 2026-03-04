@@ -39,7 +39,7 @@ function extractOrgName(context: string): string {
 /**
  * Robustly extracts and parses JSON from a string that may contain markdown or prose.
  */
-export function robustParse(agentName: string, raw: string): any {
+export function robustParse(agentName: string, raw: string, sessionId?: string): any {
     const fallback = {
         analysis_markdown: raw,
         dimensions: {
@@ -63,7 +63,10 @@ export function robustParse(agentName: string, raw: string): any {
 
     // 2. Greedy Extraction
     const jsonMatch = sanitized.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return fallback;
+    if (!jsonMatch) {
+        log({ severity: 'ERROR', message: `Parse Failure: No JSON object found in output from ${agentName}`, agent_id: agentName, session_id: sessionId, raw_output: raw.slice(0, 1000) });
+        return fallback;
+    }
 
     try {
         const parsed = JSON.parse(jsonMatch[0]);
@@ -88,7 +91,8 @@ export function robustParse(agentName: string, raw: string): any {
             ...fallback,
             ...parsed,
         };
-    } catch {
+    } catch (e) {
+        log({ severity: 'ERROR', message: `Parse Failure: JSON parse error from ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e), raw_output: raw.slice(0, 1000) });
         return fallback;
     }
 }
@@ -100,7 +104,7 @@ export class ChiefStrategyAgent {
     constructor() {
         this.agent = new LlmAgent({
             name: 'chief_strategy_agent',
-            model: 'gemini-2.5-pro',
+            model: 'gemini-1.5-pro',
             description: 'Enterprise-grade Chief Strategy Officer (CSO) responsible for synthesizing business analysis.',
             instruction: `
         You are a Global Executive Chief Strategy Officer. 
@@ -145,7 +149,6 @@ export class ChiefStrategyAgent {
         Customer Concentration Risk: [score]/100
         
         CRITICAL: Output ONLY markdown text. Do NOT output JSON, code blocks, or raw data structures. All output must be human-readable narrative markdown.`,
-            subAgents: [...specialists, strategicCritic, blueOceanAgent, wardleyAgent],
         });
     }
 
@@ -252,7 +255,7 @@ export class ChiefStrategyAgent {
             }
         }
 
-        const result = robustParse(agent.name!, rawOutput);
+        const result = robustParse(agent.name!, rawOutput, sessionId);
         const latency = Date.now() - startTime;
         const outChars = JSON.stringify(result).length;
         const cost = estimateCost('gemini-2.0-flash', context.length, outChars);
@@ -301,9 +304,9 @@ export class ChiefStrategyAgent {
             }
         }
 
-        const result = robustParse('strategic_critic', raw);
+        const result = robustParse('strategic_critic', raw, sessionId);
         const latency = Date.now() - startTime;
-        const cost = estimateCost('gemini-2.5-pro', criticInput.length, raw.length);
+        const cost = estimateCost('gemini-1.5-pro', criticInput.length, raw.length);
 
         log({
             severity: 'INFO',
@@ -483,7 +486,37 @@ OPERATIONS: ${operationsResult.analysis_markdown}
             1. Synthesize these inputs into a high-end Tier-1 Consulting strategic report.
             2. Integrate the dimension scores into the narrative.
             3. Ensure the report is formatted in clean markdown.
-            4. YOU MUST END THE REPORT WITH THE EXACT "Dimension Scores" TABLE BELOW.
+            4. You MUST explicitly include the following sections if data is available in the inputs:
+               - **Executive Synthesis**
+               - **Unit Economics Analysis**
+               - **Risk & Monte Carlo Projections**
+               
+            5. After the main strategy report, generate a 90-DAY STRATEGIC ROADMAP section.
+               Format it as:
+               ## 90-Day Strategic Roadmap
+               
+               ### Days 1-30: Quick Wins
+               [3 specific actions with measurable outcomes. Format each as:]
+               **Action:** [Specific action]
+               **Owner:** [CEO / CTO / Head of Sales / etc]
+               **Success metric:** [Quantifiable outcome]
+               **Why now:** [One sentence urgency]
+               
+               ### Days 31-60: Foundation Building
+               [3 specific actions]
+               
+               ### Days 61-90: Strategic Bets
+               [2-3 specific actions with higher uncertainty but high upside]
+               
+               Each action must:
+               - Reference a specific dimension from the 20-dimension scorecard
+               - Name a specific person or role responsible
+               - Have a measurable success metric (not "improve" — specify a number)
+               - Connect to a specific business outcome (revenue, cost, risk reduction)
+               
+            6. YOU MUST END THE REPORT WITH THE EXACT "Dimension Scores" TABLE BELOW.
+            
+            CRITICAL: Do NOT call any sub-agents or tools. All necessary data is provided above. Simply synthesize and return markdown.
             
             ## Dimension Scores
             ${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
@@ -511,7 +544,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         }
 
         const synthesisLatency = Date.now() - synthesisStartTime;
-        const synthesisCost = estimateCost('gemini-2.5-pro', synthesisPrompt.length, finalReport.length);
+        const synthesisCost = estimateCost('gemini-1.5-pro', synthesisPrompt.length, finalReport.length);
         log({
             severity: 'INFO',
             message: 'CSO synthesis complete',
@@ -608,7 +641,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
                     }
                 }
 
-                const result = robustParse(agent.name!, rawOutput);
+                const result = robustParse(agent.name!, rawOutput, sessionId);
                 if (result.dimensions) {
                     Object.assign(finalDimensions, result.dimensions);
                 }
@@ -621,7 +654,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         }
 
         return {
-            report: finalReport || 'Strategic analysis failed.',
+            report: finalReport,
             dimensions: finalDimensions,
             richDimensions,
             specialistOutputs,
@@ -698,7 +731,7 @@ Only include a dimension in mitigation_cards if its stressed score is below 40.
         // Run as a lightweight single-agent call (no sub-agents, no Discovery)
         const stressAgent = new LlmAgent({
             name: 'stress_test_agent',
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.0-flash',
             description: 'Rapid stress-test recalculation specialist.',
             instruction: 'You are a Global Executive stress-test analyst. Respond ONLY with a raw JSON object as instructed.',
         });
@@ -751,7 +784,7 @@ Only include a dimension in mitigation_cards if its stressed score is below 40.
             riskDeltas[dim] = stressed - original; // negative = worse
         }
 
-        const cost = estimateCost('gemini-2.5-flash', stressPrompt.length, rawOutput.length);
+        const cost = estimateCost('gemini-2.0-flash', stressPrompt.length, rawOutput.length);
         log({ severity: 'INFO', message: 'Stress test complete', agent_id: 'stress_test_agent', phase: 'stress_test', session_id: sessionId, cost_usd: cost.usd, scenario: scenarioId });
 
         return {

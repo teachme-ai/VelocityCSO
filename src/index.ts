@@ -16,11 +16,12 @@ import type { StrategySession } from './services/sessionService.js';
 import { authMiddleware, AuthRequest } from './middleware/auth.js';
 import { registerConnection, unregisterConnection, sseWrite, emitHeartbeat } from './services/sseService.js';
 import multer from 'multer';
+import { sendStrategyDigest } from './services/emailService.js';
 
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-    fileFilter: (_req, file, cb) => {
+    fileFilter: (_req: any, file: any, cb: any) => {
         const allowed = ['application/pdf', 'text/plain', 'text/markdown'];
         cb(null, allowed.includes(file.mimetype));
     }
@@ -67,20 +68,57 @@ function extractDimensions(report: string): Record<string, number> {
 
 // ─── GET /report/:id ─────────────────────────────────────────────────────────
 app.get('/report/:id', async (req, res) => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const token = req.query.token as string | undefined;
-    const memory = await loadAuditMemory(id);
-    if (!memory) return res.status(404).json({ error: 'Report not found or expired.' });
-    // Simple access key: token must match last 8 chars of reportId
-    if (token !== id.slice(-8)) return res.status(403).json({ error: 'Invalid access token.' });
-    res.json({
-        id,
-        report: memory.report,
-        dimensions: memory.dimensionScores,
-        grounded_context: memory.groundedContext,
-        business_context: memory.businessContext,
-        created_at: memory.createdAt,
-    });
+
+    try {
+        const doc = await admin.firestore().collection('enterprise_strategy_reports').doc(id).get();
+        if (!doc.exists) return res.status(404).json({ error: 'Report not found or expired.' });
+
+        const data = doc.data()!;
+        const isValid = token === id.slice(-8) || (data.share_token && token === data.share_token);
+        if (!isValid) return res.status(403).json({ error: 'Invalid access token.' });
+
+        const memory = await loadAuditMemory(id);
+        if (!memory) return res.status(404).json({ error: 'Memory details not found.' });
+
+        res.json({
+            id,
+            report: memory.report,
+            dimensions: memory.dimensionScores,
+            grounded_context: memory.groundedContext,
+            business_context: memory.businessContext,
+            created_at: memory.createdAt,
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Error fetching report details' });
+    }
+});
+
+// ─── POST /report/:id/share ──────────────────────────────────────────────────
+app.post('/report/:id/share', authMiddleware as any, async (req: AuthRequest, res) => {
+    const id = req.params.id as string;
+
+    try {
+        const doc = await admin.firestore().collection('enterprise_strategy_reports').doc(id).get();
+        if (!doc.exists) return res.status(404).json({ error: 'Report not found' });
+
+        const data = doc.data()!;
+        if (data.user_id !== req.userId && data.org_id !== req.orgId && req.userId !== 'dev-user') {
+            return res.status(403).json({ error: 'Unauthorized to share' });
+        }
+
+        const { generateShareToken } = await import('./middleware/auth.js');
+        const shareToken = generateShareToken();
+
+        await doc.ref.update({ share_token: shareToken });
+
+        const baseUrl = process.env.APP_URL || 'http://localhost:5173';
+        res.json({ shareUrl: `${baseUrl}/report/${id}?token=${shareToken}` });
+    } catch (err: any) {
+        log({ severity: 'ERROR', message: `Share link generation failed: ${err.message}` });
+        res.status(500).json({ error: 'Failed to generate share link' });
+    }
 });
 
 // ─── GET /report/:id/download ─────────────────────────────────────────────────
@@ -97,6 +135,80 @@ app.get('/report/:id/download', async (req, res) => {
         res.send(pdf);
     } catch (err: any) {
         res.status(500).json({ error: 'PDF generation failed', detail: err.message });
+    }
+});
+
+// ─── GET /history/:orgId ─────────────────────────────────────────────────────
+app.get('/history/:orgId', authMiddleware as any, async (req: AuthRequest, res) => {
+    const orgId = req.params.orgId as string;
+
+    if (req.orgId !== orgId) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    try {
+        const snapshot = await admin.firestore()
+            .collection('enterprise_strategy_reports')
+            .where('org_id', '==', orgId)
+            .orderBy('created_at', 'desc')
+            .limit(20)
+            .get();
+
+        const audits = snapshot.docs.map(doc => {
+            const data = doc.data();
+            const dims = data.dimension_scores || {};
+            const keys = Object.keys(dims);
+            const overallScore = keys.length ? (Object.values(dims) as number[]).reduce((a, b) => a + b, 0) / keys.length : 0;
+            return {
+                id: doc.id,
+                orgName: data.org_name,
+                createdAt: data.created_at?.toDate?.()?.toISOString(),
+                dimensions: dims,
+                overallScore,
+            };
+        });
+
+        res.json({ audits });
+    } catch (err: any) {
+        log({ severity: 'ERROR', message: `History fetch failed: ${err.message}` });
+        res.status(500).json({ error: 'Failed to fetch history' });
+    }
+});
+
+// ─── GET /history/:orgId/trend/:fingerprint ──────────────────────────────────
+app.get('/history/:orgId/trend/:fingerprint', authMiddleware as any, async (req: AuthRequest, res) => {
+    const orgId = req.params.orgId as string;
+    const fingerprint = req.params.fingerprint as string;
+
+    if (req.orgId !== orgId) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    try {
+        const prefix = fingerprint.slice(0, 80);
+        const snapshot = await admin.firestore()
+            .collection('enterprise_strategy_reports')
+            .where('org_id', '==', orgId)
+            .where('fingerprint', '>=', prefix)
+            .where('fingerprint', '<', prefix + '\uf8ff')
+            .orderBy('fingerprint')
+            .orderBy('created_at', 'asc')
+            .limit(12)
+            .get();
+
+        const trend = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                date: data.created_at?.toDate?.()?.toISOString(),
+                dimensions: data.dimension_scores || {},
+                reportId: doc.id,
+            };
+        });
+
+        res.json({ trend });
+    } catch (err: any) {
+        log({ severity: 'ERROR', message: `Trend fetch failed: ${err.message}` });
+        res.status(500).json({ error: 'Failed to fetch trend' });
     }
 });
 
@@ -146,7 +258,8 @@ app.post('/enrich/document',
 // ─── POST /analyze ───────────────────────────────────────────────────────────
 app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
     const { business_context, stress_test } = req.body;
-    const userId = req.user?.uid || 'anonymous';
+    const userId = req.userId || 'anonymous';
+    const orgId = req.orgId || 'default-org';
 
     if (!business_context) {
         return res.status(400).json({ error: 'business_context is required' });
@@ -313,6 +426,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
                 org_name: orgName,
                 moat_rationale: moatRationale,
                 user_id: userId,
+                org_id: orgId,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 expires_at: expiresAt,
             });
@@ -557,6 +671,66 @@ app.post('/analyze/stress-test', authMiddleware as any, async (req: AuthRequest,
         tlog({ severity: 'ERROR', message: 'Stress test failed', error: error.message, session_id: sessionId });
         sseWrite(res, { type: 'ERROR', message: error.message });
         res.end();
+    }
+});
+
+// ─── POST /internal/send-digests ─────────────────────────────────────────────
+app.post('/internal/send-digests', async (req, res) => {
+    const secret = req.headers['x-digest-secret'] || req.query.secret;
+    const envSecret = process.env.DIGEST_SECRET || 'dev-secret';
+    if (secret !== envSecret) {
+        return res.status(403).json({ error: 'Unauthorized payload' });
+    }
+
+    try {
+        const reportsSnapshot = await admin.firestore()
+            .collection('enterprise_strategy_reports')
+            .orderBy('createdAt', 'desc')
+            .limit(50)
+            .get();
+
+        const seenOrgs = new Set<string>();
+        let sentCount = 0;
+
+        for (const doc of reportsSnapshot.docs) {
+            const data = doc.data();
+            const orgId = data.org_id;
+            // Assuming the report stores email or user_id we can resolve
+            const userEmail = data.user_email || 'admin@velocitycso.com';
+
+            if (orgId && !seenOrgs.has(orgId)) {
+                seenOrgs.add(orgId);
+
+                const scoredValues = Object.values(data.dimensionScores || {}).filter((v): v is number => v !== null);
+                const overallScore = scoredValues.length ? Math.round(scoredValues.reduce((a, b) => a + b, 0) / scoredValues.length) : 0;
+
+                const topActions = Object.values(data.richDimensions || {})
+                    .filter((dim: any) => dim.score < 65 && dim.improvement_action)
+                    .map((dim: any) => dim.improvement_action)
+                    .slice(0, 3);
+
+                const driftAlerts = Object.keys(data.dimensionScores || {})
+                    .filter(k => data.dimensionScores[k] < 40)
+                    .map(k => `Critical Risk: ${k} (Score: ${data.dimensionScores[k]})`);
+
+                const dataPayload = {
+                    to: userEmail,
+                    orgName: data.orgName || 'Your Organization',
+                    overallScore,
+                    driftAlerts,
+                    topActions,
+                    reportLink: `${process.env.APP_URL || 'http://localhost:5173'}/report/${doc.id}`
+                };
+
+                const sent = await sendStrategyDigest(dataPayload);
+                if (sent) sentCount++;
+            }
+        }
+
+        res.json({ message: 'Digests processing complete', sentCount });
+    } catch (err: any) {
+        log({ severity: 'ERROR', message: 'Send-digests failed', error: err.message });
+        res.status(500).json({ error: 'Failed to process digests' });
     }
 });
 

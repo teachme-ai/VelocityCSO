@@ -25,7 +25,9 @@ tasks, exact file paths, code snippets, and acceptance criteria.
 | [LIVE_AUDIT_CRITIQUE.md](./LIVE_AUDIT_CRITIQUE.md) | — | Fix live audit bugs (org name, moat, zero-scores, stale text) | Data-correct scores, context-aware moat, null dimensions |
 | [REPORT_UI_CHANGES.md](./REPORT_UI_CHANGES.md) | — | Report dashboard UI fixes and new components | KPI row, tab nav, expandable scorecard, category strip |
 | [DASHBOARD_UI_REDESIGN.md](./DASHBOARD_UI_REDESIGN.md) | — | Full dashboard redesign spec and shared design tokens | KpiRow, CategorySummary, ReportTabs, tokens.ts |
+| [STAGE_SECTOR_INTAKE.md](./STAGE_SECTOR_INTAKE.md) | — | Stage/sector selectors for context-aware CSO-grade analysis | Stage dropdowns, suppressed dimensions, calibrated prompts, benchmark injection |
 | [PHASE_5_PRODUCT_FEATURES.md](./PHASE_5_PRODUCT_FEATURES.md) | [PHASE_5_TESTS.md](./PHASE_5_TESTS.md) | Monitoring, collaboration, and enterprise exports | Audit history, action roadmap, share links, PDF quality |
+| [STRATEGY_DEPTH.md](./STRATEGY_DEPTH.md) | — | Fill strategic framework gaps (Ansoff, VRIO, Scenario Planning) | Ansoff Matrix, VRIO analysis, 3-scenario planning injected into specialist prompts |
 | [PHASE_6_ARCHITECTURE.md](./PHASE_6_ARCHITECTURE.md) | [PHASE_6_TESTS.md](./PHASE_6_TESTS.md) | Scale, test coverage, and frontend maintainability | Redis SSE, multi-tenant, test suite, component decomposition |
 
 > **Testing master doc:** [TESTING_STRATEGY.md](./TESTING_STRATEGY.md) — install this first (vitest config, mock setup, CI pipeline, conventions).
@@ -56,7 +58,17 @@ Phase 1 (Foundation)  ──►  Phase 1 Tests
                     │       Reference doc for KpiRow, CategorySummary, ReportTabs,
                     │       tokens.ts — use alongside REPORT_UI_CHANGES.md
                     │
+                    ├─► STAGE_SECTOR_INTAKE.md  (context-aware analysis)
+                    │       Stage + sector dropdowns → calibrated specialist prompts,
+                    │       suppressed inapplicable dimensions, benchmark injection
+                    │
                     └─► Phase 5 (Product Features)  ──►  Phase 5 Tests  ◄── AG IS HERE
+                          │
+                          ├─► STRATEGY_DEPTH.md  (can run in parallel with Phase 5)
+                          │       Ansoff Matrix → innovationAnalyst
+                          │       VRIO Framework → innovationAnalyst / operationsAnalyst
+                          │       3-Scenario Planning → CSO synthesis prompt
+                          │
                           └─► Phase 6 (Architecture)  ──►  Phase 6 Tests
                                 └─► Full coverage check (npm run test:coverage)
 ```
@@ -64,6 +76,7 @@ Phase 1 (Foundation)  ──►  Phase 1 Tests
 **Rule:** For each phase — implement first, then run its companion test file.
 Phases 1–3 are prerequisites for all subsequent work.
 **LIVE_AUDIT_CRITIQUE.md and REPORT_UI_CHANGES.md must be completed after Phase 4 and before Phase 5** — they fix data correctness issues that Phase 5 product features depend on (correct scores, org names, moat text).
+**STAGE_SECTOR_INTAKE.md must run after LIVE_AUDIT_CRITIQUE** — it depends on null-dimension support being in place.
 DASHBOARD_UI_REDESIGN.md is a reference/spec doc — read it alongside REPORT_UI_CHANGES.md, not separately.
 Phase 6 can begin in parallel with Phase 5 (architecture work is independent).
 
@@ -101,6 +114,8 @@ frontend/src/components/MonteCarloChart.tsx                Phase 3
 frontend/src/components/WardleyMap.tsx                     Phase 3
 frontend/src/components/AuditHistory.tsx                   Phase 5
 frontend/src/components/ActionRoadmap.tsx                  Phase 5
+frontend/src/components/AnsoffMatrix.tsx                   STRATEGY_DEPTH
+frontend/src/components/VrioCard.tsx                       STRATEGY_DEPTH
 frontend/src/components/audit/AuditInputForm.tsx           Phase 6
 frontend/src/components/audit/ClarificationDialog.tsx      Phase 6
 frontend/src/components/audit/ProcessingView.tsx           Phase 6
@@ -125,8 +140,8 @@ vitest.config.ts         Phase 6
 | File | Phases / Docs | Key Changes |
 |------|---------------|-------------|
 | `src/index.ts` | 1, 4, 5 | Auth middleware, new endpoints, remove dead code |
-| `src/coordinator.ts` | 1, 2, 3, LIVE_AUDIT | Critic wiring, staged pipeline, Blue Ocean + Wardley; **org name heuristic, moat empty guard, null dimensions init** |
-| `src/specialists.ts` | 2, 3 | Scoring rubrics, CoT scaffold, new dimensions, new output schemas |
+| `src/coordinator.ts` | 1, 2, 3, LIVE_AUDIT, STAGE_SECTOR | Critic wiring, staged pipeline, Blue Ocean + Wardley; org name heuristic, moat empty guard, null dimensions; **stage calibration, suppressed dims, benchmark injection** |
+| `src/specialists.ts` | 2, 3, STRATEGY_DEPTH | Scoring rubrics, CoT scaffold, new dimensions, new output schemas; **Ansoff Matrix + VRIO in innovationAnalyst** |
 | `src/agents/discovery.ts` | 1, 2 | Google Search Grounding, PESTLE output |
 | `src/agents/interrogator.ts` | 1, 2 | Fix `idBreakdown`, update import to sseService |
 | `src/critic.ts` | 1 | Strengthen critic prompt |
@@ -135,7 +150,7 @@ vitest.config.ts         Phase 6
 | `src/services/sessionService.ts` | 1, 6 | Remove dead code, consolidate collections |
 | `src/services/logger.ts` | 1 | Add gemini-2.0-flash-exp to pricing table |
 | `package.json` | 4, 6 | Add multer, ioredis, vitest, canvas |
-| `frontend/src/components/HeroSection.tsx` | 1, 3, 5, 6, REPORT_UI | Auth headers, new framework cards, tab state, KPI row, always-visible scorecard |
+| `frontend/src/components/HeroSection.tsx` | 1, 3, 5, 6, REPORT_UI, STAGE_SECTOR | Auth headers, new framework cards, tab state, KPI row, always-visible scorecard; **stage + sector dropdowns** |
 | `frontend/src/components/DiagnosticScorecard.tsx` | 2, REPORT_UI | 20 dimensions in 5 categories; **expandable rows with justification + improvement_action** |
 | `frontend/src/components/StrategyRadar.tsx` | 2 | Handle 20 dimensions (outerRadius 42% — already fixed) |
 | `frontend/src/components/ExecutiveSummaryCard.tsx` | REPORT_UI | Update "CSO v2.5" badge → "CSO v4.0" |

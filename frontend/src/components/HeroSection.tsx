@@ -167,10 +167,18 @@ export function HeroSection() {
     const [companyUrl, setCompanyUrl] = useState('');
     const [urlEnriching, setUrlEnriching] = useState(false);
     const [urlEnriched, setUrlEnriched] = useState(false);
+    const [sharing, setSharing] = useState(false);
+    const [shareMessage, setShareMessage] = useState('');
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     const enrichFromUrl = async () => {
         if (!companyUrl) return;
+
+        let urlTarget = companyUrl.trim();
+        if (!/^https?:\/\//i.test(urlTarget)) {
+            urlTarget = `https://${urlTarget}`;
+        }
+
         setUrlEnriching(true);
         setUrlEnriched(false);
         setError('');
@@ -179,7 +187,7 @@ export function HeroSection() {
             const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/enrich/url`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: companyUrl }),
+                body: JSON.stringify({ url: urlTarget }),
             });
             const result = await res.json();
 
@@ -187,7 +195,7 @@ export function HeroSection() {
 
             const data = result.data;
             const enrichedText = `
-WEBSITE CONTEXT (scraped from ${companyUrl}):
+WEBSITE CONTEXT (scraped from ${urlTarget}):
 Title: ${data.title}
 Description: ${data.description}
 Products: ${data.product_pages?.join(', ')}
@@ -436,6 +444,30 @@ ${context}`.trim();
         } catch {
             setError('Connection failed during clarification.');
             setPhase('error');
+        }
+    };
+
+    const handleShare = async () => {
+        if (!currentReportId) return;
+        setSharing(true);
+        try {
+            // Include Firebase auth token if user is signed in
+            const authHeader = localStorage.getItem('vcso_auth_token') || 'Bearer dev-token';
+            const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/report/${currentReportId}/share`, {
+                method: 'POST',
+                headers: { 'Authorization': authHeader }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to generate share link');
+
+            await navigator.clipboard.writeText(data.shareUrl);
+            setShareMessage('Copied to clipboard!');
+            setTimeout(() => setShareMessage(''), 3000);
+        } catch (err: any) {
+            setShareMessage(err.message || 'Share failed');
+            setTimeout(() => setShareMessage(''), 3000);
+        } finally {
+            setSharing(false);
         }
     };
 
@@ -700,6 +732,13 @@ ${context}`.trim();
                                 <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 16, color: '#fff' }}>Strategy Intelligence Report</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {shareMessage && <span className="text-xs text-emerald-400">{shareMessage}</span>}
+                                    <button onClick={handleShare} disabled={sharing}
+                                        style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 8, background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(139,92,246,0.4)', color: '#C4B5FD', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                        {sharing ? 'Generating...' : '↗ Share Link'}
+                                    </button>
+                                </div>
                                 {currentReportId && currentReportToken && (
                                     <a href={`/report/${currentReportId}/download?token=${currentReportToken}`} target="_blank" rel="noopener noreferrer"
                                         style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 8, background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(37,99,235,0.4)', color: '#93C5FD', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>

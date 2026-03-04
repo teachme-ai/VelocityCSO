@@ -208,7 +208,7 @@ export const operationsAnalyst = new LlmAgent({
 
 export const financeAnalyst = new LlmAgent({
   name: 'finance_analyst',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-2.0-flash',
   description: 'Expert in Financial Modeling, Risk Assessment, and M&A.',
   instruction: `
     Analyze the provided business context focusing on:

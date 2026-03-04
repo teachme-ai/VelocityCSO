@@ -3,6 +3,17 @@ import admin from 'firebase-admin';
 
 export interface AuthRequest extends Request {
     user?: admin.auth.DecodedIdToken;
+    userId?: string;
+    orgId?: string;
+}
+
+export function generateShareToken(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+    let token = '';
+    for (let i = 0; i < 32; i++) {
+        token += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return token;
 }
 
 /**
@@ -14,6 +25,8 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
     if (process.env.NODE_ENV === 'development') {
         req.user = { uid: 'dev-user', email: 'dev@example.com' } as any;
+        req.userId = 'dev-user';
+        req.orgId = 'dev-org';
         return next();
     }
 
@@ -26,6 +39,8 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     try {
         const decodedToken = await admin.auth().verifyIdToken(token);
         req.user = decodedToken;
+        req.userId = decodedToken.uid;
+        req.orgId = decodedToken.org || 'default-org';
         next();
     } catch (error) {
         console.error('Error verifying Firebase ID token:', error);

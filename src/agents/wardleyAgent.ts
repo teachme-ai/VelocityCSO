@@ -1,31 +1,31 @@
 import { LlmAgent } from '@google/adk';
 
 export interface WardleyCapability {
-    id: string;
-    name: string;
-    evolution: number;        // 0-100 (Genesis=0, Custom=33, Product=66, Commodity=100)
-    value_chain_position: number;  // 0-100 (User-facing=100, Infrastructure=0)
-    is_differentiator: boolean;
-    will_commoditize_in_18m: boolean;
-    build_buy_partner: 'build' | 'buy' | 'partner' | 'outsource';
-    dependency_ids: string[];  // IDs of capabilities this depends on
+  id: string;
+  name: string;
+  evolution: number;        // 0-100 (Genesis=0, Custom=33, Product=66, Commodity=100)
+  value_chain_position: number;  // 0-100 (User-facing=100, Infrastructure=0)
+  is_differentiator: boolean;
+  will_commoditize_in_18m: boolean;
+  build_buy_partner: 'build' | 'buy' | 'partner' | 'outsource';
+  dependency_ids: string[];  // IDs of capabilities this depends on
 }
 
 export interface WardleyResult {
-    capabilities: WardleyCapability[];
-    strategic_warnings: string[];  // Capabilities about to be commoditized
-    build_buy_decisions: Array<{
-        capability: string;
-        recommendation: 'build' | 'buy' | 'partner' | 'outsource';
-        rationale: string;
-    }>;
-    core_differentiators: string[];  // Names of capabilities that should be built
+  capabilities: WardleyCapability[];
+  strategic_warnings: string[];  // Capabilities about to be commoditized
+  build_buy_decisions: Array<{
+    capability: string;
+    recommendation: 'build' | 'buy' | 'partner' | 'outsource';
+    rationale: string;
+  }>;
+  core_differentiators: string[];  // Names of capabilities that should be built
 }
 
 export const wardleyAgent = new LlmAgent({
-    name: 'wardley_analyst',
-    model: 'gemini-2.5-flash',
-    instruction: `
+  name: 'wardley_analyst',
+  model: 'gemini-2.0-flash',
+  instruction: `
 You are a Wardley Mapping specialist. Map the business's capability landscape.
 
 EVOLUTION AXIS (X-axis):

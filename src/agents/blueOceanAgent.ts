@@ -1,33 +1,33 @@
 import { LlmAgent } from '@google/adk';
 
 export interface ERRCGrid {
-    eliminate: string[];
-    reduce: string[];
-    raise: string[];
-    create: string[];
+  eliminate: string[];
+  reduce: string[];
+  raise: string[];
+  create: string[];
 }
 
 export interface CompetitiveFactor {
-    name: string;
-    businessScore: number;
-    competitor1Score: number;
-    competitor2Score: number;
-    customerImportance: number;
+  name: string;
+  businessScore: number;
+  competitor1Score: number;
+  competitor2Score: number;
+  customerImportance: number;
 }
 
 export interface BlueOceanResult {
-    industry_factors: CompetitiveFactor[];
-    errc_grid: ERRCGrid;
-    value_curve_summary: string;
-    blue_ocean_opportunity: string;
-    competitor_names: [string, string];
-    strategic_canvas_title: string;
+  industry_factors: CompetitiveFactor[];
+  errc_grid: ERRCGrid;
+  value_curve_summary: string;
+  blue_ocean_opportunity: string;
+  competitor_names: [string, string];
+  strategic_canvas_title: string;
 }
 
 export const blueOceanAgent = new LlmAgent({
-    name: 'blue_ocean_analyst',
-    model: 'gemini-2.5-flash',
-    instruction: `
+  name: 'blue_ocean_analyst',
+  model: 'gemini-2.0-flash',
+  instruction: `
 You are a Blue Ocean Strategy analyst. Identify uncontested market space.
 
 STEP 1 — INDUSTRY FACTORS

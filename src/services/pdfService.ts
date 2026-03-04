@@ -25,6 +25,7 @@ const SCENARIO_LABELS: Record<string, string> = {
     PRICE_WAR: 'Competitor Price War',
     SCALE_UP: 'Aggressive Scale-Up',
     TALENT: 'Global Talent Shortage',
+    REGULATORY: 'Aggressive Regulatory Crackdown',
 };
 
 // Inline stress prompts — avoids importing scenarios.ts circular dep
@@ -33,14 +34,15 @@ const SCENARIO_PROMPTS: Record<string, string> = {
     PRICE_WAR: 'A well-funded competitor cuts prices 40%. Customers demand price matching. Margins compress 25%.',
     SCALE_UP: 'Board demands 3x growth in 18 months. Headcount must triple. Infrastructure costs spike 200%.',
     TALENT: 'Senior engineering talent costs double. Key hires take 6+ months. Attrition hits 30% annually.',
+    REGULATORY: 'Major regulatory framework changes over 18 months limit data usage and increase compliance costs by 40%.',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function sanitizeText(text: string): string {
     if (!text) return '';
     // Strip emojis and non-printable ASCII characters that break standard PDF encoding
-    // Keep space to ~ (standard printable)
-    return text.replace(/[^\x20-\x7E]/g, '').trim();
+    // Allow basic ASCII, newlines, tabs, and common typography (quotes, dashes)
+    return text.replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF\u2013-\u201D\u2018-\u2019]/g, '').trim();
 }
 function drawHeader(doc: PDFKit.PDFDocument, title: string) {
     const safeTitle = sanitizeText(title).toUpperCase();
@@ -160,7 +162,7 @@ Dimensions: ${dimNames.join(', ')}`.trim();
 
     // Fallback: apply fixed deltas
     const stressedScores: Record<string, number> = {};
-    const deltas: Record<string, number> = { RECESSION: -18, PRICE_WAR: -15, SCALE_UP: -12, TALENT: -10 };
+    const deltas: Record<string, number> = { RECESSION: -18, PRICE_WAR: -15, SCALE_UP: -12, TALENT: -10, REGULATORY: -22 };
     const delta = deltas[scenarioId] || -12;
     for (const [dim, score] of Object.entries(dimensionScores)) {
         stressedScores[dim] = Math.max(0, (score ?? 0) + delta);
@@ -170,8 +172,8 @@ Dimensions: ${dimNames.join(', ')}`.trim();
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 export async function generatePDF(memory: AuditMemory): Promise<Buffer> {
-    // Run all 4 stress scenarios in parallel before building PDF
-    const scenarioIds = ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT'];
+    // Run all stress scenarios
+    const scenarioIds = ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT', 'REGULATORY'];
     const stressResults = await Promise.all(
         scenarioIds.map(id => runStressScenario(id, memory.businessContext, memory.dimensionScores))
     );
@@ -237,7 +239,29 @@ function _buildPDF(
 
     drawFooter(doc, page++);
 
-    // ── PAGE 2: 20-Dimension Heatmap ──────────────────────────────────────────
+    // ── PAGE 2: Table of Contents ─────────────────────────────────────────────
+    y = addPage(doc, orgName);
+    y = sectionTitle(doc, 'Table of Contents', y);
+
+    const tocItems = [
+        '1. Executive Summary',
+        '2. Strategic Diagnostic Matrix (20 Dimensions)',
+        '3. Detailed Tactical Audit',
+        '4. Strategic Recommendations (90-Day Roadmap)',
+        '5. Adversarial Stress Scenarios',
+        '6. Sources Appendix'
+    ];
+
+    let tocY = y + 10;
+    for (const item of tocItems) {
+        doc.fontSize(10).fillColor(BLUE).font('Helvetica-Bold').text(item, 40, tocY);
+        doc.moveTo(40, tocY + 14).lineTo(doc.page.width - 40, tocY + 14).lineWidth(0.5).strokeOpacity(0.2).stroke(GRAY).strokeOpacity(1);
+        tocY += 24;
+    }
+
+    drawFooter(doc, page++);
+
+    // ── PAGE 3: 20-Dimension Heatmap & Radar Chart ───────────────────────────
     y = addPage(doc, orgName);
     y = sectionTitle(doc, 'Strategic Diagnostic Matrix (20 Dimensions)', y);
 
@@ -247,6 +271,39 @@ function _buildPDF(
 
     const catEntries = Object.entries(CATEGORIES);
     const splitIndex = 3; // Market, Strategy, Commercial on left; Operations, Finance on right
+
+    // Draw Radar Chart
+    const radarCx = midPoint;
+    const radarCy = doc.page.height - 230;
+    const radarRadius = 80;
+    const dimNames = Object.keys(CATEGORIES).flatMap(k => CATEGORIES[k]);
+    const angleStep = (Math.PI * 2) / dimNames.length;
+
+    // Draw radar web
+    doc.lineWidth(0.5).strokeColor('#E5E7EB');
+    for (let r = 0.2; r <= 1; r += 0.2) {
+        doc.polygon(...dimNames.map((_, i) => [
+            radarCx + Math.cos(i * angleStep - Math.PI / 2) * radarRadius * r,
+            radarCy + Math.sin(i * angleStep - Math.PI / 2) * radarRadius * r
+        ] as [number, number]));
+        doc.stroke();
+    }
+    // Draw radar axes
+    dimNames.forEach((_, i) => {
+        const x = radarCx + Math.cos(i * angleStep - Math.PI / 2) * radarRadius;
+        const y = radarCy + Math.sin(i * angleStep - Math.PI / 2) * radarRadius;
+        doc.moveTo(radarCx, radarCy).lineTo(x, y).stroke();
+    });
+    // Draw data polygon
+    const dataPoints = dimNames.map((dim, i) => {
+        const score = dims[dim] || 0;
+        return [
+            radarCx + Math.cos(i * angleStep - Math.PI / 2) * radarRadius * (score / 100),
+            radarCy + Math.sin(i * angleStep - Math.PI / 2) * radarRadius * (score / 100)
+        ] as [number, number];
+    });
+    doc.polygon(...dataPoints);
+    doc.fillOpacity(0.2).fillAndStroke(ACCENT, ACCENT).fillOpacity(1);
 
     // Left Column
     for (let i = 0; i < splitIndex; i++) {
@@ -271,12 +328,10 @@ function _buildPDF(
     }
 
     y = Math.max(leftHalfY, rightHalfY) + 20;
-    doc.fontSize(7).fillColor(GRAY).font('Helvetica')
-        .text('Scoring benchmarks: 70+ Transformational | 40-69 Competitive | <40 Structural Risk', 40, y, { align: 'center', width: doc.page.width - 80 });
 
     drawFooter(doc, page++);
 
-    // ── PAGES 3+: Full Strategy Report ────────────────────────────────────────
+    // ── PAGES 4+: Full Strategy Report ────────────────────────────────────────
     y = addPage(doc, orgName);
     y = sectionTitle(doc, 'Detailed Tactical Audit', y);
 
@@ -352,7 +407,7 @@ function _buildPDF(
     }
 
     // ── STRESS TEST PAGES ──────────────────────────────────────────────────────
-    for (const scenarioId of ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT']) {
+    for (const scenarioId of ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT', 'REGULATORY']) {
         const result = stressMap[scenarioId];
         if (!result) continue;
 
@@ -437,6 +492,25 @@ function _buildPDF(
                 }
                 y += 5;
             }
+        }
+        drawFooter(doc, page++);
+    }
+
+    // ── SOURCES APPENDIX ───────────────────────────────────────────────────────
+    if (memory.groundedContext) {
+        y = addPage(doc, orgName);
+        y = sectionTitle(doc, 'Sources Appendix', y);
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text('The following context and artifacts were discovered and synthesized during the intelligence sweep:', 40, y);
+        y += 20;
+
+        const contextLines = memory.groundedContext.split('\n');
+        for (const line of contextLines) {
+            if (y > pageBottom - 20) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+            const trimmed = sanitizeText(line.trim());
+            if (!trimmed) { y += 5; continue; }
+            doc.fontSize(7).fillColor(NAVY).text(trimmed, 40, y, { width: doc.page.width - 80 });
+            y = doc.y + 2;
         }
         drawFooter(doc, page++);
     }
