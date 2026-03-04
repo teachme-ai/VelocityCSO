@@ -133,6 +133,51 @@ export const innovationAnalyst = new LlmAgent({
     If any TWO forces both exceed 70, add a warning:
     "STRUCTURAL VULNERABILITY: [Force A] + [Force B] create compound pressure on [specific aspect]"
 
+    ANSOFF MATRIX ANALYSIS
+    Assess which of the 4 growth vectors is the primary strategic opportunity for this business.
+    Score each vector's attractiveness (0-100). Higher = more viable given current position and context.
+    
+    1. MARKET PENETRATION (existing product × existing market)
+       Can they capture more share from current customers/segments without changing the product?
+       Consider: pricing, distribution, marketing intensity, competitor displacement.
+    
+    2. MARKET DEVELOPMENT (existing product × new market)
+       Can they take what works today into a new geography, segment, or channel?
+       Consider: international expansion, adjacent verticals, new distribution channels.
+    
+    3. PRODUCT DEVELOPMENT (new product × existing market)
+       Can they deepen wallet share with existing customers by adding adjacent offerings?
+       Consider: upsell potential, platform expansion, API/ecosystem plays, AI-native features.
+    
+    4. DIVERSIFICATION (new product × new market)
+       Should they enter an entirely new space? Only viable if existing moat transfers.
+       Consider: capability adjacency, M&A, strategic partnerships, platform pivots.
+    
+    Identify the PRIMARY vector (highest-scoring) and explain the killer move for executing it.
+
+    VRIO FRAMEWORK ANALYSIS
+    For the business's PRIMARY claimed competitive advantage, evaluate it against all 4 VRIO criteria.
+    The advantage to evaluate = whatever scores highest in Competitive Defensibility context.
+    
+    V — VALUABLE: Does this resource/capability allow the business to exploit opportunities or neutralise threats?
+       Score 0-100. 0 = table stakes, 100 = eliminates an existential threat or unlocks transformational opportunity.
+    
+    R — RARE: How many competitors currently possess this resource/capability?
+       Score 0-100. 0 = commodity (everyone has it), 100 = unique (only this firm).
+    
+    I — INIMITABLE: How costly/difficult is it for competitors to imitate or substitute?
+       Score 0-100. 0 = can be copied in 3 months, 100 = structurally impossible (patent wall, network lock-in, decade of data).
+       Consider: path dependency, causal ambiguity, social complexity.
+    
+    O — ORGANISED: Is the business actually set up to capture the value from this resource?
+       Score 0-100. 0 = capability exists but no process/team to exploit it, 100 = fully operationalised with dedicated team and KPIs.
+    
+    VRIO VERDICT:
+    - All 4 high (>70): Sustained Competitive Advantage
+    - V+R+I high, O low: Temporary Advantage (not yet operationalised)
+    - V+R high, I+O low: Competitive Parity at risk
+    - Only V high: No advantage (valuable but not differentiated)
+
     ${COT_SCAFFOLD}
     ${rubricRule(["Competitive Defensibility", "Model Innovation", "Flywheel Potential", "Network Effects Strength", "Data Asset Quality"])}
  
@@ -154,6 +199,23 @@ export const innovationAnalyst = new LlmAgent({
       },
       "structural_attractiveness_score": 0,
       "interaction_effect_warning": "string or null"
+    },
+    "ansoffMatrix": {
+      "market_penetration": { "score": 0, "rationale": "...", "killer_move": "..." },
+      "market_development": { "score": 0, "rationale": "...", "killer_move": "..." },
+      "product_development": { "score": 0, "rationale": "...", "killer_move": "..." },
+      "diversification": { "score": 0, "rationale": "...", "killer_move": "..." },
+      "primary_vector": "market_penetration | market_development | product_development | diversification",
+      "strategic_verdict": "..."
+    },
+    "vrioAnalysis": {
+      "resource_evaluated": "...",
+      "valuable": { "score": 0, "evidence": "..." },
+      "rare": { "score": 0, "evidence": "..." },
+      "inimitable": { "score": 0, "evidence": "..." },
+      "organised": { "score": 0, "evidence": "..." },
+      "verdict": "Sustained Competitive Advantage | Temporary Advantage | Competitive Parity | No Advantage",
+      "verdict_rationale": "..."
     }
 
     ${jsonInstruction}

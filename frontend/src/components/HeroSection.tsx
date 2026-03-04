@@ -4,7 +4,9 @@ import type {
     UnitEconomicsData,
     FiveForcesData,
     WardleyResult,
-    BlueOceanResult
+    BlueOceanResult,
+    AnsoffMatrixData,
+    VrioAnalysisData
 } from '../types/frameworks';
 import { AgentOrbs } from './AgentOrbs';
 import { StressTestPanel } from './StressTestPanel';
@@ -21,6 +23,8 @@ import { UnitEconomicsDashboard } from './UnitEconomicsDashboard';
 import { FiveForces } from './FiveForces';
 import { WardleyMap } from './WardleyMap';
 import { MonteCarloChart } from './MonteCarloChart';
+import { AnsoffMatrix } from './AnsoffMatrix';
+import { VrioCard } from './VrioCard';
 import { KpiRow } from './dashboard/KpiRow';
 import { CategorySummary } from './dashboard/CategorySummary';
 import { ReportTabs } from './dashboard/ReportTabs';
@@ -56,6 +60,8 @@ type ReportData = {
         wardley?: WardleyResult;
         blue_ocean?: BlueOceanResult;
         monte_carlo?: MonteCarloData;
+        ansoffMatrix?: AnsoffMatrixData;
+        vrioAnalysis?: VrioAnalysisData;
     };
 };
 
@@ -889,6 +895,8 @@ ${context}`.trim();
                                                 warnings={result.frameworks.wardley.strategic_warnings}
                                             />
                                         )}
+                                        {result.frameworks?.ansoffMatrix && <AnsoffMatrix data={result.frameworks.ansoffMatrix} />}
+                                        {result.frameworks?.vrioAnalysis && <VrioCard data={result.frameworks.vrioAnalysis} />}
                                     </div>
 
                                     {result.frameworks?.monte_carlo ? (

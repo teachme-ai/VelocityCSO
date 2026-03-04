@@ -82,3 +82,33 @@ export interface WardleyResult {
     }>;
     core_differentiators: string[];
 }
+
+export interface AnsoffVector {
+    score: number;
+    rationale: string;
+    killer_move: string;
+}
+
+export interface AnsoffMatrixData {
+    market_penetration: AnsoffVector;
+    market_development: AnsoffVector;
+    product_development: AnsoffVector;
+    diversification: AnsoffVector;
+    primary_vector: string;
+    strategic_verdict: string;
+}
+
+export interface VrioCriterion {
+    score: number;
+    evidence: string;
+}
+
+export interface VrioAnalysisData {
+    resource_evaluated: string;
+    valuable: VrioCriterion;
+    rare: VrioCriterion;
+    inimitable: VrioCriterion;
+    organised: VrioCriterion;
+    verdict: string;
+    verdict_rationale: string;
+}

@@ -425,8 +425,10 @@ OPERATIONS: ${operationsResult.analysis_markdown}
 
         const frameworks = {
             blueOcean: blueOceanResult,
-            fiveForces: innovationResult.portersFiveForces,
-            unitEconomics: financeResult.unitEconomics,
+            fiveForces: innovationResult?.portersFiveForces || null,
+            ansoffMatrix: innovationResult?.ansoffMatrix || null,
+            vrioAnalysis: innovationResult?.vrioAnalysis || null,
+            unitEconomics: financeResult?.unitEconomics || null,
             monteCarlo: monteCarloResult,
             wardley: wardleyResult
         };
@@ -481,6 +483,35 @@ OPERATIONS: ${operationsResult.analysis_markdown}
             
             MERGED DIMENSION SCORES:
             ${JSON.stringify(finalDimensions, null, 2)}
+            
+            SCENARIO PLANNING — MANDATORY SECTION
+            Based on the specialist analyses, identify the 2 highest-impact macro uncertainties facing this business.
+            Then define 3 named scenarios and assess the strategy's resilience under each.
+            
+            MACRO UNCERTAINTIES: Pick 2 from the context (e.g. regulatory change, competitive entry, market contraction, technology shift, macro recession, demand acceleration).
+            
+            SCENARIO 1 — BASE CASE (most likely, ~60% probability)
+            - Name: [descriptive label]
+            - Conditions: [what the world looks like]
+            - Strategy performance: GREEN | AMBER | RED
+            - Key risk in this scenario:
+            - Recommended pivot if this materialises:
+            
+            SCENARIO 2 — OPTIMISTIC CASE (~25% probability)
+            - Name: [descriptive label]
+            - Conditions: [tailwinds, favourable dynamics]
+            - Strategy performance: GREEN | AMBER | RED
+            - How to accelerate advantage in this scenario:
+            
+            SCENARIO 3 — STRESS CASE (~15% probability)
+            - Name: [descriptive label]
+            - Conditions: [headwinds, adverse dynamics]
+            - Strategy performance: GREEN | AMBER | RED
+            - Survival move: minimum viable strategic action to remain viable
+            
+            RESILIENCE SCORE: 0-100 (how well does the strategy hold across all 3 scenarios?)
+            
+            Include this as a dedicated "## Scenario Analysis" section in the markdown report.
             
             YOUR TASK:
             1. Synthesize these inputs into a high-end Tier-1 Consulting strategic report.
