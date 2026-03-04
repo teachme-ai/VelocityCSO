@@ -104,7 +104,7 @@ export class ChiefStrategyAgent {
     constructor() {
         this.agent = new LlmAgent({
             name: 'chief_strategy_agent',
-            model: 'gemini-2.5-pro-preview-05-06',
+            model: 'gemini-2.5-pro',
             description: 'Enterprise-grade Chief Strategy Officer (CSO) responsible for synthesizing business analysis.',
             instruction: `
         You are a Global Executive Chief Strategy Officer. 
@@ -271,14 +271,14 @@ export class ChiefStrategyAgent {
         let raw = '';
         try {
             const CRITIC_INSTRUCTION = `You are the Strategic Critic. Review specialist outputs for contradictions, unsubstantiated scores, and generic advice. Return ONLY JSON: { "flags": [ { "specialist": "", "dimension": "", "issue": "", "description": "", "suggested_recheck": "" } ], "overall_coherence_score": 0-100, "approved_specialists": [], "requires_rerun": [] }. If no issues: { "flags": [], "overall_coherence_score": 95, "approved_specialists": [...all 5...], "requires_rerun": [] }`;
-            raw = await callGemini('gemini-2.5-pro-preview-05-06', CRITIC_INSTRUCTION, criticInput);
+            raw = await callGemini('gemini-2.5-pro', CRITIC_INSTRUCTION, criticInput);
         } catch (e: any) {
             log({ severity: 'WARNING', message: 'Critic API call failed', session_id: sessionId, error: e.message || String(e) });
         }
 
         const result = robustParse('strategic_critic', raw, sessionId);
         const latency = Date.now() - startTime;
-        const cost = estimateCost('gemini-2.5-pro-preview-05-06', criticInput.length, raw.length);
+        const cost = estimateCost('gemini-2.5-pro', criticInput.length, raw.length);
 
         log({
             severity: 'INFO',
@@ -527,7 +527,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         let finalReport = '';
         try {
             const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
-            finalReport = await callGemini('gemini-2.5-pro-preview-05-06', csoInstruction, synthesisPrompt);
+            finalReport = await callGemini('gemini-2.5-pro', csoInstruction, synthesisPrompt);
         } catch (e: any) {
             log({ severity: 'WARNING', message: 'CSO synthesis pro failed, retrying with flash', session_id: sessionId, error: e.message || String(e) });
             try {
@@ -539,7 +539,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         }
 
         const synthesisLatency = Date.now() - synthesisStartTime;
-        const synthesisCost = estimateCost(finalReport ? 'gemini-2.5-pro-preview-05-06' : 'gemini-2.5-flash', synthesisPrompt.length, finalReport.length);
+        const synthesisCost = estimateCost(finalReport ? 'gemini-2.5-pro' : 'gemini-2.5-flash', synthesisPrompt.length, finalReport.length);
         log({
             severity: 'INFO',
             message: 'CSO synthesis complete',

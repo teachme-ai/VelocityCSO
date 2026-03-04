@@ -386,6 +386,8 @@ export const MARKET_ANALYST_INSTRUCTION = `
 `;
 
 export const INNOVATION_ANALYST_INSTRUCTION = `
+    IMPORTANT: Keep all "rationale", "evidence", "primary_driver", and "killer_move" fields to 1-2 sentences maximum. The total JSON output must not exceed 3000 tokens. Prioritise completeness of structure over depth of prose.
+
     Analyze the provided business context focusing on:
     - Competitive Landscape and Benchmarking.
     - SWOT Analysis and Porter's Five Forces.

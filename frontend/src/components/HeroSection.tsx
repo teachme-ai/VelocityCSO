@@ -929,42 +929,6 @@ ${context}`.trim();
                                         />
                                     </section>
 
-                                    {/* Zone 2: Deep Analysis & Risk Propagation */}
-                                    <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-start max-w-7xl mx-auto w-full">
-                                        <div className="space-y-6">
-                                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 backdrop-blur-xl">
-                                                <div className="report-content prose prose-invert prose-sm max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-p:text-zinc-300 prose-p:leading-relaxed prose-strong:text-white prose-pre:bg-zinc-900">
-                                                    <ReactMarkdown
-                                                        components={{
-                                                            h1: ({ children }) => <h1 className="text-3xl font-bold text-white mb-6 mt-10">{children}</h1>,
-                                                            h2: ({ children }) => <h2 className="text-xl font-bold text-violet-300 mb-4 mt-8 uppercase tracking-wider">{children}</h2>,
-                                                            h3: ({ children }) => <h3 className="text-lg font-bold text-white mb-3 mt-6">{children}</h3>,
-                                                            p: ({ children }) => {
-                                                                const text = String(children);
-                                                                if (text.toLowerCase().includes('asymmetric play')) {
-                                                                    return <AsymmetricCard>{children}</AsymmetricCard>;
-                                                                }
-                                                                if (text.startsWith('Because ') && (text.includes(' cannot ') || text.includes(' can\'t '))) {
-                                                                    return <SavvyRecommendation>{children}</SavvyRecommendation>;
-                                                                }
-                                                                return <p className="mb-4 leading-relaxed">{children}</p>;
-                                                            }
-                                                        }}
-                                                    >
-                                                        {sanitizeReport(result.analysis_markdown || '')}
-                                                    </ReactMarkdown>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-6">
-                                            <StressTestPanel
-                                                reportId={currentReportId || ''}
-                                                onStressResult={handleStressResult}
-                                                apiBase={import.meta.env.VITE_API_URL || ''}
-                                            />
-                                        </div>
-                                    </section>
                                 </motion.div>
                             )}
 
@@ -1047,11 +1011,48 @@ ${context}`.trim();
                                 <motion.div
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="max-w-7xl mx-auto w-full"
+                                    className="max-w-7xl mx-auto w-full space-y-8"
                                 >
                                     {result.frameworks?.blue_ocean && (
                                         <BlueOceanCanvas data={result.frameworks.blue_ocean} />
                                     )}
+
+                                    {/* Executive Report & Stress Test */}
+                                    <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-start">
+                                        <div className="space-y-6">
+                                            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 backdrop-blur-xl">
+                                                <div className="report-content prose prose-invert prose-sm max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-p:text-zinc-300 prose-p:leading-relaxed prose-strong:text-white prose-pre:bg-zinc-900">
+                                                    <ReactMarkdown
+                                                        components={{
+                                                            h1: ({ children }) => <h1 className="text-3xl font-bold text-white mb-6 mt-10">{children}</h1>,
+                                                            h2: ({ children }) => <h2 className="text-xl font-bold text-violet-300 mb-4 mt-8 uppercase tracking-wider">{children}</h2>,
+                                                            h3: ({ children }) => <h3 className="text-lg font-bold text-white mb-3 mt-6">{children}</h3>,
+                                                            p: ({ children }) => {
+                                                                const text = String(children);
+                                                                if (text.toLowerCase().includes('asymmetric play')) {
+                                                                    return <AsymmetricCard>{children}</AsymmetricCard>;
+                                                                }
+                                                                if (text.startsWith('Because ') && (text.includes(' cannot ') || text.includes(' can\'t '))) {
+                                                                    return <SavvyRecommendation>{children}</SavvyRecommendation>;
+                                                                }
+                                                                return <p className="mb-4 leading-relaxed">{children}</p>;
+                                                            }
+                                                        }}
+                                                    >
+                                                        {sanitizeReport(result.analysis_markdown || '')}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-6">
+                                            <StressTestPanel
+                                                reportId={currentReportId || ''}
+                                                onStressResult={handleStressResult}
+                                                apiBase={import.meta.env.VITE_API_URL || ''}
+                                            />
+                                        </div>
+                                    </section>
                                 </motion.div>
                             )}
                         </div>
