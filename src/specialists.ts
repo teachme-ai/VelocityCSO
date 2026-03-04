@@ -476,7 +476,6 @@ export const FINANCE_ANALYST_INSTRUCTION = `
     
     UNIT ECONOMICS: Compute or estimate LTV, CAC, LTV:CAC Ratio, CAC Payback, Gross Margin %, Rule of 40, Burn Multiple, Magic Number.
     State assumptions. For each metric provide value, benchmark, RAG status (GREEN|AMBER|RED), and one sentence note.
-    Include sensitivity table: how LTV:CAC changes if ARPU -20%, Churn +50%, CAC +30%.
 
     ${COT_SCAFFOLD}
     ${rubricRule(["ROI Projection", "Risk Tolerance", "Capital Efficiency", "Customer Concentration Risk"])}
@@ -487,9 +486,25 @@ export const FINANCE_ANALYST_INSTRUCTION = `
     3. "Capital Efficiency"
     4. "Customer Concentration Risk"
     
-    Add to JSON output:
-    "unitEconomics": { "assumptions": [], "metrics": { "ltv_cac": { "value": "", "benchmark": "> 3:1", "status": "", "note": "" }, "cac_payback_months": { "value": null, "benchmark": "< 12 months (SMB)", "status": "", "note": "" }, "gross_margin_pct": { "value": null, "benchmark": "70-85% (SaaS)", "status": "", "note": "" }, "rule_of_40": { "value": null, "benchmark": "> 40", "status": "", "note": "" }, "burn_multiple": { "value": null, "benchmark": "< 1.5", "status": "", "note": "" }, "magic_number": { "value": null, "benchmark": "> 0.75", "status": "", "note": "" } }, "sensitivity": { "base_ltv_cac": 0.0, "arpu_down_20pct": 0.0, "churn_up_50pct": 0.0, "cac_up_30pct": 0.0 } },
-    "monteCarloInputs": { "arpu_low": 0, "arpu_base": 0, "arpu_high": 0, "churn_low": 0, "churn_base": 0, "churn_high": 0, "cac_low": 0, "cac_base": 0, "cac_high": 0, "growth_rate_low": 0, "growth_rate_base": 0, "growth_rate_high": 0, "gross_margin_low": 0, "gross_margin_base": 0, "gross_margin_high": 0 }
+    Add to JSON output (use null for any metric you cannot estimate):
+    "unitEconomics": {
+      "assumptions": ["string"],
+      "metrics": {
+        "ltv_cac": { "value": "string", "benchmark": "> 3:1", "status": "GREEN|AMBER|RED", "note": "string" },
+        "cac_payback_months": { "value": null, "benchmark": "< 12 months", "status": "", "note": "" },
+        "gross_margin_pct": { "value": null, "benchmark": "70-85%", "status": "", "note": "" },
+        "rule_of_40": { "value": null, "benchmark": "> 40", "status": "", "note": "" },
+        "burn_multiple": { "value": null, "benchmark": "< 1.5", "status": "", "note": "" },
+        "magic_number": { "value": null, "benchmark": "> 0.75", "status": "", "note": "" }
+      }
+    },
+    "monteCarloInputs": {
+      "arpu_low": 0, "arpu_base": 0, "arpu_high": 0,
+      "churn_low": 0, "churn_base": 0, "churn_high": 0,
+      "cac_low": 0, "cac_base": 0, "cac_high": 0,
+      "growth_rate_low": 0, "growth_rate_base": 0, "growth_rate_high": 0,
+      "gross_margin_low": 0, "gross_margin_base": 0, "gross_margin_high": 0
+    }
     
     ${jsonInstruction}
 `;
