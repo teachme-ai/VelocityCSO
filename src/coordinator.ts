@@ -217,7 +217,8 @@ export class ChiefStrategyAgent {
     private async runSpecialist(agent: LlmAgent, context: string, sessionId: string): Promise<any> {
         const startTime = Date.now();
         const agentName = agent.name!;
-        const systemInstruction = specialistInstructions[agentName] || '';
+        // Fallback to agent.instruction if not found in the custom mapping
+        const systemInstruction = (specialistInstructions[agentName] || agent.instruction || '').toString();
         const userPrompt = `${context}\n\nCRITICAL: You MUST return your analysis as a clean JSON object according to your schema. Do NOT include markdown text outside the JSON. All dimensions for your lens MUST be scored 0-100.`;
 
         emitHeartbeat(sessionId, `◆ ${agentName}: sensing market signals and identifying asymmetric plays...`);
