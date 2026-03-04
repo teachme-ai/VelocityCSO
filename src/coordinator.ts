@@ -396,12 +396,12 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         }
 
         const frameworks = {
-            blueOcean: blueOceanResult,
-            fiveForces: innovationResult?.portersFiveForces || null,
+            blue_ocean: blueOceanResult,
+            five_forces: innovationResult?.portersFiveForces || null,
             ansoffMatrix: innovationResult?.ansoffMatrix || null,
             vrioAnalysis: innovationResult?.vrioAnalysis || null,
-            unitEconomics: financeResult?.unitEconomics || null,
-            monteCarlo: monteCarloResult,
+            unit_economics: financeResult?.unitEconomics || null,
+            monte_carlo: monteCarloResult,
             wardley: wardleyResult
         };
 

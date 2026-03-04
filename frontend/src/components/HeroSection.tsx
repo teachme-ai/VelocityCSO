@@ -981,15 +981,45 @@ ${context}`.trim();
                                     )}
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                        {result.frameworks?.five_forces && <FiveForces data={result.frameworks.five_forces} />}
-                                        {result.frameworks?.wardley && (
+                                        {result.frameworks?.five_forces ? (
+                                            <FiveForces data={result.frameworks.five_forces} />
+                                        ) : (
+                                            <PlaceholderCard
+                                                icon={ShieldAlert}
+                                                title="Five Forces Blocked"
+                                                description="Insufficient competitive signal to model Porter's Five Forces. Provide competitor names and market dynamics to unlock."
+                                            />
+                                        )}
+                                        {result.frameworks?.wardley ? (
                                             <WardleyMap
                                                 capabilities={result.frameworks.wardley.capabilities}
                                                 warnings={result.frameworks.wardley.strategic_warnings}
                                             />
+                                        ) : (
+                                            <PlaceholderCard
+                                                icon={ShieldAlert}
+                                                title="Wardley Map Blocked"
+                                                description="Value chain positioning requires capability and maturity data. Describe your core product dependencies to generate this map."
+                                            />
                                         )}
-                                        {result.frameworks?.ansoffMatrix && <AnsoffMatrix data={result.frameworks.ansoffMatrix} />}
-                                        {result.frameworks?.vrioAnalysis && <VrioCard data={result.frameworks.vrioAnalysis} />}
+                                        {result.frameworks?.ansoffMatrix ? (
+                                            <AnsoffMatrix data={result.frameworks.ansoffMatrix} />
+                                        ) : (
+                                            <PlaceholderCard
+                                                icon={ShieldAlert}
+                                                title="Ansoff Matrix Blocked"
+                                                description="Growth vector analysis requires product and market context. Describe your current offerings and target segments to unlock."
+                                            />
+                                        )}
+                                        {result.frameworks?.vrioAnalysis ? (
+                                            <VrioCard data={result.frameworks.vrioAnalysis} />
+                                        ) : (
+                                            <PlaceholderCard
+                                                icon={ShieldAlert}
+                                                title="VRIO Analysis Blocked"
+                                                description="Competitive advantage evaluation requires a clearly stated core capability. Describe your primary differentiator to unlock."
+                                            />
+                                        )}
                                     </div>
 
                                     {result.frameworks?.monte_carlo ? (
@@ -1013,8 +1043,14 @@ ${context}`.trim();
                                     animate={{ opacity: 1, y: 0 }}
                                     className="max-w-7xl mx-auto w-full space-y-8"
                                 >
-                                    {result.frameworks?.blue_ocean && (
+                                    {result.frameworks?.blue_ocean ? (
                                         <BlueOceanCanvas data={result.frameworks.blue_ocean} />
+                                    ) : (
+                                        <PlaceholderCard
+                                            icon={ShieldAlert}
+                                            title="Blue Ocean Canvas Blocked"
+                                            description="Strategic canvas requires competitor comparison data and value factor analysis. Provide market alternatives to generate this view."
+                                        />
                                     )}
 
                                     {/* Executive Report & Stress Test */}
