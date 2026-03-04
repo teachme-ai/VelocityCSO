@@ -249,8 +249,16 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
         res.end();
 
     } catch (error: any) {
-        tlog({ severity: 'ERROR', message: 'Analyze endpoint failed', error: error.message, session_id: sessionId });
-        sseWrite(res, { type: 'ERROR', message: error.message });
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : 'No stack trace available';
+        tlog({
+            severity: 'ERROR',
+            message: 'Analyze endpoint failed',
+            error: errorMessage,
+            stack: errorStack,
+            session_id: sessionId
+        });
+        sseWrite(res, { type: 'ERROR', message: errorMessage });
         res.end();
     }
 });
@@ -399,9 +407,17 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
         res.end();
 
     } catch (error: any) {
-        tlog({ severity: 'ERROR', message: 'Clarify endpoint failed', error: error.message, session_id: sessionId });
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : 'No stack trace available';
+        tlog({
+            severity: 'ERROR',
+            message: 'Clarify endpoint failed',
+            error: errorMessage,
+            stack: errorStack,
+            session_id: sessionId
+        });
         await releaseLock(sessionId); // Still needed on catch
-        sseWrite(res, { type: 'ERROR', message: error.message });
+        sseWrite(res, { type: 'ERROR', message: errorMessage });
         res.end();
     }
 });

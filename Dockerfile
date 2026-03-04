@@ -20,6 +20,7 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine
 
+ENV NODE_ENV=development
 WORKDIR /app
 
 COPY --from=builder /app/package*.json ./

@@ -163,6 +163,11 @@ export function HeroSection() {
                 body: JSON.stringify({ business_context: context, stress_test: stressTest }),
             });
 
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || `Server responded with ${response.status}`);
+            }
+
             for await (const event of readSSE(response)) {
                 addEvent(event as StatusEvent);
 
@@ -721,7 +726,10 @@ export function HeroSection() {
                                         )}
                                         {result.frameworks.monteCarlo && (
                                             <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
-                                                <MonteCarloChart data={result.frameworks.monteCarlo} />
+                                                <MonteCarloChart
+                                                    distributions={result.frameworks.monteCarlo.distributions}
+                                                    riskDrivers={result.frameworks.monteCarlo.risk_drivers}
+                                                />
                                             </div>
                                         )}
                                     </div>
