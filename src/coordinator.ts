@@ -299,11 +299,15 @@ export class ChiefStrategyAgent {
         const startTime = Date.now();
         emitHeartbeat(sessionId, '◆ Critic: performing cross-functional gap-analysis...');
 
-        const criticInput = `
-            Review the following specialists for business: ${businessContext.slice(0, 500)}
-            
-            ${Object.entries(specialistOutputs).map(([name, out]) => `--- ${name} ---\n${JSON.stringify(out)}`).join('\n\n')}
-        `.trim();
+        // Strip analysis_markdown and raw output — critic only needs scores and confidence.
+        // Passing full JSON (including prose) wastes ~3,000 tokens on the critic call.
+        const criticInput = `Business: ${businessContext.slice(0, 300)}
+
+${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.stringify({
+    dimensions: out.dimensions,
+    confidence_score: out.confidence_score,
+    missing_signals: (out.missing_signals || []).slice(0, 3),
+})}`).join('\n')}`;
 
         let raw = '';
         try {
@@ -372,18 +376,18 @@ export class ChiefStrategyAgent {
         Object.assign(finalDimensions, marketResult.dimensions, innovationResult.dimensions);
         Object.assign(richDimensions, marketResult.richDimensions, innovationResult.richDimensions);
 
-        // ── PHASE B: Commercial + Operations (consume Phase A) ──────────────────
-        const phaseAFindings = `
-PHASE A FINDINGS (use these to calibrate your analysis):
-MARKET: ${marketResult.analysis_markdown}
-INNOVATION: ${innovationResult.analysis_markdown}
-        `.trim();
+        // ── PHASE B: Commercial + Operations (consume Phase A summary) ──────────
+        // Phase A markdown → summarize once → pass only the summary downstream.
+        // Do NOT re-prepend full businessContext to Phase B/C: the summary already
+        // contains the key signals. This saves ~2,000–4,000 tokens across 3 calls.
+        const phaseAFindings = `MARKET: ${marketResult.analysis_markdown}\nINNOVATION: ${innovationResult.analysis_markdown}`;
 
-        emitHeartbeat(sessionId, '◆ CSO: optimizing Phase A intelligence for downstream consumption...');
+        emitHeartbeat(sessionId, '◆ CSO: compressing Phase A intelligence...');
         const summarizedPhaseA = await this.summarize(phaseAFindings, sessionId);
 
         emitHeartbeat(sessionId, '◆ CSO Phase B: Commercial & Operations analysis...');
-        const phaseBContext = `${businessContext}\n\nPHASE A SUMMARY:\n${summarizedPhaseA}`;
+        // Context = original business description + compressed Phase A signal
+        const phaseBContext = `BUSINESS CONTEXT:\n${businessContext}\n\nPHASE A INTELLIGENCE:\n${summarizedPhaseA}`;
         const [commercialResult, operationsResult] = await Promise.all([
             this.runSpecialist(specialists.find(s => s.name === 'commercial_analyst')!, phaseBContext, sessionId),
             this.runSpecialist(specialists.find(s => s.name === 'operations_analyst')!, phaseBContext, sessionId)
@@ -394,19 +398,19 @@ INNOVATION: ${innovationResult.analysis_markdown}
         Object.assign(finalDimensions, commercialResult.dimensions, operationsResult.dimensions);
         Object.assign(richDimensions, commercialResult.richDimensions, operationsResult.richDimensions);
 
-        // ── PHASE C: Finance (consumes Phase A + B) ──────────────────────────────
-        const phaseBFindings = `
-COMMERCIAL: ${commercialResult.analysis_markdown}
-OPERATIONS: ${operationsResult.analysis_markdown}
-        `.trim();
+        // ── PHASE C: Finance (consumes summarized A + B findings) ───────────────
+        // CRITICAL: Feed summarizedPhaseA (already compressed) into the B summarizer,
+        // not the raw phaseAFindings again — avoids re-summarizing 2,500 already-compressed tokens.
+        const phaseBFindings = `COMMERCIAL: ${commercialResult.analysis_markdown}\nOPERATIONS: ${operationsResult.analysis_markdown}`;
 
-        emitHeartbeat(sessionId, '◆ CSO: optimizing Phase B intelligence for financial modeling...');
-        const summarizedPhaseB = await this.summarize(`${phaseAFindings}\n\n${phaseBFindings}`, sessionId);
+        emitHeartbeat(sessionId, '◆ CSO: compressing Phase B intelligence for financial modeling...');
+        const summarizedPhaseB = await this.summarize(`${summarizedPhaseA}\n\n${phaseBFindings}`, sessionId);
 
         emitHeartbeat(sessionId, '◆ CSO Phase C: Financial structure analysis...');
+        // Finance only gets the compressed A+B summary — no need for raw businessContext again
         const financeResult = await this.runSpecialist(
             specialists.find(s => s.name === 'finance_analyst')!,
-            `${businessContext}\n\nPHASE A+B SUMMARY:\n${summarizedPhaseB}`,
+            `BUSINESS CONTEXT:\n${businessContext}\n\nCOMPRESSED INTELLIGENCE (A+B):\n${summarizedPhaseB}`,
             sessionId
         );
 
@@ -481,15 +485,29 @@ OPERATIONS: ${operationsResult.analysis_markdown}
         emitHeartbeat(sessionId, '◆ Critic: Verifying cross-functional alignment of specialist findings...');
         emitHeartbeat(sessionId, '◆ CSO: Synthesizing narrative for executive board-room delivery...');
 
+        // Build a tight specialist digest: only the 1-2 sentence key finding per agent,
+        // plus the dimension scores they own. Replaces 800-char prose slices × 5 (~4K tokens)
+        // with a structured 300-char-per-agent digest (~1.5K tokens total).
+        const specialistDigest = Object.entries(specialistOutputs)
+            .filter(([name]) => !['blue_ocean', 'wardley', 'monte_carlo'].includes(name))
+            .map(([name, out]) => {
+                const scores = Object.entries(out.dimensions || {})
+                    .map(([dim, score]) => `${dim}: ${score}`)
+                    .join(', ');
+                const topInsight = (out.analysis_markdown || '').split('\n').find((l: string) => l.trim().length > 40) || '';
+                return `[${name}] ${scores}\nKey signal: ${topInsight.slice(0, 200)}`;
+            })
+            .join('\n\n');
+
         const synthesisPrompt = `
             You are the Chief Strategy Officer. You have received independent analysis from your specialists.
-            
+
             BUSINESS CONTEXT:
             ${businessContext}
-            
-            SPECIALIST ANALYSES:
-            ${Object.entries(specialistOutputs).map(([name, out]) => `--- ${name} ---\n${(out.analysis_markdown || '').slice(0, 800)}`).join('\n\n')}
-            
+
+            SPECIALIST DIGEST (scores + key signal per agent):
+            ${specialistDigest}
+
             MERGED DIMENSION SCORES:
             ${JSON.stringify(finalDimensions, null, 2)}
             

@@ -39,6 +39,20 @@ export async function callGemini(
             throw new Error('Empty response text from Gemini');
         }
 
+        // Log real token counts from API metadata when available.
+        // Replaces char/4 estimation (which underestimates JSON by 25-40%).
+        const usage = response.usageMetadata;
+        if (usage) {
+            log({
+                severity: 'DEBUG',
+                message: `Token usage [${model}]`,
+                model_requested: model,
+                input_tokens_actual: usage.promptTokenCount,
+                output_tokens_actual: usage.candidatesTokenCount,
+                total_tokens_actual: usage.totalTokenCount,
+            });
+        }
+
         return text;
     } catch (e: any) {
         const keyStatus = apiKey ? `present (${apiKey.slice(0, 4)}...${apiKey.slice(-4)})` : 'missing';
