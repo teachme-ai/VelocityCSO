@@ -226,8 +226,14 @@ export class ChiefStrategyAgent {
         let rawOutput = '';
         try {
             rawOutput = await callGemini('gemini-2.0-flash', systemInstruction, userPrompt);
-        } catch (e) {
-            log({ severity: 'ERROR', message: `Specialist API call failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e) });
+        } catch (e: any) {
+            log({
+                severity: 'ERROR',
+                message: `Specialist API call failed: ${agentName}`,
+                agent_id: agentName,
+                session_id: sessionId,
+                error: e.message || String(e)
+            });
         }
 
         const result = robustParse(agentName, rawOutput, sessionId);
@@ -266,9 +272,9 @@ export class ChiefStrategyAgent {
         let raw = '';
         try {
             const CRITIC_INSTRUCTION = `You are the Strategic Critic. Review specialist outputs for contradictions, unsubstantiated scores, and generic advice. Return ONLY JSON: { "flags": [ { "specialist": "", "dimension": "", "issue": "", "description": "", "suggested_recheck": "" } ], "overall_coherence_score": 0-100, "approved_specialists": [], "requires_rerun": [] }. If no issues: { "flags": [], "overall_coherence_score": 95, "approved_specialists": [...all 5...], "requires_rerun": [] }`;
-            raw = await callGemini('gemini-2.5-pro', CRITIC_INSTRUCTION, criticInput);
-        } catch (e) {
-            log({ severity: 'WARNING', message: 'Critic API call failed', session_id: sessionId, error: String(e) });
+            raw = await callGemini('gemini-1.5-pro', CRITIC_INSTRUCTION, criticInput);
+        } catch (e: any) {
+            log({ severity: 'WARNING', message: 'Critic API call failed', session_id: sessionId, error: e.message || String(e) });
         }
 
         const result = robustParse('strategic_critic', raw, sessionId);
@@ -701,12 +707,12 @@ Only include a dimension in mitigation_cards if its stressed score is below 40.
         let rawOutput = '';
         try {
             rawOutput = await callGemini(
-                'gemini-2.5-flash',
+                'gemini-2.0-flash',
                 'You are a Global Executive stress-test analyst. Respond ONLY with a raw JSON object as instructed.',
                 stressPrompt
             );
-        } catch (e) {
-            log({ severity: 'ERROR', message: 'Stress test API call failed', session_id: sessionId, error: String(e) });
+        } catch (e: any) {
+            log({ severity: 'ERROR', message: 'Stress test API call failed', session_id: sessionId, error: e.message || String(e) });
         }
 
         // Robust JSON extraction

@@ -406,7 +406,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             : enrichedContext;
 
         const { report, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
-        const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
+        const csoCost = estimateCost('gemini-1.5-pro', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
         // Save to Firestore with structured memory
@@ -561,7 +561,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
 
         const { report, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await analysisPromise;
         clearTimeout(safetyReceipt);
-        const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
+        const csoCost = estimateCost('gemini-1.5-pro', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
         let docId = `local-${randomUUID()}`;
