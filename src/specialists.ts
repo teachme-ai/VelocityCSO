@@ -385,53 +385,72 @@ export const MARKET_ANALYST_INSTRUCTION = `
     ${jsonInstruction}
 `;
 
+// ─── Innovation analyst split into two focused calls ─────────────────────────
+// Call 1: Frameworks only (Porter's + Ansoff + VRIO). No dimensions, no CoT prose.
+// Target output: ~1,800 tokens. Hard-capped at 2,048 tokens via maxOutputTokens.
+export const INNOVATION_FRAMEWORKS_INSTRUCTION = `
+    You are a competitive strategy expert. Analyze the business context and return ONLY a raw JSON object.
+    Keep ALL text fields (primary_driver, rationale, killer_move, evidence, verdict_rationale) to ONE sentence each.
+    Return ONLY the JSON below — no prose, no markdown, no explanation outside the JSON.
+
+    {
+      "portersFiveForces": {
+        "scores": {
+          "competitive_rivalry":      { "score": 0, "primary_driver": "1 sentence" },
+          "threat_of_new_entrants":   { "score": 0, "primary_driver": "1 sentence" },
+          "threat_of_substitutes":    { "score": 0, "primary_driver": "1 sentence" },
+          "buyer_power":              { "score": 0, "primary_driver": "1 sentence" },
+          "supplier_power":           { "score": 0, "primary_driver": "1 sentence" }
+        },
+        "structural_attractiveness_score": 0,
+        "interaction_effect_warning": null
+      },
+      "ansoffMatrix": {
+        "market_penetration":  { "score": 0, "rationale": "1 sentence", "killer_move": "1 sentence" },
+        "market_development":  { "score": 0, "rationale": "1 sentence", "killer_move": "1 sentence" },
+        "product_development": { "score": 0, "rationale": "1 sentence", "killer_move": "1 sentence" },
+        "diversification":     { "score": 0, "rationale": "1 sentence", "killer_move": "1 sentence" },
+        "primary_vector": "market_penetration|market_development|product_development|diversification",
+        "strategic_verdict": "1 sentence"
+      },
+      "vrioAnalysis": {
+        "resource_evaluated": "name of primary advantage",
+        "valuable":    { "score": 0, "evidence": "1 sentence" },
+        "rare":        { "score": 0, "evidence": "1 sentence" },
+        "inimitable":  { "score": 0, "evidence": "1 sentence" },
+        "organised":   { "score": 0, "evidence": "1 sentence" },
+        "verdict": "Sustained Competitive Advantage|Temporary Advantage|Competitive Parity|No Advantage",
+        "verdict_rationale": "1 sentence"
+      }
+    }
+
+    PORTER scoring: Higher = more intense pressure. Rivalry 25%, Entrants 20%, Substitutes 20%, Buyers 20%, Suppliers 15%.
+    ANSOFF scoring: Higher = more attractive given current position.
+    VRIO scoring: 0 = no advantage, 100 = unassailable.
+`;
+
+// Call 2: Dimensions + brief analysis. No frameworks. Target output: ~1,500 tokens.
 export const INNOVATION_ANALYST_INSTRUCTION = `
-    IMPORTANT: Keep all "rationale", "evidence", "primary_driver", and "killer_move" fields to 1-2 sentences maximum. The total JSON output must not exceed 3000 tokens. Prioritise completeness of structure over depth of prose.
+    You are a competitive strategy expert. Analyze the business context and return ONLY a raw JSON object.
+    Keep "analysis_markdown" under 200 words. Keep "justification" and "improvement_action" to 1-2 sentences each.
 
-    Analyze the provided business context focusing on:
-    - Competitive Landscape and Benchmarking.
-    - SWOT Analysis and Porter's Five Forces.
-    - Three Horizons of Growth Framework.
-    
-    PORTER'S FIVE FORCES ANALYSIS
-    Score each force on competitive intensity (0-100).
-    Higher score = stronger force = more pressure on the business.
-
-    1. COMPETITIVE_RIVALRY (0-100) — rivals, differentiation, price wars
-    2. THREAT_OF_NEW_ENTRANTS (0-100) — barriers to entry, capital, regulation
-    3. THREAT_OF_SUBSTITUTES (0-100) — alternatives, switching costs
-    4. BUYER_POWER (0-100) — concentration, switching ease
-    5. SUPPLIER_POWER (0-100) — supplier concentration, forward integration
-
-    STRUCTURAL ATTRACTIVENESS SCORE = 100 - weighted average (Rivalry 25%, Entrants 20%, Substitutes 20%, Buyers 20%, Suppliers 15%)
-
-    ANSOFF MATRIX — score each vector 0-100 for attractiveness:
-    1. MARKET PENETRATION (existing product × existing market)
-    2. MARKET DEVELOPMENT (existing product × new market)
-    3. PRODUCT DEVELOPMENT (new product × existing market)
-    4. DIVERSIFICATION (new product × new market)
-    Identify primary vector and killer move.
-
-    VRIO FRAMEWORK — evaluate primary competitive advantage:
-    V — Valuable (0-100), R — Rare (0-100), I — Inimitable (0-100), O — Organised (0-100)
-    Verdict: Sustained | Temporary | Parity | None
-
-    ${COT_SCAFFOLD}
     ${rubricRule(["Competitive Defensibility", "Model Innovation", "Flywheel Potential", "Network Effects Strength", "Data Asset Quality"])}
- 
-    You must extract and score the following 5 dimensions (0-100):
-    1. "Competitive Defensibility"
-    2. "Model Innovation"
-    3. "Flywheel Potential"
-    4. "Network Effects Strength"
-    5. "Data Asset Quality"
-    
-    Add to JSON output:
-    "portersFiveForces": { "scores": { "competitive_rivalry": { "score": 0, "primary_driver": "" }, "threat_of_new_entrants": { "score": 0, "primary_driver": "" }, "threat_of_substitutes": { "score": 0, "primary_driver": "" }, "buyer_power": { "score": 0, "primary_driver": "" }, "supplier_power": { "score": 0, "primary_driver": "" } }, "structural_attractiveness_score": 0, "interaction_effect_warning": null },
-    "ansoffMatrix": { "market_penetration": { "score": 0, "rationale": "", "killer_move": "" }, "market_development": { "score": 0, "rationale": "", "killer_move": "" }, "product_development": { "score": 0, "rationale": "", "killer_move": "" }, "diversification": { "score": 0, "rationale": "", "killer_move": "" }, "primary_vector": "", "strategic_verdict": "" },
-    "vrioAnalysis": { "resource_evaluated": "", "valuable": { "score": 0, "evidence": "" }, "rare": { "score": 0, "evidence": "" }, "inimitable": { "score": 0, "evidence": "" }, "organised": { "score": 0, "evidence": "" }, "verdict": "", "verdict_rationale": "" }
 
-    ${jsonInstruction}
+    Score these 5 dimensions (0-100). Do NOT include Porter's, Ansoff, or VRIO — those are handled separately.
+
+    {
+      "analysis_markdown": "Brief 2-paragraph competitive summary (max 200 words)",
+      "confidence_score": 0,
+      "data_sources": ["source1"],
+      "missing_signals": ["gap1"],
+      "dimensions": {
+        "Competitive Defensibility": { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" },
+        "Model Innovation":          { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" },
+        "Flywheel Potential":        { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" },
+        "Network Effects Strength":  { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" },
+        "Data Asset Quality":        { "score": 0, "justification": "1-2 sentences", "key_assumption": "1 sentence", "improvement_action": "1 sentence" }
+      }
+    }
 `;
 
 export const COMMERCIAL_ANALYST_INSTRUCTION = `
@@ -515,6 +534,7 @@ export const FINANCE_ANALYST_INSTRUCTION = `
 export const specialistInstructions: Record<string, string> = {
   'market_analyst': MARKET_ANALYST_INSTRUCTION,
   'innovation_analyst': INNOVATION_ANALYST_INSTRUCTION,
+  'innovation_frameworks': INNOVATION_FRAMEWORKS_INSTRUCTION,
   'commercial_analyst': COMMERCIAL_ANALYST_INSTRUCTION,
   'operations_analyst': OPERATIONS_ANALYST_INSTRUCTION,
   'finance_analyst': FINANCE_ANALYST_INSTRUCTION,

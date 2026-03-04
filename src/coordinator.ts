@@ -258,6 +258,43 @@ export class ChiefStrategyAgent {
         return result;
     }
 
+    /**
+     * Runs a named specialist by instruction key (not LlmAgent instance).
+     * Supports maxOutputTokens to hard-cap output size.
+     */
+    private async runSpecialistDirect(agentName: string, context: string, sessionId: string, maxOutputTokens?: number): Promise<any> {
+        const startTime = Date.now();
+        const systemInstruction = (specialistInstructions[agentName] || '').toString();
+        const userPrompt = `${context}\n\nCRITICAL: Return ONLY a raw JSON object. No markdown, no prose outside JSON.`;
+
+        emitHeartbeat(sessionId, `◆ ${agentName}: running focused analysis...`);
+        let rawOutput = '';
+        try {
+            rawOutput = await callGemini('gemini-2.5-flash', systemInstruction, userPrompt, maxOutputTokens);
+        } catch (e: any) {
+            log({ severity: 'ERROR', message: `Specialist API call failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: e.message || String(e) });
+        }
+
+        const result = robustParse(agentName, rawOutput, sessionId);
+        const latency = Date.now() - startTime;
+        const cost = estimateCost('gemini-2.5-flash', context.length, rawOutput.length);
+
+        log({
+            severity: 'INFO',
+            message: `Specialist complete: ${agentName}`,
+            agent_id: agentName,
+            phase: 'specialist_run',
+            session_id: sessionId,
+            latency_ms: latency,
+            cost_usd: cost.usd,
+            tokens_in: cost.inputTokens,
+            tokens_out: cost.outputTokens
+        });
+
+        emitHeartbeat(sessionId, `◆ ${agentName}: analysis complete.`);
+        return result;
+    }
+
     private async runCritic(businessContext: string, specialistOutputs: Record<string, any>, sessionId: string): Promise<any> {
         const startTime = Date.now();
         emitHeartbeat(sessionId, '◆ Critic: performing cross-functional gap-analysis...');
@@ -319,11 +356,15 @@ export class ChiefStrategyAgent {
         const richDimensions: Record<string, any> = {};
         const specialistOutputs: Record<string, any> = {};
 
-        // ── PHASE A: Market + Innovation (parallel) ──────────────────────────
+        // ── PHASE A: Market + Innovation (parallel, innovation split into 2 calls) ──
+        // innovation_analyst → dimensions + analysis_markdown only (~1,500 tokens)
+        // innovation_frameworks → Porter's + Ansoff + VRIO only (~1,800 tokens)
+        // Split prevents JSON truncation at ~11K tokens from a single combined call.
         emitHeartbeat(sessionId, '◆ CSO Phase A: Market & Innovation analysis...');
-        const [marketResult, innovationResult] = await Promise.all([
+        const [marketResult, innovationResult, innovationFrameworks] = await Promise.all([
             this.runSpecialist(specialists.find(s => s.name === 'market_analyst')!, businessContext, sessionId),
-            this.runSpecialist(specialists.find(s => s.name === 'innovation_analyst')!, businessContext, sessionId)
+            this.runSpecialistDirect('innovation_analyst', businessContext, sessionId, 2048),
+            this.runSpecialistDirect('innovation_frameworks', businessContext, sessionId, 2048),
         ]);
 
         specialistOutputs['market_analyst'] = marketResult;
@@ -397,9 +438,9 @@ OPERATIONS: ${operationsResult.analysis_markdown}
 
         const frameworks = {
             blue_ocean: blueOceanResult,
-            five_forces: innovationResult?.portersFiveForces || null,
-            ansoffMatrix: innovationResult?.ansoffMatrix || null,
-            vrioAnalysis: innovationResult?.vrioAnalysis || null,
+            five_forces: innovationFrameworks?.portersFiveForces || null,
+            ansoffMatrix: innovationFrameworks?.ansoffMatrix || null,
+            vrioAnalysis: innovationFrameworks?.vrioAnalysis || null,
             unit_economics: financeResult?.unitEconomics || null,
             monte_carlo: monteCarloResult,
             wardley: wardleyResult

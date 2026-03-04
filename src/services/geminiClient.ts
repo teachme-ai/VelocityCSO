@@ -21,12 +21,14 @@ const genAI = new GoogleGenerativeAI(apiKey);
 export async function callGemini(
     model: string,
     systemInstruction: string,
-    userPrompt: string
+    userPrompt: string,
+    maxOutputTokens?: number
 ): Promise<string> {
     try {
         const client = genAI.getGenerativeModel({
             model,
             systemInstruction,
+            generationConfig: maxOutputTokens ? { maxOutputTokens } : undefined,
         });
 
         const result = await client.generateContent(userPrompt);
