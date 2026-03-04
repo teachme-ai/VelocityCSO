@@ -1,4 +1,6 @@
 import { LlmAgent, InMemoryRunner, isFinalResponse } from '@google/adk';
+import { callGemini } from './services/geminiClient.js';
+import { specialistInstructions } from './specialists.js';
 import { randomUUID } from 'crypto';
 import { specialists } from './specialists.js';
 import { strategicCritic } from './critic.js';
@@ -188,27 +190,12 @@ export class ChiefStrategyAgent {
      */
     private async summarize(content: string, sessionId: string): Promise<string> {
         const startTime = Date.now();
-        const summarizerAgent = new LlmAgent({
-            name: 'summarizer_agent',
-            model: 'gemini-2.0-flash',
-            description: 'Strategic summary engine to optimize context usage.',
-            instruction: 'Compress the following strategic findings into a high-density executive summary. Focus on structural advantages, risks, and core metrics. Max 300 words.'
-        });
-
-        const runner = new InMemoryRunner({ agent: summarizerAgent, appName: 'velocity_summarizer' });
-        const internalId = randomUUID();
-        await runner.sessionService.createSession({ appName: 'velocity_summarizer', userId: 'cso_internal', sessionId: internalId });
-
-        const stream = runner.runAsync({
-            userId: 'cso_internal',
-            sessionId: internalId,
-            newMessage: { role: 'user', parts: [{ text: content }] }
-        });
-
+        const systemInstruction = 'Compress the following strategic findings into a high-density executive summary. Focus on structural advantages, risks, and core metrics. Max 300 words.';
         let summary = '';
-        for await (const ev of stream) {
-            const text = (ev.content?.parts || []).map((p: any) => p.text).filter(Boolean).join('');
-            if (text) summary += text;
+        try {
+            summary = await callGemini('gemini-2.0-flash', systemInstruction, content);
+        } catch (e) {
+            log({ severity: 'WARNING', message: 'Summarizer failed — using empty summary', session_id: sessionId, error: String(e) });
         }
 
         const latency = Date.now() - startTime;
@@ -231,58 +218,44 @@ export class ChiefStrategyAgent {
 
     private async runSpecialist(agent: LlmAgent, context: string, sessionId: string): Promise<any> {
         const startTime = Date.now();
-        const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist' });
-        const internalId = randomUUID();
-        await runner.sessionService.createSession({ appName: 'velocity_specialist', userId: 'cso_internal', sessionId: internalId });
+        const agentName = agent.name!;
+        const systemInstruction = specialistInstructions[agentName] || '';
+        const userPrompt = `${context}\n\nCRITICAL: You MUST return your analysis as a clean JSON object according to your schema. Do NOT include markdown text outside the JSON. All dimensions for your lens MUST be scored 0-100.`;
 
-        const eventStream = runner.runAsync({
-            userId: 'cso_internal',
-            sessionId: internalId,
-            newMessage: {
-                role: 'user',
-                parts: [{ text: `${context}\n\nCRITICAL: You MUST return your analysis as a clean JSON object according to your schema. Do NOT include markdown text outside the JSON. All dimensions for your lens MUST be scored 0-100.` }]
-            }
-        });
-
-        emitHeartbeat(sessionId, `◆ ${agent.name}: sensing market signals and identifying asymmetric plays...`);
+        emitHeartbeat(sessionId, `◆ ${agentName}: sensing market signals and identifying asymmetric plays...`);
         let rawOutput = '';
-        for await (const event of eventStream) {
-            // Capture text from ANY event — ADK may emit final output on events
-            // where event.author differs from the agent name (e.g. 'model' events).
-            const parts = event.content?.parts || [];
-            const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
-            if (text) rawOutput += text;
+        try {
+            rawOutput = await callGemini('gemini-2.0-flash', systemInstruction, userPrompt);
+        } catch (e) {
+            log({ severity: 'ERROR', message: `Specialist API call failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e) });
         }
 
-        const result = robustParse(agent.name!, rawOutput, sessionId);
+        const result = robustParse(agentName, rawOutput, sessionId);
         const latency = Date.now() - startTime;
         const outChars = JSON.stringify(result).length;
         const cost = estimateCost('gemini-2.0-flash', context.length, outChars);
 
         log({
             severity: 'INFO',
-            message: `Specialist complete: ${agent.name}`,
-            agent_id: agent.name,
+            message: `Specialist complete: ${agentName}`,
+            agent_id: agentName,
             phase: 'specialist_run',
             session_id: sessionId,
             latency_ms: latency,
-            agent_input: context.slice(0, 1000) + '...', // Truncate for log safety
+            agent_input: context.slice(0, 1000) + '...',
             agent_output: result,
             cost_usd: cost.usd,
             tokens_in: cost.inputTokens,
             tokens_out: cost.outputTokens
         });
 
-        emitHeartbeat(sessionId, `◆ ${agent.name}: analysis complete. alignment verified.`);
+        emitHeartbeat(sessionId, `◆ ${agentName}: analysis complete. alignment verified.`);
         return result;
     }
 
     private async runCritic(businessContext: string, specialistOutputs: Record<string, any>, sessionId: string): Promise<any> {
         const startTime = Date.now();
         emitHeartbeat(sessionId, '◆ Critic: performing cross-functional gap-analysis...');
-        const criticRunner = new InMemoryRunner({ agent: strategicCritic, appName: 'velocity_critic' });
-        const criticId = randomUUID();
-        await criticRunner.sessionService.createSession({ appName: 'velocity_critic', userId: 'cso_internal', sessionId: criticId });
 
         const criticInput = `
             Review the following specialists for business: ${businessContext.slice(0, 500)}
@@ -290,16 +263,12 @@ export class ChiefStrategyAgent {
             ${Object.entries(specialistOutputs).map(([name, out]) => `--- ${name} ---\n${JSON.stringify(out)}`).join('\n\n')}
         `.trim();
 
-        const stream = criticRunner.runAsync({
-            userId: 'cso_internal',
-            sessionId: criticId,
-            newMessage: { role: 'user', parts: [{ text: criticInput }] }
-        });
-
         let raw = '';
-        for await (const ev of stream) {
-            const text = (ev.content?.parts || []).map((p: any) => p.text).filter(Boolean).join('');
-            if (text) raw += text;
+        try {
+            const CRITIC_INSTRUCTION = `You are the Strategic Critic. Review specialist outputs for contradictions, unsubstantiated scores, and generic advice. Return ONLY JSON: { "flags": [ { "specialist": "", "dimension": "", "issue": "", "description": "", "suggested_recheck": "" } ], "overall_coherence_score": 0-100, "approved_specialists": [], "requires_rerun": [] }. If no issues: { "flags": [], "overall_coherence_score": 95, "approved_specialists": [...all 5...], "requires_rerun": [] }`;
+            raw = await callGemini('gemini-2.5-pro', CRITIC_INSTRUCTION, criticInput);
+        } catch (e) {
+            log({ severity: 'WARNING', message: 'Critic API call failed', session_id: sessionId, error: String(e) });
         }
 
         const result = robustParse('strategic_critic', raw, sessionId);
@@ -440,20 +409,17 @@ OPERATIONS: ${operationsResult.analysis_markdown}
 
             const retryPromises = rerunTargets.map(async (agent) => {
                 const feedback = (criticResult.flags || []).find((f: any) => f.specialist === agent.name)?.description || 'Align with other specialists.';
-                const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist_retry' });
-                const internalId = randomUUID();
-                await runner.sessionService.createSession({ appName: 'velocity_specialist_retry', userId: 'cso', sessionId: internalId });
-
-                const stream = runner.runAsync({
-                    userId: 'cso',
-                    sessionId: internalId,
-                    newMessage: { role: 'user', parts: [{ text: `${businessContext}\n\nCRITIC FEEDBACK: ${feedback}\n\nReturn ONLY the JSON.` }] }
-                });
-
+                const agentName = agent.name!;
+                const systemInstruction = specialistInstructions[agentName] || '';
                 let raw = '';
-                for await (const ev of stream) {
-                    const text = (ev.content?.parts || []).map((p: any) => p.text).filter(Boolean).join('');
-                    if (text) raw += text;
+                try {
+                    raw = await callGemini(
+                        'gemini-2.0-flash',
+                        systemInstruction,
+                        `${businessContext}\n\nCRITIC FEEDBACK: ${feedback}\n\nReturn ONLY the JSON.`
+                    );
+                } catch (e) {
+                    log({ severity: 'WARNING', message: `Retry failed for ${agentName}`, session_id: sessionId, error: String(e) });
                 }
 
                 const result = robustParse(agent.name!, raw);
@@ -552,21 +518,13 @@ OPERATIONS: ${operationsResult.analysis_markdown}
 
         emitHeartbeat(sessionId, '◆ CSO: merging 20-dimension matrix...');
         const synthesisStartTime = Date.now();
-        const csoRunner = new InMemoryRunner({ agent: this.agent, appName: 'velocity_cso_synthesis' });
-        const csoSessionId = randomUUID();
-        await csoRunner.sessionService.createSession({ appName: 'velocity_cso_synthesis', userId: 'cso_user', sessionId: csoSessionId });
-
-        const csoStream = csoRunner.runAsync({
-            userId: 'cso_user',
-            sessionId: csoSessionId,
-            newMessage: { role: 'user', parts: [{ text: synthesisPrompt }] }
-        });
 
         let finalReport = '';
-        for await (const event of csoStream) {
-            const parts = event.content?.parts || [];
-            const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
-            if (text) finalReport += text;
+        try {
+            const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
+            finalReport = await callGemini('gemini-1.5-pro', csoInstruction, synthesisPrompt);
+        } catch (e) {
+            log({ severity: 'ERROR', message: 'CSO synthesis API call failed', session_id: sessionId, error: String(e) });
         }
 
         const synthesisLatency = Date.now() - synthesisStartTime;
@@ -601,19 +559,15 @@ OPERATIONS: ${operationsResult.analysis_markdown}
 
         emitHeartbeat(sessionId, `◆ CSO: Identifying strategic moat (${topDimension[0]})...`);
         const moatStartTime = Date.now();
-        const moatAgent = new LlmAgent({
-            name: 'moat_analyst',
-            model: 'gemini-2.0-flash',
-            instruction: 'Write a concise 2-sentence Moat Rationale.'
-        });
-        const moatRunner = new InMemoryRunner({ agent: moatAgent, appName: 'moat_logic' });
-        const moatId = randomUUID();
-        await moatRunner.sessionService.createSession({ appName: 'moat_logic', userId: 'cso', sessionId: moatId });
-        const moatStream = moatRunner.runAsync({ userId: 'cso', sessionId: moatId, newMessage: { role: 'user', parts: [{ text: moatPrompt }] } });
         let moatRationale = '';
-        for await (const ev of moatStream) {
-            const text = (ev.content?.parts || []).map((p: any) => p.text).filter(Boolean).join('');
-            if (text) moatRationale += text;
+        try {
+            moatRationale = await callGemini(
+                'gemini-2.0-flash',
+                'Write a concise 2-sentence Moat Rationale. Use professional, aggressive, insightful tone. Frame as a Tier-1 Consulting strategic verdict.',
+                moatPrompt
+            );
+        } catch (e) {
+            log({ severity: 'WARNING', message: 'Moat agent API call failed', session_id: sessionId, error: String(e) });
         }
 
         if (!moatRationale.trim()) {
@@ -637,36 +591,27 @@ OPERATIONS: ${operationsResult.analysis_markdown}
             tokens_out: moatCost.outputTokens
         });
 
-        // 3. Safety Receipt Check: If dimensions are empty or generic, trigger a re-audit
-        const isGeneric = Object.values(finalDimensions).every(v => v === null || v === 0 || v === 50);
-        if (isGeneric) {
-            log({ severity: 'WARNING', message: 'Dimensions appear generic — potential parsing failure. Triggering specialized re-audit.', session_id: sessionId });
+        // 3. Safety Receipt Check: If dimensions failed parsing, trigger a specialized re-audit
+        // Note: we check if all dimensions are the default fallback value (50)
+        const hadParseFailures = Object.values(finalDimensions).every(v => v === 50 || v === null);
+
+        if (hadParseFailures) {
+            log({ severity: 'WARNING', message: 'Dimensions appear generic (Parse Failure) — Triggering specialized re-audit.', session_id: sessionId });
 
             // Re-run specialists once more with extreme JSON enforcement
             const retryPromises = specialists.map(async (agent) => {
-                const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist_retry' });
-                const internalId = randomUUID();
-                await runner.sessionService.createSession({ appName: 'velocity_specialist_retry', userId: 'cso_internal', sessionId: internalId });
-
-                const eventStream = runner.runAsync({
-                    userId: 'cso_internal',
-                    sessionId: internalId,
-                    newMessage: {
-                        role: 'user',
-                        parts: [{ text: `${businessContext}\n\nRE-AUDIT REQUIRED: Previous output failed parsing. Return ONLY a valid JSON object. No markdown.` }]
-                    }
-                });
+                const agentName = agent.name!;
+                const systemInstruction = specialistInstructions[agentName] || '';
+                const userPrompt = `${businessContext}\n\nRE-AUDIT REQUIRED: Previous output failed parsing. Return ONLY a valid JSON object. No markdown.`;
 
                 let rawOutput = '';
-                for await (const event of eventStream) {
-                    if (event.author === agent.name || isFinalResponse(event)) {
-                        const parts = event.content?.parts || [];
-                        const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
-                        if (text) rawOutput += text;
-                    }
+                try {
+                    rawOutput = await callGemini('gemini-2.0-flash', systemInstruction, userPrompt);
+                } catch (e) {
+                    log({ severity: 'ERROR', message: `Re-audit API call failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e) });
                 }
 
-                const result = robustParse(agent.name!, rawOutput, sessionId);
+                const result = robustParse(agentName, rawOutput, sessionId);
                 if (result.dimensions) {
                     Object.assign(finalDimensions, result.dimensions);
                 }
@@ -753,31 +698,15 @@ Dimensions to score: ${DIM_NAMES.join(', ')}
 Only include a dimension in mitigation_cards if its stressed score is below 40.
     `.trim();
 
-        // Run as a lightweight single-agent call (no sub-agents, no Discovery)
-        const stressAgent = new LlmAgent({
-            name: 'stress_test_agent',
-            model: 'gemini-2.0-flash',
-            description: 'Rapid stress-test recalculation specialist.',
-            instruction: 'You are a Global Executive stress-test analyst. Respond ONLY with a raw JSON object as instructed.',
-        });
-
-        const runner = new InMemoryRunner({ agent: stressAgent, appName: 'velocity_stress' });
-        const runnerSessionId = randomUUID();
-        await runner.sessionService.createSession({ appName: 'velocity_stress', userId: 'stress_user', sessionId: runnerSessionId });
-
-        const eventStream = runner.runAsync({
-            userId: 'stress_user',
-            sessionId: runnerSessionId,
-            newMessage: { role: 'user', parts: [{ text: stressPrompt }] }
-        });
-
         let rawOutput = '';
-        for await (const event of eventStream) {
-            if (event.author === stressAgent.name || isFinalResponse(event)) {
-                const parts = event.content?.parts || [];
-                const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
-                if (text) rawOutput += text;
-            }
+        try {
+            rawOutput = await callGemini(
+                'gemini-2.5-flash',
+                'You are a Global Executive stress-test analyst. Respond ONLY with a raw JSON object as instructed.',
+                stressPrompt
+            );
+        } catch (e) {
+            log({ severity: 'ERROR', message: 'Stress test API call failed', session_id: sessionId, error: String(e) });
         }
 
         // Robust JSON extraction

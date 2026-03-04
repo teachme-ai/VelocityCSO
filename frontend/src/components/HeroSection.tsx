@@ -42,9 +42,12 @@ type Phase =
     | 'done'
     | 'error';
 
+
+
+
 type MonteCarloData = {
-    distributions: any[];
-    risk_drivers: any[];
+    distributions: MonteCarloDistribution[];
+    risk_drivers: { factor: string; variance_contribution: number }[];
 };
 
 type ReportData = {
@@ -145,7 +148,7 @@ function sanitizeReport(text: string): string {
         .trim();
 }
 
-const PlaceholderCard = ({ title, description, icon: Icon }: { title: string, description: string, icon: React.ComponentType<any> }) => (
+const PlaceholderCard = ({ title, description, icon: Icon }: { title: string, description: string, icon: React.ElementType }) => (
     <div className="bg-zinc-900/30 border border-zinc-800/50 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center opacity-60 h-full min-h-[300px]">
         <div className="w-12 h-12 rounded-full bg-zinc-800/50 flex items-center justify-center mb-4">
             <Icon className="w-6 h-6 text-zinc-500" />
@@ -216,8 +219,8 @@ ${context}`.trim();
 
             setContext(enrichedText);
             setUrlEnriched(true);
-        } catch (err: any) {
-            setError(err.message);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Enrichment failed');
         } finally {
             setUrlEnriching(false);
         }
@@ -447,7 +450,7 @@ ${context}`.trim();
                         orgName,
                         moatRationale,
                         richDimensions: event.richDimensions as Record<string, RichDimensionData>,
-                        frameworks: event.frameworks as Record<string, any>,
+                        frameworks: event.frameworks as ReportData['frameworks'],
                     });
                     if (reportId) {
                         setCurrentReportId(reportId);
@@ -481,8 +484,8 @@ ${context}`.trim();
             await navigator.clipboard.writeText(data.shareUrl);
             setShareMessage('Copied to clipboard!');
             setTimeout(() => setShareMessage(''), 3000);
-        } catch (err: any) {
-            setShareMessage(err.message || 'Share failed');
+        } catch (err) {
+            setShareMessage(err instanceof Error ? err.message : 'Share failed');
             setTimeout(() => setShareMessage(''), 3000);
         } finally {
             setSharing(false);
