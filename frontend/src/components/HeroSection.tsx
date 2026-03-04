@@ -177,6 +177,8 @@ export function HeroSection() {
     const [shareMessage, setShareMessage] = useState('');
     const [auditTimestamp, setAuditTimestamp] = useState<string>('');
     const [briefExpanded, setBriefExpanded] = useState(false);
+    const [orgSector, setOrgSector] = useState<string>('');
+    const [orgScale, setOrgScale] = useState<string>('');
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     const enrichFromUrl = async () => {
@@ -280,7 +282,14 @@ ${context}`.trim();
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ business_context: context, stress_test: stressTest }),
+                body: JSON.stringify({
+                    business_context: [
+                        context,
+                        orgSector ? `[SECTOR: ${orgSector}]` : '',
+                        orgScale ? `[ORG SCALE: ${orgScale}]` : '',
+                    ].filter(Boolean).join(' '),
+                    stress_test: stressTest
+                }),
             });
 
             if (!response.ok) {
@@ -564,6 +573,51 @@ ${context}`.trim();
                                     autoCapitalize="sentences"
                                     spellCheck="true"
                                 />
+
+                                {/* Sector + Scale dropdowns */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs text-gray-500 uppercase tracking-wider pl-1">Sector</label>
+                                        <select
+                                            value={orgSector}
+                                            onChange={(e) => setOrgSector(e.target.value)}
+                                            className="w-full bg-zinc-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors appearance-none cursor-pointer"
+                                            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+                                        >
+                                            <option value="">Select sector…</option>
+                                            <option value="B2B SaaS">B2B SaaS</option>
+                                            <option value="B2C / Consumer">B2C / Consumer</option>
+                                            <option value="Marketplace">Marketplace</option>
+                                            <option value="EdTech">EdTech</option>
+                                            <option value="FinTech">FinTech</option>
+                                            <option value="HealthTech">HealthTech</option>
+                                            <option value="DeepTech / AI">DeepTech / AI</option>
+                                            <option value="eCommerce / D2C">eCommerce / D2C</option>
+                                            <option value="Climate / GreenTech">Climate / GreenTech</option>
+                                            <option value="Enterprise / Gov">Enterprise / Gov</option>
+                                            <option value="Media / Creator">Media / Creator</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs text-gray-500 uppercase tracking-wider pl-1">Organisation Scale</label>
+                                        <select
+                                            value={orgScale}
+                                            onChange={(e) => setOrgScale(e.target.value)}
+                                            className="w-full bg-zinc-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors appearance-none cursor-pointer"
+                                            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+                                        >
+                                            <option value="">Select scale…</option>
+                                            <option value="Pre-idea / Concept">Pre-idea / Concept</option>
+                                            <option value="Pre-revenue Startup">Pre-revenue Startup</option>
+                                            <option value="Early Stage (0–$1M ARR)">Early Stage (0–$1M ARR)</option>
+                                            <option value="Growth Stage ($1M–$10M ARR)">Growth Stage ($1M–$10M ARR)</option>
+                                            <option value="Scale-up ($10M–$50M ARR)">Scale-up ($10M–$50M ARR)</option>
+                                            <option value="Enterprise ($50M+ ARR)">Enterprise ($50M+ ARR)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
                                 <div className="flex items-center justify-between flex-wrap gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer group">
                                         <div className={`w-10 h-5 rounded-full flex items-center transition-all duration-300 px-0.5 ${stressTest ? 'bg-violet-600' : 'bg-white/10'}`}
