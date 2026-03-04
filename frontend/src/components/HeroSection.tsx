@@ -175,6 +175,8 @@ export function HeroSection() {
     const [urlEnriched, setUrlEnriched] = useState(false);
     const [sharing, setSharing] = useState(false);
     const [shareMessage, setShareMessage] = useState('');
+    const [auditTimestamp, setAuditTimestamp] = useState<string>('');
+    const [briefExpanded, setBriefExpanded] = useState(false);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     const enrichFromUrl = async () => {
@@ -361,6 +363,7 @@ ${context}`.trim();
                         }
                         setResult(parsed);
                         setStressResult(null);
+                        setAuditTimestamp(new Date().toLocaleString());
                         setPhase('done');
                         break;
                     }
@@ -777,6 +780,77 @@ ${context}`.trim();
                                     animate={{ opacity: 1, y: 0 }}
                                     className="space-y-12"
                                 >
+                                    {/* Audit Brief Card */}
+                                    <div className="max-w-7xl mx-auto w-full">
+                                        <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 backdrop-blur-xl">
+                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Audit Brief</span>
+                                                    {urlEnriched && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                                                            🌐 URL Enriched
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {clarification?.usedLenses?.[0] && (
+                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-violet-500/10 border border-violet-500/20 text-violet-400">
+                                                            {clarification.usedLenses[0]}
+                                                        </span>
+                                                    )}
+                                                    {clarification?.usedLenses?.[1] && (
+                                                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-violet-500/10 border border-violet-500/20 text-violet-400">
+                                                            {clarification.usedLenses[1]}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6">
+                                                {/* Left: context preview */}
+                                                <div>
+                                                    <p
+                                                        className="text-sm text-zinc-400 leading-relaxed"
+                                                        style={briefExpanded ? undefined : {
+                                                            display: '-webkit-box',
+                                                            WebkitLineClamp: 3,
+                                                            WebkitBoxOrient: 'vertical',
+                                                            overflow: 'hidden'
+                                                        }}
+                                                    >
+                                                        {context}
+                                                    </p>
+                                                    <button
+                                                        onClick={() => setBriefExpanded(v => !v)}
+                                                        className="mt-2 text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+                                                    >
+                                                        {briefExpanded ? 'Show less ↑' : 'Show more ↓'}
+                                                    </button>
+                                                </div>
+
+                                                {/* Right: metadata */}
+                                                <div className="shrink-0 flex flex-col gap-3 min-w-[190px] border-t md:border-t-0 md:border-l border-zinc-800/50 pt-4 md:pt-0 md:pl-6">
+                                                    <div>
+                                                        <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold mb-0.5">Submitted</p>
+                                                        <p className="text-xs text-zinc-300 font-mono">{auditTimestamp || '—'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold mb-0.5">Audit ID</p>
+                                                        <p className="text-xs text-zinc-300 font-mono">{currentReportId?.slice(-8) ?? '—'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold mb-0.5">Information Density</p>
+                                                        <p className="text-xs text-zinc-300 font-mono">
+                                                            {clarification?.idScore
+                                                                ? `${clarification.idScore}/100`
+                                                                : 'Auto-grounded'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     {/* Zone 1: Executive Glance */}
                                     <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 items-stretch max-w-7xl mx-auto w-full relative">
                                         <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-6 md:p-10 backdrop-blur-xl flex flex-col items-center justify-center min-h-[400px] lg:min-h-[500px]">
