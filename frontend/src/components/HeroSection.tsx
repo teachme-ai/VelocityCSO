@@ -12,6 +12,11 @@ import { StrategyRadar } from './StrategyRadar';
 import { AgentHeartbeat } from './AgentHeartbeat';
 import { type HeartbeatLog } from './HeartbeatTerminal';
 import { ExecutiveSummaryCard } from './ExecutiveSummaryCard';
+import { BlueOceanCanvas } from './BlueOceanCanvas';
+import { UnitEconomicsDashboard } from './UnitEconomicsDashboard';
+import { FiveForces } from './FiveForces';
+import { WardleyMap } from './WardleyMap';
+import { MonteCarloChart } from './MonteCarloChart';
 
 const API_URL = import.meta.env.VITE_API_URL || '/analyze';
 const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
@@ -31,6 +36,8 @@ type ReportData = {
     confidence_score?: number;
     orgName?: string;
     moatRationale?: string;
+    richDimensions?: Record<string, any>;
+    frameworks?: any;
 };
 
 type ClarificationState = {
@@ -220,6 +227,8 @@ export function HeroSection() {
                             dimensions: dims || {},
                             orgName: event.orgName as string,
                             moatRationale: event.moatRationale as string,
+                            richDimensions: event.richDimensions as any,
+                            frameworks: event.frameworks as any,
                         };
                         if (reportId) {
                             // setLastReportId(reportId);
@@ -301,7 +310,9 @@ export function HeroSection() {
                         analysis_markdown: raw,
                         dimensions: dims || {},
                         orgName,
-                        moatRationale
+                        moatRationale,
+                        richDimensions: event.richDimensions as any,
+                        frameworks: event.frameworks as any,
                     });
                     if (reportId) {
                         setCurrentReportId(reportId);
@@ -581,6 +592,7 @@ export function HeroSection() {
                                     orgName={result.orgName || 'Strategic Audit Result'}
                                     moatRationale={result.moatRationale || 'Top-tier competitive moat identified through asymmetric multi-agentic analysis.'}
                                     dimensions={result.dimensions || {}}
+                                    richDimensions={result.richDimensions}
                                 />
 
                                 {/* Executive Analysis Scroll Hint Notch */}
@@ -647,7 +659,8 @@ export function HeroSection() {
                                                 <DiagnosticScorecard
                                                     dimensions={stressResult.stressedScores}
                                                     originalDimensions={stressResult.originalScores}
-                                                    onAreaClick={(dim) => console.log('Stress Area:', dim)}
+                                                    richDimensions={result.richDimensions}
+                                                    onAreaClick={(dim: string) => console.log('Stress Area:', dim)}
                                                 />
                                             </div>
                                         ) : (
@@ -664,6 +677,56 @@ export function HeroSection() {
                                     </div>
                                 </div>
                             </section>
+
+                            {/* Zone 3: Strategic Frameworks */}
+                            {result?.frameworks && (
+                                <section className="max-w-7xl mx-auto w-full border-t border-zinc-800/50 pt-12">
+                                    <div className="flex items-center gap-3 mb-8">
+                                        <div className="p-2 bg-blue-500/10 rounded-lg">
+                                            <Search className="w-5 h-5 text-blue-500" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-white tracking-tight">Strategic Frameworks</h2>
+                                            <p className="text-xs text-zinc-500 uppercase tracking-widest font-medium mt-1">Deep Dive Diagnostics</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Row 1: Blue Ocean & Five Forces */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                                        {result.frameworks.blueOcean && (
+                                            <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
+                                                <BlueOceanCanvas data={result.frameworks.blueOcean} />
+                                            </div>
+                                        )}
+                                        {result.frameworks.fiveForces && (
+                                            <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
+                                                <FiveForces data={result.frameworks.fiveForces} />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Row 2: Wardley Mapping */}
+                                    {result.frameworks.wardley && (
+                                        <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md mb-8">
+                                            <WardleyMap capabilities={result.frameworks.wardley.capabilities || []} warnings={result.frameworks.wardley.strategic_warnings || []} />
+                                        </div>
+                                    )}
+
+                                    {/* Row 3: Financials (Unit Economics + Monte Carlo) */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                        {result.frameworks.unitEconomics && (
+                                            <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
+                                                <UnitEconomicsDashboard data={result.frameworks.unitEconomics} />
+                                            </div>
+                                        )}
+                                        {result.frameworks.monteCarlo && (
+                                            <div className="bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-md">
+                                                <MonteCarloChart data={result.frameworks.monteCarlo} />
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
 
                             <div id="strategic-synthesis" className="max-w-5xl mx-auto w-full pb-20 border-t border-zinc-800/50 pt-12">
                                 <div className="flex items-center gap-3 mb-10">

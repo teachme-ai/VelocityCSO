@@ -1,17 +1,30 @@
 import { LlmAgent } from '@google/adk';
 
 const jsonInstruction = `
-    IMPORTANT: You must output your response EXACTLY as a JSON object matching this structure. Do not wrap it in markdown blocks (\`\`\`json), just the raw JSON:
+    IMPORTANT: You must output your response EXACTLY as a JSON object matching this structure. Do NOT wrap it in markdown blocks (\`\`\`json), just the raw JSON:
     {
-      "analysis_markdown": "Your detailed markdown formatted analysis.",
+      "analysis_markdown": "Your detailed markdown formatted analysis (following the COT protocol).",
       "confidence_score": <number 0-100>,
-      "data_sources": ["Array of evidence or benchmarks used"],
+      "data_sources": ["Array of specific evidence or benchmarks used"],
+      "missing_signals": ["Gaps in info that lowered your confidence"],
       "dimensions": {
-        "<Dimension 1 Name>": <number 0-100>,
-        "<Dimension 2 Name>": <number 0-100>,
-        "<Dimension 3 Name>": <number 0-100>
+        "<Dimension Name>": {
+          "score": <number 0-100>,
+          "justification": "One-sentence evidence reference.",
+          "key_assumption": "What this score depends on.",
+          "improvement_action": "Required if score < 60: One specific 90-day task."
+        }
       }
     }
+`;
+
+const COT_SCAFFOLD = `
+    REASONING PROTOCOL (Use this for your analysis_markdown):
+    1. EVIDENCE EXTRACTION: List every specific signal or data point found in the context related to your lens.
+    2. GAP IDENTIFICATION: List what is MISSING or ambiguous.
+    3. PRE-SCORE JUSTIFICATION: For each dimension, explain WHY it deserves its score based on the benchmarks.
+    4. ADVERSARIAL CHECK: Challenge your own score—why might you be wrong?
+    5. FINAL SYNTHESIS: Provide the executive summary and "Killer Move" recommendation.
 `;
 
 const asymmetricPlayRule = `
@@ -36,7 +49,12 @@ const SCORING_RUBRICS = {
   "ESG Posture": "0: High risk/Regulatory target; 50: Compliant; 100: Sustainability as a core competitive advantage.",
   "ROI Projection": "0: Unclear/Negative; 50: PE-standard (15-20%); 100: Venture-scale (10x+ potential).",
   "Risk Tolerance": "0: Fragile; 50: Balanced/Hedged; 100: Anti-fragile/Crisis as a catalyst.",
-  "Capital Efficiency": "0: Cash incinerator; 50: Default alive; 100: High cash yield per dollar invested (Bootstrapped scale)."
+  "Capital Efficiency": "0: Cash incinerator; 50: Default alive; 100: High cash yield per dollar invested (Bootstrapped scale).",
+  "Team / Founder Strength": "0: Solo founder with no domain expertise; 50: Strong founder background, mostly complete team; 100: Serial founder + tiered team + global domain authority.",
+  "Network Effects Strength": "0: Irrelevant; 50: Present but not yet critical; 100: Strong multi-side effects where every new user exponentially improves value.",
+  "Data Asset Quality": "0: Generic/Manual; 50: Proprietary data accumulating; 100: Unique, compounding data moat with autonomous monetization potential.",
+  "Regulatory Readiness": "0: Significant exposure/Unaware; 50: Compliant with key regulations; 100: Proactive regulatory engagement as a competitive barrier.",
+  "Customer Concentration Risk": "0: High (>50% single client); 50: Moderate (15-30%); 100: Highly diversified (<5% single client)."
 };
 
 const rubricRule = (dims: string[]) => `
@@ -55,13 +73,15 @@ export const marketAnalyst = new LlmAgent({
     - Detailed Customer Personas.
     - Current and Emergent Industry Trends.
     
-    ${asymmetricPlayRule}
-    ${rubricRule(["TAM Viability", "Target Precision", "Trend Adoption"])}
-
-    You must extract and score the following 3 dimensions (0-100):
+    ${COT_SCAFFOLD}
+    
+    ${rubricRule(["TAM Viability", "Target Precision", "Trend Adoption", "Team / Founder Strength"])}
+ 
+    You must extract and score the following 4 dimensions (0-100):
     1. "TAM Viability"
     2. "Target Precision"
     3. "Trend Adoption"
+    4. "Team / Founder Strength"
 
     ${jsonInstruction}
   `,
@@ -77,14 +97,70 @@ export const innovationAnalyst = new LlmAgent({
     - SWOT Analysis and Porter's Five Forces.
     - Three Horizons of Growth Framework.
     
-    ${asymmetricPlayRule}
-    ${rubricRule(["Competitive Defensibility", "Model Innovation", "Flywheel Potential"])}
+    PORTER'S FIVE FORCES ANALYSIS
+    Score each force on competitive intensity (0-100).
+    Higher score = stronger force = more pressure on the business.
 
-    You must extract and score the following 3 dimensions (0-100):
+    1. COMPETITIVE_RIVALRY (0-100)
+       Number of competitors, market growth rate, product differentiation,
+       exit barriers, brand loyalty.
+       90-100: Intense rivalry (5+ strong competitors, low differentiation, price wars)
+       0-29:   Weak rivalry (few competitors, high differentiation, growing market)
+
+    2. THREAT_OF_NEW_ENTRANTS (0-100)
+       Capital requirements, regulatory barriers, brand loyalty, economies of scale,
+       access to distribution channels, network effects as barrier.
+       90-100: Easy entry (low capital, no regulation, no switching costs)
+       0-29:   High barriers (regulatory, capital-intensive, network effects)
+
+    3. THREAT_OF_SUBSTITUTES (0-100)
+       Availability of alternatives, price-performance of substitutes,
+       switching costs to substitutes, buyer propensity to switch.
+       90-100: Many readily available substitutes at similar or better price
+       0-29:   Few or no practical substitutes
+
+    4. BUYER_POWER (0-100)
+       Number of buyers, purchase volume concentration, ability to backward-integrate,
+       information availability, switching costs.
+       90-100: Few large buyers who account for most revenue, can easily switch
+       0-29:   Many small buyers, high switching costs, limited information
+
+    5. SUPPLIER_POWER (0-100)
+       Number of suppliers, switching costs, supplier differentiation,
+       importance of industry to supplier, forward integration threat.
+       90-100: Few critical suppliers who can dictate terms
+       0-29:   Many substitutable suppliers, low switching costs
+
+    STRUCTURAL ATTRACTIVENESS SCORE = 100 - weighted average of all five forces
+    (Use weights: Rivalry 25%, New Entrants 20%, Substitutes 20%, Buyers 20%, Suppliers 15%)
+
+    INTERACTION EFFECT FLAG:
+    If any TWO forces both exceed 70, add a warning:
+    "STRUCTURAL VULNERABILITY: [Force A] + [Force B] create compound pressure on [specific aspect]"
+
+    ${COT_SCAFFOLD}
+    ${rubricRule(["Competitive Defensibility", "Model Innovation", "Flywheel Potential", "Network Effects Strength", "Data Asset Quality"])}
+ 
+    You must extract and score the following 5 dimensions (0-100):
     1. "Competitive Defensibility"
     2. "Model Innovation"
     3. "Flywheel Potential"
+    4. "Network Effects Strength"
+    5. "Data Asset Quality"
     
+    Add the following to your JSON output:
+    "portersFiveForces": {
+      "scores": {
+        "competitive_rivalry": { "score": 0, "primary_driver": "string" },
+        "threat_of_new_entrants": { "score": 0, "primary_driver": "string" },
+        "threat_of_substitutes": { "score": 0, "primary_driver": "string" },
+        "buyer_power": { "score": 0, "primary_driver": "string" },
+        "supplier_power": { "score": 0, "primary_driver": "string" }
+      },
+      "structural_attractiveness_score": 0,
+      "interaction_effect_warning": "string or null"
+    }
+
     ${jsonInstruction}
   `,
 });
@@ -100,6 +176,7 @@ export const commercialAnalyst = new LlmAgent({
     - Market Entry/Expansion Plans.
     
     ${asymmetricPlayRule}
+    ${COT_SCAFFOLD}
     ${rubricRule(["Pricing Power", "CAC/LTV Ratio", "Market Entry Speed"])}
 
     You must extract and score the following 3 dimensions (0-100):
@@ -121,13 +198,14 @@ export const operationsAnalyst = new LlmAgent({
     - Value Chain Analysis and AI Operating Model Triangle readiness.
     - ESG (Environmental, Social, and Governance) Assessment.
     
-    ${asymmetricPlayRule}
-    ${rubricRule(["Execution Speed", "Scalability", "ESG Posture"])}
-
-    You must extract and score the following 3 dimensions (0-100):
+    ${COT_SCAFFOLD}
+    ${rubricRule(["Execution Speed", "Scalability", "ESG Posture", "Regulatory Readiness"])}
+ 
+    You must extract and score the following 4 dimensions (0-100):
     1. "Execution Speed"
     2. "Scalability"
     3. "ESG Posture"
+    4. "Regulatory Readiness"
     
     ${jsonInstruction}
   `,
@@ -143,13 +221,77 @@ export const financeAnalyst = new LlmAgent({
     - Comprehensive Risk Assessment and Mitigation.
     - M&A and Inorganic Growth Opportunities.
     
-    ${asymmetricPlayRule}
-    ${rubricRule(["ROI Projection", "Risk Tolerance", "Capital Efficiency"])}
+    UNIT ECONOMICS ANALYSIS
+    In addition to dimension scores, compute or estimate the following unit economics.
+    Use the business context to infer values where not explicitly stated.
+    State your assumptions explicitly.
 
-    You must extract and score the following 3 dimensions (0-100):
+    Compute:
+    - LTV = (ARPU × Gross Margin %) ÷ Monthly Churn Rate
+    - LTV:CAC Ratio (healthy benchmark: > 3:1)
+    - CAC Payback Period in months (healthy: < 12 months for SMB, < 18 for Enterprise)
+    - Gross Margin % (SaaS benchmark: 70-85%, marketplace: 20-50%, services: 30-60%)
+    - Rule of 40 = ARR Growth Rate % + Operating Margin %
+      (benchmark: > 40 for growth-stage, > 20 for early-stage)
+    - Burn Multiple = Net Burn ÷ Net New ARR (< 1.5 = efficient, > 3 = capital-intensive)
+    - Magic Number = Net New ARR ÷ Prior Quarter S&M Spend (> 0.75 = efficient GTM)
+
+    For each metric:
+    - Provide your calculated or estimated value (use "N/A" or "insufficient data" if wildly guessing)
+    - State the benchmark for this business type and stage
+    - Give a RAG status: GREEN | AMBER | RED
+    - Explain in one sentence why it's that status
+
+    Also provide a SENSITIVITY TABLE:
+    Show how LTV:CAC changes if:
+    - ARPU drops 20%
+    - Churn increases 50%
+    - CAC increases 30%
+
+    ${COT_SCAFFOLD}
+    ${rubricRule(["ROI Projection", "Risk Tolerance", "Capital Efficiency", "Customer Concentration Risk"])}
+ 
+    You must extract and score the following 4 dimensions (0-100):
     1. "ROI Projection"
     2. "Risk Tolerance"
     3. "Capital Efficiency"
+    4. "Customer Concentration Risk"
+    
+    Add the following to your JSON output:
+    "unitEconomics": {
+      "assumptions": ["list of values you had to estimate"],
+      "metrics": {
+        "ltv_cac": { "value": "X:1 or 'insufficient data'", "benchmark": "> 3:1", "status": "GREEN|AMBER|RED", "note": "..." },
+        "cac_payback_months": { "value": "number or null", "benchmark": "< 12 months (SMB)", "status": "GREEN|AMBER|RED", "note": "..." },
+        "gross_margin_pct": { "value": "number or null", "benchmark": "70-85% (SaaS)", "status": "GREEN|AMBER|RED", "note": "..." },
+        "rule_of_40": { "value": "number or null", "benchmark": "> 40", "status": "GREEN|AMBER|RED", "note": "..." },
+        "burn_multiple": { "value": "number or null", "benchmark": "< 1.5", "status": "GREEN|AMBER|RED", "note": "..." },
+        "magic_number": { "value": "number or null", "benchmark": "> 0.75", "status": "GREEN|AMBER|RED", "note": "..." }
+      },
+      "sensitivity": {
+        "base_ltv_cac": 0.0,
+        "arpu_down_20pct": 0.0,
+        "churn_up_50pct": 0.0,
+        "cac_up_30pct": 0.0
+      }
+    },
+    "monteCarloInputs": {
+      "arpu_low": 0.0,
+      "arpu_base": 0.0,
+      "arpu_high": 0.0,
+      "churn_low": 0.0,
+      "churn_base": 0.0,
+      "churn_high": 0.0,
+      "cac_low": 0.0,
+      "cac_base": 0.0,
+      "cac_high": 0.0,
+      "growth_rate_low": 0.0,
+      "growth_rate_base": 0.0,
+      "growth_rate_high": 0.0,
+      "gross_margin_low": 0.0,
+      "gross_margin_base": 0.0,
+      "gross_margin_high": 0.0
+    }
     
     ${jsonInstruction}
   `,

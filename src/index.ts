@@ -39,7 +39,9 @@ function extractDimensions(report: string): Record<string, number> {
         'Competitive Defensibility', 'Model Innovation', 'Flywheel Potential',
         'Pricing Power', 'CAC/LTV Ratio', 'Market Entry Speed',
         'Execution Speed', 'Scalability', 'ESG Posture',
-        'ROI Projection', 'Risk Tolerance', 'Capital Efficiency'
+        'ROI Projection', 'Risk Tolerance', 'Capital Efficiency',
+        'Team / Founder Strength', 'Network Effects Strength',
+        'Data Asset Quality', 'Regulatory Readiness', 'Customer Concentration Risk'
     ];
     for (const dim of dimNames) {
         // Match score in any format: "TAM Viability: 78", "TAM Viability** 78/100", "TAM Viability Score: **78**"
@@ -197,7 +199,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             ? enrichedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
             : enrichedContext;
 
-        const { report, dimensions, specialistOutputs, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
+        const { report, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
@@ -213,6 +215,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
                 fingerprint,
                 report,
                 dimension_scores: dimensions,
+                frameworks,
                 discovery_findings: discoveryFindingsStr,
                 org_name: orgName,
                 moat_rationale: moatRationale,
@@ -228,7 +231,9 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
                 businessContext: business_context,
                 groundedContext: discoveryFindingsStr,
                 specialistOutputs,
+                frameworks,
                 dimensionScores: dimensions,
+                richDimensions,
                 report,
                 stressTest: !!stress_test,
                 orgName,
@@ -240,7 +245,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
 
         logAuditCost(sessionId, { discovery: discoveryCost.usd, synthesis: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, orgName, moatRationale });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, frameworks, orgName, moatRationale });
         res.end();
 
     } catch (error: any) {
@@ -339,7 +344,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             }
         }, 10000);
 
-        const { report, dimensions, specialistOutputs, orgName, moatRationale } = await analysisPromise;
+        const { report, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await analysisPromise;
         clearTimeout(safetyReceipt);
         const csoCost = estimateCost('gemini-2.5-pro', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
@@ -355,6 +360,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
                 user_clarification: clarification,
                 report,
                 dimension_scores: dimensions,
+                frameworks,
                 org_name: orgName,
                 moat_rationale: moatRationale,
                 user_id: userId,
@@ -368,7 +374,9 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
                 businessContext: session.enrichedContext,
                 groundedContext: session.discoveryFindings,
                 specialistOutputs,
+                frameworks,
                 dimensionScores: dimensions,
+                richDimensions,
                 report,
                 stressTest: !!stress_test,
                 orgName,
@@ -387,7 +395,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             tlog({ severity: 'WARNING', message: 'Dimensions still empty at emit time', session_id: sessionId });
         }
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, orgName, moatRationale });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, frameworks, orgName, moatRationale });
         res.end();
 
     } catch (error: any) {
@@ -449,5 +457,5 @@ app.get('/{*path}', (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-    log({ severity: 'INFO', message: `VelocityCSO server started on port ${port} [v2.1.1]`, agent_id: 'system' });
+    log({ severity: 'INFO', message: `VelocityCSO server started on port ${port} [v4.0.0]`, agent_id: 'system' });
 });

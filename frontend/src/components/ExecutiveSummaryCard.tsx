@@ -5,14 +5,22 @@ interface ExecutiveSummaryProps {
     orgName: string;
     moatRationale: string;
     dimensions: Record<string, number>;
+    richDimensions?: Record<string, any>;
 }
 
-export const ExecutiveSummaryCard = ({ orgName, moatRationale, dimensions }: ExecutiveSummaryProps) => {
+export const ExecutiveSummaryCard = ({ orgName, moatRationale, dimensions, richDimensions }: ExecutiveSummaryProps) => {
     // Get top 3 dimensions
     const developingMoats = Object.entries(dimensions)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
         .map(([name, score]) => ({ name, score }));
+
+    // Get critical improvement actions
+    const criticalActions = Object.entries(richDimensions || {})
+        .filter(([_, data]) => data.score < 65 && data.improvement_action)
+        .sort((a, b) => a[1].score - b[1].score)
+        .slice(0, 2)
+        .map(([name, data]) => ({ name, action: data.improvement_action }));
 
     return (
         <motion.div
@@ -69,6 +77,27 @@ export const ExecutiveSummaryCard = ({ orgName, moatRationale, dimensions }: Exe
                         ))}
                     </div>
                 </div>
+
+                {criticalActions.length > 0 && (
+                    <div className="space-y-3 mt-6">
+                        <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.15em] mb-4">
+                            90-Day Tactical Moves
+                        </h3>
+                        <div className="space-y-2">
+                            {criticalActions.map((item, idx) => (
+                                <div key={idx} className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-lg">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1 h-3 bg-purple-500 rounded-full" />
+                                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{item.name}</span>
+                                    </div>
+                                    <p className="text-xs text-zinc-300 leading-relaxed font-medium">
+                                        {item.action}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="mt-auto pt-6 border-t border-zinc-800/50">

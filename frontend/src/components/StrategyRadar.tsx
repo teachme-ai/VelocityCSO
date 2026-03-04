@@ -10,9 +10,32 @@ interface StrategyRadarProps {
 }
 
 export const StrategyRadar: React.FC<StrategyRadarProps> = ({ dimensions, originalDimensions }) => {
+    const ABBREVIATIONS: Record<string, string> = {
+        'TAM Viability': 'TAM',
+        'Target Precision': 'Target',
+        'Trend Adoption': 'Trend',
+        'Team / Founder Strength': 'Team',
+        'Competitive Defensibility': 'Moat',
+        'Model Innovation': 'Innov',
+        'Flywheel Potential': 'Fly',
+        'Network Effects Strength': 'Netw',
+        'Data Asset Quality': 'Data',
+        'Pricing Power': 'Price',
+        'CAC/LTV Ratio': 'CAC',
+        'Market Entry Speed': 'Entry',
+        'Execution Speed': 'Exec',
+        'Scalability': 'Scale',
+        'ESG Posture': 'ESG',
+        'Regulatory Readiness': 'Reg',
+        'ROI Projection': 'ROI',
+        'Risk Tolerance': 'Risk',
+        'Capital Efficiency': 'Cap',
+        'Customer Concentration Risk': 'Conc'
+    };
+
     // Transform Record<string, number> to Array for Recharts
     const radarData = Object.entries(dimensions).map(([key, value]) => ({
-        subject: key,
+        subject: ABBREVIATIONS[key] || key.slice(0, 5),
         A: value,
         baseline: originalDimensions ? (originalDimensions[key] ?? value) : value,
         parity: 50, // Industry Parity "Ghost" Level

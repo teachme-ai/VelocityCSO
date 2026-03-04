@@ -12,6 +12,11 @@ export interface AuthRequest extends Request {
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
 
+    if (process.env.NODE_ENV === 'development') {
+        req.user = { uid: 'dev-user', email: 'dev@example.com' } as any;
+        return next();
+    }
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }

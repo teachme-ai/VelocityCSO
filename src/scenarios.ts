@@ -3,6 +3,32 @@
  * Each scenario injects a "Synthetic Crisis" into the specialist recalculation.
  */
 
+export interface MonteCarloInput {
+    arpu_low: number;
+    arpu_base: number;
+    arpu_high: number;
+    churn_low: number;   // monthly churn %
+    churn_base: number;
+    churn_high: number;
+    cac_low: number;
+    cac_base: number;
+    cac_high: number;
+    growth_rate_low: number;  // monthly growth %
+    growth_rate_base: number;
+    growth_rate_high: number;
+    gross_margin_low: number;
+    gross_margin_base: number;
+    gross_margin_high: number;
+}
+
+export interface MonteCarloResult {
+    metric: string;
+    p10: number;
+    p50: number;
+    p90: number;
+    probability_of_failure: number;  // P(metric falls below critical threshold)
+}
+
 export const SCENARIOS = {
     RECESSION: {
         id: 'RECESSION',

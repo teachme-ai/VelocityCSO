@@ -28,13 +28,21 @@ const LOCATION_KEYWORDS = /\b(US|UK|EU|Canada|Australia|India|New York|London|Ca
 const COMPETITOR_KEYWORDS = /\b(competitor|vs\.?|against|rival|alternative|instead of|compared to|[A-Z][a-z]+\s+(Inc|Corp|Ltd|LLC|SaaS|AI|Tech)|Asana|Monday|Salesforce|HubSpot|Shopify|Blue Yonder|Crisp|SAP|Oracle|AWS|Google|Microsoft|Amazon)\b/;
 const MOAT_KEYWORDS = /\b(exclusive|patent|proprietary|partnership|contract|license|unique|only|can't replicate|cannot copy|switching cost|lock.?in|data advantage|network effect|retention|NPS|referral|distributor|supplier agreement)\b/i;
 
-function scoreContextDeterministically(context: string): { score: number; coveredLenses: string[] } {
+function scoreContextDeterministically(context: string): { score: number; coveredLenses: string[]; breakdown: { specificity: number; completeness: number; moat: number } } {
     const coveredLenses: string[] = [];
-    let score = 0;
-    if (LOCATION_KEYWORDS.test(context)) { score += 30; coveredLenses.push('CUSTOMER/MARKET'); }
-    if (COMPETITOR_KEYWORDS.test(context)) { score += 30; coveredLenses.push('COMPETITOR/MOAT'); }
-    if (MOAT_KEYWORDS.test(context)) { score += 40; coveredLenses.push('OPERATIONS/SUPPLY'); }
-    return { score, coveredLenses };
+    let specificity = 0;
+    let completeness = 0;
+    let moat = 0;
+
+    if (LOCATION_KEYWORDS.test(context)) { specificity = 30; coveredLenses.push('CUSTOMER/MARKET'); }
+    if (COMPETITOR_KEYWORDS.test(context)) { completeness = 30; coveredLenses.push('COMPETITOR/MOAT'); }
+    if (MOAT_KEYWORDS.test(context)) { moat = 40; coveredLenses.push('OPERATIONS/SUPPLY'); }
+
+    return {
+        score: specificity + completeness + moat,
+        coveredLenses,
+        breakdown: { specificity, completeness, moat }
+    };
 }
 
 function buildInstruction(usedLenses: string[], askedQuestions: string[]): string {
@@ -62,6 +70,11 @@ OUTPUT: Raw JSON only.
 {
   "category": "...",
   "id_score": 0,
+  "id_breakdown": {
+    "specificity": 0,
+    "completeness": 0,
+    "moat": 0
+  },
   "lens_used": "${nextLens}",
   "question": "...",
   "is_auditable": false,
@@ -90,7 +103,15 @@ export class InterrogatorAgent {
         if (preScore.score >= 70) {
             log({ severity: 'INFO', message: 'Interrogator: Pre-score passed. Skipping LLM.', agent_id: 'interrogator_agent', session_id: sessionId, id_score: preScore.score });
             emitHeartbeat(sessionId, `[DEBUG] Deterministic match passed (Score: ${preScore.score}). Skipping LLM.`, 'debug');
-            return { category: 'B2B SaaS', question: '', isAuditable: true, strategyContext: groundedContext, idScore: preScore.score, lensUsed: '', idBreakdown: { specificity: preScore.score, completeness: preScore.score, moat: preScore.score } };
+            return {
+                category: 'Strategic Business',
+                question: '',
+                isAuditable: true,
+                strategyContext: groundedContext,
+                idScore: preScore.score,
+                lensUsed: '',
+                idBreakdown: preScore.breakdown
+            };
         }
 
         // Merge deterministically covered lenses with session-tracked ones
@@ -98,8 +119,16 @@ export class InterrogatorAgent {
 
         // 🚨 STATE LOCK: If all lenses are covered, or (2/3 lenses covered AND pre-score is decent), force audit
         if (effectiveUsedLenses.length >= 3 || (effectiveUsedLenses.length === 2 && preScore.score >= 50)) {
-            log({ severity: 'INFO', message: 'Interrogator: State Lock triggered (Density reached). Forcing READY_FOR_AUDIT.', agent_id: 'interrogator_agent', session_id: sessionId, score: preScore.score, lenses: effectiveUsedLenses });
-            return { category: 'Strategic Business', question: '', isAuditable: true, strategyContext: groundedContext, idScore: Math.max(70, preScore.score), lensUsed: '', idBreakdown: { specificity: 70, completeness: 70, moat: 70 } };
+            log({ severity: 'INFO', message: 'Interrogator: Density reached. Forcing audit.', agent_id: 'interrogator_agent', session_id: sessionId, score: preScore.score });
+            return {
+                category: 'Strategic Business',
+                question: '',
+                isAuditable: true,
+                strategyContext: groundedContext,
+                idScore: Math.max(70, preScore.score),
+                lensUsed: '',
+                idBreakdown: preScore.breakdown
+            };
         }
 
         // Load asked questions from Firestore for blacklist
@@ -184,7 +213,7 @@ export class InterrogatorAgent {
                     strategyContext: p.strategy_context || groundedContext,
                     idScore,
                     lensUsed,
-                    idBreakdown: { specificity: idScore, completeness: idScore, moat: idScore }
+                    idBreakdown: p.id_breakdown || { specificity: idScore / 3, completeness: idScore / 3, moat: idScore / 3 }
                 };
             } catch {
                 log({ severity: 'WARNING', message: 'Interrogator JSON parse failed', session_id: sessionId });

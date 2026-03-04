@@ -2,6 +2,9 @@ import { LlmAgent, InMemoryRunner, isFinalResponse } from '@google/adk';
 import { randomUUID } from 'crypto';
 import { specialists } from './specialists.js';
 import { strategicCritic } from './critic.js';
+import { blueOceanAgent } from './agents/blueOceanAgent.js';
+import { wardleyAgent } from './agents/wardleyAgent.js';
+import { runMonteCarlo } from './services/monteCarloService.js';
 import { DiscoveryResult } from './agents/discovery.js';
 import { log, estimateCost } from './services/logger.js';
 import { SCENARIOS, ScenarioId, StressResult, MitigationCard } from './scenarios.js';
@@ -17,7 +20,17 @@ export type { StrategySession } from './services/sessionService.js';
 export function robustParse(agentName: string, raw: string): any {
     const fallback = {
         analysis_markdown: raw,
-        dimensions: {},
+        dimensions: {
+            'TAM Viability': 50,
+            'Target Precision': 50,
+            'Trend Adoption': 50,
+            'Team / Founder Strength': 50,
+            'Network Effects Strength': 50,
+            'Data Asset Quality': 50,
+            'Regulatory Readiness': 50,
+            'Customer Concentration Risk': 50
+        },
+        richDimensions: {} as Record<string, any>,
         confidence_score: 50,
         flags: [],
         requires_rerun: []
@@ -32,6 +45,23 @@ export function robustParse(agentName: string, raw: string): any {
 
     try {
         const parsed = JSON.parse(jsonMatch[0]);
+
+        // Normalize dimensions: extract "score" if it's an object {score: N, ...}
+        if (parsed.dimensions && typeof parsed.dimensions === 'object') {
+            const normalized: Record<string, number> = {};
+            const rich: Record<string, any> = {};
+            for (const [key, val] of Object.entries(parsed.dimensions)) {
+                if (typeof val === 'number') {
+                    normalized[key] = val;
+                } else if (val && typeof val === 'object' && typeof (val as any).score === 'number') {
+                    normalized[key] = (val as any).score;
+                    rich[key] = val; // Preserve CoT metadata (justification, improvement_action, etc)
+                }
+            }
+            parsed.dimensions = normalized;
+            parsed.richDimensions = rich;
+        }
+
         return {
             ...fallback,
             ...parsed,
@@ -86,9 +116,14 @@ export class ChiefStrategyAgent {
         ROI Projection: [score]/100
         Risk Tolerance: [score]/100
         Capital Efficiency: [score]/100
+        Team / Founder Strength: [score]/100
+        Network Effects Strength: [score]/100
+        Data Asset Quality: [score]/100
+        Regulatory Readiness: [score]/100
+        Customer Concentration Risk: [score]/100
         
         CRITICAL: Output ONLY markdown text. Do NOT output JSON, code blocks, or raw data structures. All output must be human-readable narrative markdown.`,
-            subAgents: [...specialists, strategicCritic],
+            subAgents: [...specialists, strategicCritic, blueOceanAgent, wardleyAgent],
         });
     }
 
@@ -123,6 +158,35 @@ export class ChiefStrategyAgent {
         return { proceed: false, gap };
     }
 
+    private async runSpecialist(agent: LlmAgent, context: string, sessionId: string): Promise<any> {
+        const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist' });
+        const internalId = randomUUID();
+        await runner.sessionService.createSession({ appName: 'velocity_specialist', userId: 'cso_internal', sessionId: internalId });
+
+        const eventStream = runner.runAsync({
+            userId: 'cso_internal',
+            sessionId: internalId,
+            newMessage: {
+                role: 'user',
+                parts: [{ text: `${context}\n\nCRITICAL: You MUST return your analysis as a clean JSON object according to your schema. Do NOT include markdown text outside the JSON. All dimensions for your lens MUST be scored 0-100.` }]
+            }
+        });
+
+        emitHeartbeat(sessionId, `◆ ${agent.name}: sensing market signals and identifying asymmetric plays...`);
+        let rawOutput = '';
+        for await (const event of eventStream) {
+            if (event.author === agent.name || isFinalResponse(event)) {
+                const parts = event.content?.parts || [];
+                const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
+                if (text) rawOutput += text;
+            }
+        }
+
+        const result = robustParse(agent.name!, rawOutput);
+        emitHeartbeat(sessionId, `◆ ${agent.name}: analysis complete. alignment verified.`);
+        return result;
+    }
+
     private async runCritic(businessContext: string, specialistOutputs: Record<string, any>, sessionId: string): Promise<any> {
         emitHeartbeat(sessionId, '◆ Critic: performing cross-functional gap-analysis...');
         const criticRunner = new InMemoryRunner({ agent: strategicCritic, appName: 'velocity_critic' });
@@ -151,7 +215,7 @@ export class ChiefStrategyAgent {
         return robustParse('strategic_critic', raw);
     }
 
-    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number>; specialistOutputs: Record<string, any>; orgName: string; moatRationale: string }> {
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; frameworks: any; orgName: string; moatRationale: string }> {
         log({
             severity: 'INFO',
             message: 'CSO analysis started (Parallel Specialist Mode)',
@@ -166,48 +230,91 @@ export class ChiefStrategyAgent {
             'Competitive Defensibility': 0, 'Model Innovation': 0, 'Flywheel Potential': 0,
             'Pricing Power': 0, 'CAC/LTV Ratio': 0, 'Market Entry Speed': 0,
             'Execution Speed': 0, 'Scalability': 0, 'ESG Posture': 0,
-            'ROI Projection': 0, 'Risk Tolerance': 0, 'Capital Efficiency': 0
+            'ROI Projection': 0, 'Risk Tolerance': 0, 'Capital Efficiency': 0,
+            'Team / Founder Strength': 0, 'Network Effects Strength': 0,
+            'Data Asset Quality': 0, 'Regulatory Readiness': 0, 'Customer Concentration Risk': 0
         };
+        const richDimensions: Record<string, any> = {};
         const specialistOutputs: Record<string, any> = {};
 
-        // 1. Run all 5 specialists in parallel
-        const specialistPromises = specialists.map(async (agent) => {
-            const runner = new InMemoryRunner({ agent, appName: 'velocity_specialist' });
-            const internalId = randomUUID();
-            await runner.sessionService.createSession({ appName: 'velocity_specialist', userId: 'cso_internal', sessionId: internalId });
+        // ── PHASE A: Market + Innovation (parallel) ──────────────────────────
+        emitHeartbeat(sessionId, '◆ CSO Phase A: Market & Innovation analysis...');
+        const [marketResult, innovationResult] = await Promise.all([
+            this.runSpecialist(specialists.find(s => s.name === 'market_analyst')!, businessContext, sessionId),
+            this.runSpecialist(specialists.find(s => s.name === 'innovation_analyst')!, businessContext, sessionId)
+        ]);
 
-            const eventStream = runner.runAsync({
-                userId: 'cso_internal',
-                sessionId: internalId,
-                newMessage: {
-                    role: 'user',
-                    parts: [{ text: `${businessContext}\n\nCRITICAL: You MUST return your analysis as a clean JSON object according to your schema. Do NOT include markdown text outside the JSON. All 3 dimensions for your lens MUST be scored 0-100.` }]
-                }
-            });
+        specialistOutputs['market_analyst'] = marketResult;
+        specialistOutputs['innovation_analyst'] = innovationResult;
+        Object.assign(finalDimensions, marketResult.dimensions, innovationResult.dimensions);
+        Object.assign(richDimensions, marketResult.richDimensions, innovationResult.richDimensions);
 
-            emitHeartbeat(sessionId, `◆ ${agent.name}: sensing market signals and identifying asymmetric plays...`);
-            let rawOutput = '';
-            for await (const event of eventStream) {
-                if (event.author === agent.name || isFinalResponse(event)) {
-                    const parts = event.content?.parts || [];
-                    const text = parts.map((p: any) => p.text).filter(Boolean).join('\n');
-                    if (text) rawOutput += text;
-                }
+        // ── PHASE B: Commercial + Operations (consume Phase A) ──────────────────
+        const phaseAFindings = `
+PHASE A FINDINGS (use these to calibrate your analysis):
+MARKET: ${marketResult.analysis_markdown}
+INNOVATION: ${innovationResult.analysis_markdown}
+        `.trim();
+
+        emitHeartbeat(sessionId, '◆ CSO Phase B: Commercial & Operations analysis...');
+        const phaseBContext = `${businessContext}\n\n${phaseAFindings}`;
+        const [commercialResult, operationsResult] = await Promise.all([
+            this.runSpecialist(specialists.find(s => s.name === 'commercial_analyst')!, phaseBContext, sessionId),
+            this.runSpecialist(specialists.find(s => s.name === 'operations_analyst')!, phaseBContext, sessionId)
+        ]);
+
+        specialistOutputs['commercial_analyst'] = commercialResult;
+        specialistOutputs['operations_analyst'] = operationsResult;
+        Object.assign(finalDimensions, commercialResult.dimensions, operationsResult.dimensions);
+        Object.assign(richDimensions, commercialResult.richDimensions, operationsResult.richDimensions);
+
+        // ── PHASE C: Finance (consumes Phase A + B) ──────────────────────────────
+        const phaseBFindings = `
+${phaseAFindings}
+COMMERCIAL: ${commercialResult.analysis_markdown}
+OPERATIONS: ${operationsResult.analysis_markdown}
+        `.trim();
+
+        emitHeartbeat(sessionId, '◆ CSO Phase C: Financial structure analysis...');
+        const financeResult = await this.runSpecialist(
+            specialists.find(s => s.name === 'finance_analyst')!,
+            `${businessContext}\n\n${phaseBFindings}`,
+            sessionId
+        );
+
+        specialistOutputs['finance_analyst'] = financeResult;
+        Object.assign(finalDimensions, financeResult.dimensions);
+        Object.assign(richDimensions, financeResult.richDimensions);
+
+        // ── PHASE D: Specialized Frameworks ──────────────────────────────────────
+        emitHeartbeat(sessionId, '◆ CSO Phase D: Executing specialized strategic frameworks...');
+        const [blueOceanResult, wardleyResult] = await Promise.all([
+            this.runSpecialist(blueOceanAgent, phaseBFindings, sessionId),
+            this.runSpecialist(wardleyAgent, businessContext, sessionId)
+        ]);
+
+        specialistOutputs['blue_ocean'] = blueOceanResult;
+        specialistOutputs['wardley'] = wardleyResult;
+
+        // Run Monte Carlo Simulation locally
+        let monteCarloResult = null;
+        if (financeResult.monteCarloInputs) {
+            emitHeartbeat(sessionId, '◆ Quant: Running 10,000 iteration Monte Carlo simulation...');
+            try {
+                monteCarloResult = runMonteCarlo(financeResult.monteCarloInputs, 10000);
+                specialistOutputs['monte_carlo'] = monteCarloResult;
+            } catch (e) {
+                log({ severity: 'WARNING', message: 'Monte Carlo failed', error: String(e), session_id: sessionId });
             }
+        }
 
-            const result = robustParse(agent.name!, rawOutput);
-            if (result.dimensions) {
-                Object.assign(finalDimensions, result.dimensions);
-                Object.entries(result.dimensions).forEach(([dim, score]) => {
-                    emitHeartbeat(sessionId, `◆ ${agent.name} calculated ${dim}: ${score}/100`);
-                });
-            }
-            emitHeartbeat(sessionId, `◆ ${agent.name}: analysis complete. alignment verified.`);
-            specialistOutputs[agent.name!] = result;
-            return result;
-        });
-
-        await Promise.all(specialistPromises);
+        const frameworks = {
+            blueOcean: blueOceanResult,
+            fiveForces: innovationResult.portersFiveForces,
+            unitEconomics: financeResult.unitEconomics,
+            monteCarlo: monteCarloResult,
+            wardley: wardleyResult
+        };
 
         // 2. Strategic Critic Review
         const criticResult = await this.runCritic(businessContext, specialistOutputs, sessionId);
@@ -363,6 +470,9 @@ export class ChiefStrategyAgent {
                 if (result.dimensions) {
                     Object.assign(finalDimensions, result.dimensions);
                 }
+                if (result.richDimensions) {
+                    Object.assign(richDimensions, result.richDimensions);
+                }
                 return result;
             });
             await Promise.all(retryPromises);
@@ -371,7 +481,9 @@ export class ChiefStrategyAgent {
         return {
             report: finalReport || 'Strategic analysis failed.',
             dimensions: finalDimensions,
+            richDimensions,
             specialistOutputs,
+            frameworks,
             orgName,
             moatRationale
         };
@@ -398,7 +510,9 @@ export class ChiefStrategyAgent {
             'Competitive Defensibility', 'Model Innovation', 'Flywheel Potential',
             'Pricing Power', 'CAC/LTV Ratio', 'Market Entry Speed',
             'Execution Speed', 'Scalability', 'ESG Posture',
-            'ROI Projection', 'Risk Tolerance', 'Capital Efficiency'
+            'ROI Projection', 'Risk Tolerance', 'Capital Efficiency',
+            'Team / Founder Strength', 'Network Effects Strength',
+            'Data Asset Quality', 'Regulatory Readiness', 'Customer Concentration Risk'
         ];
 
         const stressPrompt = `

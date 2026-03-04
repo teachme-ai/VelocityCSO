@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import VelocityLogo from '../assets/VelocityCSO_logo.jpg';
+import VelocityLogo from '../assets/VelocityCSO_logo_v4.png';
 
 export function Header() {
     return (

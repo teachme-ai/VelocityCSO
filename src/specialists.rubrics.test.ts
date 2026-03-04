@@ -8,6 +8,7 @@ describe('Specialist Rubrics (Task 1.3)', () => {
         expect(instruction).toContain('TAM Viability:');
         expect(instruction).toContain('Target Precision:');
         expect(instruction).toContain('Trend Adoption:');
+        expect(instruction).toContain('Team / Founder Strength:');
     });
 
     it('each rubric benchmark follows the defined scale', () => {

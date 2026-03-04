@@ -6,6 +6,7 @@ export interface SpecialistOutput {
     confidence_score?: number;
     data_sources?: string[];
     dimensions?: Record<string, number>;
+    richDimensions?: Record<string, any>;
 }
 
 export interface AuditMemory {
@@ -13,11 +14,13 @@ export interface AuditMemory {
     businessContext: string;
     groundedContext: string;           // Discovery findings
     specialistOutputs: Record<string, SpecialistOutput>; // keyed by agent name
-    dimensionScores: Record<string, number>; // merged 15-dimension scores
+    dimensionScores: Record<string, number>; // merged 20-dimension scores
+    richDimensions: Record<string, any>;   // aggregated CoT metadata
     report: string;                    // Final Markdown report
     stressTest: boolean;
     moatRationale?: string;           // 2-sentence explanation of top dimension
     orgName?: string;                 // Extracted Organisation Name
+    frameworks?: Record<string, any>; // Strategic Framework results (v3+)
     createdAt: number;
 }
 
@@ -41,6 +44,7 @@ export async function saveAuditMemory(
             fingerprint: data.businessContext.trim().slice(0, 80).toLowerCase(),
             grounded_context: data.groundedContext,
             dimension_scores: data.dimensionScores,
+            rich_dimensions: data.richDimensions,
             report: data.report,
             stress_test: data.stressTest,
             moat_rationale: data.moatRationale,
@@ -108,6 +112,7 @@ export async function loadAuditMemory(reportId: string): Promise<AuditMemory | n
             groundedContext: data.grounded_context || '',
             specialistOutputs,
             dimensionScores: data.dimension_scores || {},
+            richDimensions: data.rich_dimensions || {},
             report: data.report || '',
             stressTest: data.stress_test || false,
             moatRationale: data.moat_rationale || '',
