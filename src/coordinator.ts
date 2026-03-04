@@ -643,7 +643,7 @@ OPERATIONS: ${operationsResult.analysis_markdown}
     /**
      * Runs a fast stress-test recalculation on an existing completed report.
      * Discovery is bypassed — uses cached Firestore grounded context.
-     * Uses gemini-2.5-flash for speed and minimal cost.
+     * Uses gemini-2.0-flash for speed and minimal cost.
      */
     async triggerStressTest(reportId: string, scenarioId: ScenarioId, sessionId: string): Promise<{ scenarioId: string; scenarioLabel: string; originalScores: Record<string, number | null>; stressedScores: Record<string, number>; riskDeltas: Record<string, number>; mitigationCards: MitigationCard[] }> {
         const scenario = SCENARIOS[scenarioId];
