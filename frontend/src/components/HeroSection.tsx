@@ -1,4 +1,16 @@
-
+import { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import type {
+    UnitEconomicsData,
+    FiveForcesData,
+    WardleyResult,
+    BlueOceanResult,
+    AnsoffMatrixData,
+    VrioAnalysisData,
+    MonteCarloDistribution
+} from '../types/frameworks';
+import { AgentOrbs } from './AgentOrbs';
+import { StressTestPanel } from './StressTestPanel';
 import type { StatusEvent } from './AgentStatus';
 import type { StressResult } from '../types/stress';
 import { DiagnosticScorecard, type RichDimensionData } from './DiagnosticScorecard';
@@ -30,9 +42,6 @@ type Phase =
     | 'analyzing'
     | 'done'
     | 'error';
-
-
-
 
 type MonteCarloData = {
     distributions: MonteCarloDistribution[];
@@ -1053,3 +1062,4 @@ ${context}`.trim();
         </section >
     );
 }
+
