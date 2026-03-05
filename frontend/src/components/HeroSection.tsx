@@ -501,7 +501,7 @@ ${context}`.trim();
     };
 
     return (
-        <section className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-20 md:pt-16 overflow-hidden">
+        <section className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-14 md:pt-12 overflow-hidden">
             {/* Deep Space Background */}
             <div className="absolute inset-0 z-0">
                 <StarField />
