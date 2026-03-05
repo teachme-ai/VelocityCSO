@@ -310,7 +310,9 @@ ${context}`.trim();
                     setHeartbeatLogs([]); // Reset for new session
                 }
                 if (event.type === 'HEARTBEAT_LOG' && event.log) {
-                    setHeartbeatLogs(prev => [...prev, event.log as HeartbeatLog]);
+                    const raw = event.log as HeartbeatLog;
+                    const localTs = new Date(raw.timestamp).toLocaleTimeString(undefined, { hour12: false });
+                    setHeartbeatLogs(prev => [...prev, { ...raw, timestamp: localTs }]);
                 }
 
                 switch (event.type) {
@@ -423,7 +425,9 @@ ${context}`.trim();
                     setHeartbeatLogs([]); // Reset for new session
                 }
                 if (event.type === 'HEARTBEAT_LOG' && event.log) {
-                    setHeartbeatLogs(prev => [...prev, event.log as HeartbeatLog]);
+                    const raw = event.log as HeartbeatLog;
+                    const localTs = new Date(raw.timestamp).toLocaleTimeString(undefined, { hour12: false });
+                    setHeartbeatLogs(prev => [...prev, { ...raw, timestamp: localTs }]);
                 }
 
                 if (event.type === 'INTERROGATOR_RESPONSE') {

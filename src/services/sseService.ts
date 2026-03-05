@@ -41,7 +41,7 @@ export function emitHeartbeat(
             type: 'HEARTBEAT_LOG',
             log: {
                 id: randomUUID(),
-                timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+                timestamp: new Date().toISOString(),
                 message,
                 type
             }
