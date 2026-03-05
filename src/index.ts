@@ -405,7 +405,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             ? enrichedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
             : enrichedContext;
 
-        const { report, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
+        const { report, roadmap, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
         const csoCost = estimateCost('gemini-1.5-pro-001', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
@@ -453,6 +453,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
         logAuditCost(sessionId, { discovery: discoveryCost.usd, synthesis: csoCost.usd });
 
         sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale });
+        if (roadmap) sseWrite(res, { type: 'ROADMAP_COMPLETE', roadmap });
         res.end();
 
     } catch (error: any) {
@@ -548,7 +549,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             }
         }, 10000);
 
-        const { report, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await analysisPromise;
+        const { report, roadmap, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await analysisPromise;
         clearTimeout(safetyReceipt);
         const csoCost = estimateCost('gemini-1.5-pro-001', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
@@ -600,6 +601,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
         }
 
         sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale });
+        if (roadmap) sseWrite(res, { type: 'ROADMAP_COMPLETE', roadmap });
         res.end();
 
     } catch (error: any) {

@@ -369,14 +369,14 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         let raw = '';
         try {
             const CRITIC_INSTRUCTION = `You are the Strategic Critic. Review specialist outputs for contradictions, unsubstantiated scores, and generic advice. Return ONLY JSON: { "flags": [ { "specialist": "", "dimension": "", "issue": "", "description": "", "suggested_recheck": "" } ], "overall_coherence_score": 0-100, "approved_specialists": [], "requires_rerun": [] }. If no issues: { "flags": [], "overall_coherence_score": 95, "approved_specialists": [...all 5...], "requires_rerun": [] }`;
-            raw = await callGemini('gemini-2.5-pro', CRITIC_INSTRUCTION, criticInput);
+            raw = await callGemini('gemini-2.5-flash', CRITIC_INSTRUCTION, criticInput);
         } catch (e: any) {
             log({ severity: 'WARNING', message: 'Critic API call failed', session_id: sessionId, error: e.message || String(e) });
         }
 
         const result = robustParse('strategic_critic', raw, sessionId);
         const latency = Date.now() - startTime;
-        const cost = estimateCost('gemini-2.5-pro', criticInput.length, raw.length);
+        const cost = estimateCost('gemini-2.5-flash', criticInput.length, raw.length);
 
         log({
             severity: 'INFO',
@@ -395,7 +395,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         return result;
     }
 
-    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; frameworks: any; orgName: string; moatRationale: string }> {
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; frameworks: any; orgName: string; moatRationale: string }> {
         log({
             severity: 'INFO',
             message: 'CSO analysis started (Parallel Specialist Mode)',
@@ -556,106 +556,72 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
             })
             .join('\n\n');
 
-        const synthesisPrompt = `
-            You are the Chief Strategy Officer. You have received independent analysis from your specialists.
+        // ── Synthesis prompt shared context (passed to both parallel calls) ──────
+        const sharedContext = `BUSINESS CONTEXT:\n${businessContext}\n\nSPECIALIST DIGEST (scores + key signal per agent):\n${specialistDigest}\n\nMERGED DIMENSION SCORES:\n${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join(', ')}`;
 
-            BUSINESS CONTEXT:
-            ${businessContext}
+        // ── Call A: Executive narrative + Scenario Analysis ──────────────────────
+        // Focused: no roadmap, ~1,400 tokens output target
+        const narrativePrompt = `${sharedContext}
 
-            SPECIALIST DIGEST (scores + key signal per agent):
-            ${specialistDigest}
+YOUR TASK: Synthesize into a high-end Tier-1 Consulting strategic report in clean markdown.
+Include these sections: Executive Synthesis, Unit Economics Analysis (if data available), Risk & Monte Carlo Projections (if data available).
 
-            MERGED DIMENSION SCORES:
-            ${JSON.stringify(finalDimensions, null, 2)}
-            
-            SCENARIO PLANNING — MANDATORY SECTION
-            Based on the specialist analyses, identify the 2 highest-impact macro uncertainties facing this business.
-            Then define 3 named scenarios and assess the strategy's resilience under each.
-            
-            MACRO UNCERTAINTIES: Pick 2 from the context (e.g. regulatory change, competitive entry, market contraction, technology shift, macro recession, demand acceleration).
-            
-            SCENARIO 1 — BASE CASE (most likely, ~60% probability)
-            - Name: [descriptive label]
-            - Conditions: [what the world looks like]
-            - Strategy performance: GREEN | AMBER | RED
-            - Key risk in this scenario:
-            - Recommended pivot if this materialises:
-            
-            SCENARIO 2 — OPTIMISTIC CASE (~25% probability)
-            - Name: [descriptive label]
-            - Conditions: [tailwinds, favourable dynamics]
-            - Strategy performance: GREEN | AMBER | RED
-            - How to accelerate advantage in this scenario:
-            
-            SCENARIO 3 — STRESS CASE (~15% probability)
-            - Name: [descriptive label]
-            - Conditions: [headwinds, adverse dynamics]
-            - Strategy performance: GREEN | AMBER | RED
-            - Survival move: minimum viable strategic action to remain viable
-            
-            RESILIENCE SCORE: 0-100 (how well does the strategy hold across all 3 scenarios?)
-            
-            Include this as a dedicated "## Scenario Analysis" section in the markdown report.
-            
-            YOUR TASK:
-            1. Synthesize these inputs into a high-end Tier-1 Consulting strategic report.
-            2. Integrate the dimension scores into the narrative.
-            3. Ensure the report is formatted in clean markdown.
-            4. You MUST explicitly include the following sections if data is available in the inputs:
-               - **Executive Synthesis**
-               - **Unit Economics Analysis**
-               - **Risk & Monte Carlo Projections**
-               
-            5. After the main strategy report, generate a 90-DAY STRATEGIC ROADMAP section.
-               Format it as:
-               ## 90-Day Strategic Roadmap
-               
-               ### Days 1-30: Quick Wins
-               [3 specific actions with measurable outcomes. Format each as:]
-               **Action:** [Specific action]
-               **Owner:** [CEO / CTO / Head of Sales / etc]
-               **Success metric:** [Quantifiable outcome]
-               **Why now:** [One sentence urgency]
-               
-               ### Days 31-60: Foundation Building
-               [3 specific actions]
-               
-               ### Days 61-90: Strategic Bets
-               [2-3 specific actions with higher uncertainty but high upside]
-               
-               Each action must:
-               - Reference a specific dimension from the 20-dimension scorecard
-               - Name a specific person or role responsible
-               - Have a measurable success metric (not "improve" — specify a number)
-               - Connect to a specific business outcome (revenue, cost, risk reduction)
-               
-            6. YOU MUST END THE REPORT WITH THE EXACT "Dimension Scores" TABLE BELOW.
-            
-            CRITICAL: Do NOT call any sub-agents or tools. All necessary data is provided above. Simply synthesize and return markdown.
-            
-            ## Dimension Scores
-            ${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
-        `.trim();
+SCENARIO ANALYSIS — include as "## Scenario Analysis":
+Identify 2 highest-impact macro uncertainties. Define 3 named scenarios (Base ~60%, Optimistic ~25%, Stress ~15%). For each: Name, Conditions (1 sentence), Strategy performance (GREEN|AMBER|RED), and one key action. End with Resilience Score 0-100.
 
-        emitHeartbeat(sessionId, '◆ CSO: merging 20-dimension matrix...');
+End the report with:
+## Dimension Scores
+${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
+
+CRITICAL: Do NOT generate a 90-Day Roadmap here. Do NOT call sub-agents or tools.`.trim();
+
+        // ── Call B: 90-Day Roadmap only ──────────────────────────────────────────
+        // Isolated: focused on actionable output, ~800 tokens target
+        const roadmapPrompt = `${sharedContext}
+
+YOUR TASK: Generate ONLY a 90-Day Strategic Roadmap in markdown. No other sections.
+
+## 90-Day Strategic Roadmap
+
+### Days 1-30: Quick Wins
+3 specific actions. Each formatted as:
+**Action:** [specific action] | **Owner:** [role] | **Success metric:** [number] | **Why now:** [1 sentence urgency]
+
+### Days 31-60: Foundation Building
+3 specific actions in same format.
+
+### Days 61-90: Strategic Bets
+2-3 higher-uncertainty actions with high upside, same format.
+
+Each action must reference a specific dimension from the scorecard, name a role, and have a measurable metric.
+CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.trim();
+
+        emitHeartbeat(sessionId, '◆ CSO: synthesizing executive report and roadmap in parallel...');
         const synthesisStartTime = Date.now();
+        const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
 
-        let finalReport = '';
+        // Run both Pro calls in parallel — wall-clock = max(A, B) ≈ 25-30s vs 50-55s serial
+        let mainReport = '';
+        let roadmap = '';
         try {
-            const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
-            finalReport = await callGemini('gemini-2.5-pro', csoInstruction, synthesisPrompt);
+            [mainReport, roadmap] = await Promise.all([
+                callGemini('gemini-2.5-pro', csoInstruction, narrativePrompt).catch(async (e: any) => {
+                    log({ severity: 'WARNING', message: 'CSO narrative call failed, retrying with flash', session_id: sessionId, error: e.message });
+                    return callGemini('gemini-2.5-flash', csoInstruction, narrativePrompt);
+                }),
+                callGemini('gemini-2.5-pro', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap.', roadmapPrompt).catch(async (e: any) => {
+                    log({ severity: 'WARNING', message: 'CSO roadmap call failed, retrying with flash', session_id: sessionId, error: e.message });
+                    return callGemini('gemini-2.5-flash', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap.', roadmapPrompt);
+                }),
+            ]);
         } catch (e: any) {
-            log({ severity: 'WARNING', message: 'CSO synthesis pro failed, retrying with flash', session_id: sessionId, error: e.message || String(e) });
-            try {
-                const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
-                finalReport = await callGemini('gemini-2.5-flash', csoInstruction, synthesisPrompt);
-            } catch (e2: any) {
-                log({ severity: 'ERROR', message: 'CSO synthesis fallback also failed', session_id: sessionId, error: e2.message || String(e2) });
-            }
+            log({ severity: 'ERROR', message: 'CSO synthesis both calls failed', session_id: sessionId, error: e.message || String(e) });
         }
 
+        const finalReport = mainReport + (roadmap ? '\n\n' + roadmap : '');
+
         const synthesisLatency = Date.now() - synthesisStartTime;
-        const synthesisCost = estimateCost(finalReport ? 'gemini-2.5-pro' : 'gemini-2.5-flash', synthesisPrompt.length, finalReport.length);
+        const synthesisCost = estimateCost('gemini-2.5-pro', narrativePrompt.length + roadmapPrompt.length, finalReport.length);
         log({
             severity: 'INFO',
             message: 'CSO synthesis complete',
@@ -663,8 +629,6 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
             phase: 'synthesis',
             session_id: sessionId,
             latency_ms: synthesisLatency,
-            agent_input: synthesisPrompt.slice(0, 500) + '...',
-            agent_output: finalReport.slice(0, 500) + '...',
             cost_usd: synthesisCost.usd,
             tokens_in: synthesisCost.inputTokens,
             tokens_out: synthesisCost.outputTokens
@@ -752,6 +716,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
 
         return {
             report: finalReport,
+            roadmap,
             dimensions: finalDimensions,
             richDimensions,
             specialistOutputs,

@@ -51,6 +51,7 @@ type MonteCarloData = {
 
 type ReportData = {
     analysis_markdown?: string;
+    roadmap?: string;
     dimensions?: Record<string, number | null>;
     confidence_score?: number;
     orgName?: string;
@@ -142,6 +143,7 @@ function sanitizeReport(text: string): string {
         .replace(/\{[\s\S]*?\}/g, '')       // Remove raw JSON objects
         .replace(/```markdown/g, '')        // Remove markdown tags
         .replace(/```/g, '')                // Remove any remaining backticks
+        .replace(/#{1,4}\s*90.Day Strategic Roadmap[\s\S]*$/im, '') // strip roadmap (now separate)
         .replace(/#{1,4}\s*Dimension Scores[\s\S]*$/im, '') // any heading level
         .replace(/Dimension Scores:?[\s\S]*$/im, '')
         .trim();
@@ -380,6 +382,10 @@ ${context}`.trim();
                         break;
                     }
 
+                    case 'ROADMAP_COMPLETE':
+                        setResult(prev => prev ? { ...prev, roadmap: event.roadmap as string } : prev);
+                        break;
+
                     case 'ERROR':
                         setError((event.message as string) || 'An error occurred.');
                         setPhase('error');
@@ -457,6 +463,8 @@ ${context}`.trim();
                         setCurrentReportToken((event.token as string) || reportId.slice(-8));
                     }
                     setPhase('done');
+                } else if (event.type === 'ROADMAP_COMPLETE') {
+                    setResult(prev => prev ? { ...prev, roadmap: event.roadmap as string } : prev);
                 } else if (event.type === 'ERROR') {
                     setError((event.message as string) || 'Clarification failed.');
                     setPhase('error');
@@ -1092,6 +1100,25 @@ ${context}`.trim();
                                                 </div>
                                             </div>
                                         </div>
+
+                                        {/* 90-Day Roadmap — arrives via ROADMAP_COMPLETE after main report */}
+                                        {result.roadmap ? (
+                                            <div className="bg-zinc-900/50 border border-violet-500/20 rounded-2xl p-8 backdrop-blur-xl mt-6">
+                                                <div className="report-content prose prose-invert prose-sm max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-p:text-zinc-300 prose-p:leading-relaxed prose-strong:text-white">
+                                                    <ReactMarkdown>{result.roadmap}</ReactMarkdown>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="mt-6 bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-6 animate-pulse">
+                                                <div className="h-3 bg-zinc-800 rounded w-48 mb-4" />
+                                                <div className="space-y-2">
+                                                    <div className="h-2 bg-zinc-800 rounded w-full" />
+                                                    <div className="h-2 bg-zinc-800 rounded w-5/6" />
+                                                    <div className="h-2 bg-zinc-800 rounded w-4/6" />
+                                                </div>
+                                                <p className="text-[10px] text-zinc-600 mt-3 uppercase tracking-widest font-bold">90-Day Roadmap generating...</p>
+                                            </div>
+                                        )}
 
                                         <div className="space-y-6">
                                             <StressTestPanel
