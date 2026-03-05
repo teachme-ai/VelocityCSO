@@ -38,19 +38,7 @@ export async function saveAuditMemory(
     try {
         const db = admin.firestore();
 
-        // Update the report document with structured memory fields
-        await db.collection(REPORTS).doc(reportId).set({
-            business_context: data.businessContext,
-            fingerprint: data.businessContext.trim().slice(0, 80).toLowerCase(),
-            grounded_context: data.groundedContext,
-            dimension_scores: data.dimensionScores,
-            rich_dimensions: data.richDimensions,
-            report: data.report,
-            stress_test: data.stressTest,
-            moat_rationale: data.moatRationale,
-            org_name: data.orgName,
-            created_at: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        // Report document is already created fully populated in index.ts
 
         // Write specialist outputs as a subcollection for querying
         const batch = db.batch();
@@ -117,6 +105,7 @@ export async function loadAuditMemory(reportId: string): Promise<AuditMemory | n
             stressTest: data.stress_test || false,
             moatRationale: data.moat_rationale || '',
             orgName: data.org_name || '',
+            frameworks: data.frameworks ?? {},
             createdAt: data.created_at?.toMillis() ?? Date.now(),
         };
     } catch (err: any) {

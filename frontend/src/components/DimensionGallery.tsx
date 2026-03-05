@@ -1,147 +1,194 @@
-import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
+import {
+    RadarChart,
+    Radar,
+    PolarGrid,
+    PolarAngleAxis,
+    ResponsiveContainer,
+    Tooltip,
+} from 'recharts';
 
-const dimensions = [
-    { name: 'TAM Viability', category: 'Market', color: '#a78bfa' },
-    { name: 'Target Precision', category: 'Market', color: '#a78bfa' },
-    { name: 'Trend Adoption', category: 'Market', color: '#a78bfa' },
-    { name: 'Competitive Defensibility', category: 'Strategy', color: '#818cf8' },
-    { name: 'Model Innovation', category: 'Strategy', color: '#818cf8' },
-    { name: 'Flywheel Potential', category: 'Strategy', color: '#818cf8' },
-    { name: 'Pricing Power', category: 'Commercial', color: '#34d399' },
-    { name: 'CAC/LTV Ratio', category: 'Commercial', color: '#34d399' },
-    { name: 'Market Entry Speed', category: 'Commercial', color: '#34d399' },
-    { name: 'Execution Speed', category: 'Operations', color: '#6ee7b7' },
-    { name: 'Scalability', category: 'Operations', color: '#6ee7b7' },
-    { name: 'ESG Posture', category: 'Operations', color: '#6ee7b7' },
-    { name: 'ROI Projection', category: 'Finance', color: '#fbbf24' },
-    { name: 'Risk Tolerance', category: 'Finance', color: '#fbbf24' },
-    { name: 'Capital Efficiency', category: 'Finance', color: '#fbbf24' },
+const CATEGORIES = [
+    {
+        name: 'Market',
+        color: '#a78bfa',
+        score: 73,
+        dimensions: [
+            { name: 'TAM Viability', score: 85 },
+            { name: 'Target Precision', score: 42 },
+            { name: 'Trend Adoption', score: 92 },
+        ],
+    },
+    {
+        name: 'Strategy',
+        color: '#818cf8',
+        score: 59,
+        dimensions: [
+            { name: 'Competitive Defensibility', score: 38 },
+            { name: 'Model Innovation', score: 77 },
+            { name: 'Flywheel Potential', score: 61 },
+        ],
+    },
+    {
+        name: 'Commercial',
+        color: '#34d399',
+        score: 59,
+        dimensions: [
+            { name: 'Pricing Power', score: 88 },
+            { name: 'CAC/LTV Ratio', score: 55 },
+            { name: 'Market Entry Speed', score: 33 },
+        ],
+    },
+    {
+        name: 'Operations',
+        color: '#6ee7b7',
+        score: 72,
+        dimensions: [
+            { name: 'Execution Speed', score: 72 },
+            { name: 'Scalability', score: 49 },
+            { name: 'ESG Posture', score: 95 },
+        ],
+    },
+    {
+        name: 'Finance',
+        color: '#fbbf24',
+        score: 58,
+        dimensions: [
+            { name: 'ROI Projection', score: 28 },
+            { name: 'Risk Tolerance', score: 66 },
+            { name: 'Capital Efficiency', score: 81 },
+        ],
+    },
 ];
 
-function useWindowSize() {
-    const [size, setSize] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 1200 });
-    useEffect(() => {
-        const handleResize = () => setSize({ width: window.innerWidth });
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-    return size;
+const radarData = CATEGORIES.map(c => ({ category: c.name, score: c.score }));
+
+function scoreColor(score: number) {
+    if (score >= 70) return '#16a34a';
+    if (score >= 40) return '#2563eb';
+    return '#dc2626';
 }
 
+function scoreLabel(score: number) {
+    if (score >= 70) return 'Healthy';
+    if (score >= 40) return 'Developing';
+    return 'Critical';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+        const d = payload[0].payload;
+        const cat = CATEGORIES.find(c => c.name === d.category);
+        return (
+            <div className="bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-xs">
+                <p className="text-white font-semibold mb-1">{d.category}</p>
+                <p style={{ color: cat?.color }}>{d.score} / 100</p>
+            </div>
+        );
+    }
+    return null;
+};
+
 export const DimensionGallery = () => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const { width } = useWindowSize();
-
-    // Responsive configuration
-    const isMobile = width < 640;
-    const isTablet = width >= 640 && width < 1024;
-
-    const cols = isMobile ? 1 : (isTablet ? 3 : 5);
-    const rowHeight = isMobile ? 160 : 140; // More vertical space on mobile
-    const containerHeight = Math.ceil(dimensions.length / cols) * rowHeight + 100;
-
-    const dimensionData = dimensions.map((dim: { name: string; category: string; color: string }, i: number) => {
-        const row = Math.floor(i / cols);
-        const col = i % cols;
-
-        // Base grid position (%)
-        const colWidth = 100 / cols;
-        const baseX = isMobile ? 50 : (col * colWidth) + (colWidth / 2);
-        const baseY = (row * rowHeight) + (rowHeight / 2);
-
-        // Deterministic jitter based on index
-        const jitterX = isMobile ? 0 : ((i * 13) % 8) - 4;
-        const jitterY = isMobile ? 0 : ((i * 17) % 8) - 4;
-
-        // Sample Audit Scores (deterministic for demo)
-        const scores = [85, 42, 92, 38, 77, 61, 88, 55, 33, 72, 49, 95, 28, 66, 81];
-        const score = scores[i % scores.length];
-
-        // Health Color Logic
-        let healthColor = '#16a34a'; // Green (Healthy)
-        if (score < 40) healthColor = '#dc2626'; // Red (Critical)
-        else if (score < 70) healthColor = '#2563eb'; // Blue (Developing)
-
-        return {
-            ...dim,
-            left: isMobile ? `50%` : `calc(${baseX}% + ${jitterX}px)`,
-            top: `${baseY + jitterY}px`,
-            animationDuration: 4 + ((i * 7) % 3),
-            animationDelay: (i * 0.3) % 2,
-            score,
-            healthColor
-        };
-    });
-
     return (
-        <div
-            ref={containerRef}
-            className="relative w-full mt-6 md:mt-12 overflow-hidden px-4 md:px-0"
-            style={{ height: `${containerHeight}px` }}
-        >
-            {dimensionData.map((dim: any, i: number) => {
-                return (
+        <div className="flex flex-col lg:flex-row items-start gap-10 lg:gap-16 w-full">
+            {/* Radar Chart */}
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.8 }}
+                viewport={{ once: true }}
+                className="w-full lg:w-[420px] flex-shrink-0"
+            >
+                <div className="relative">
+                    {/* Glow ring behind chart */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-64 h-64 rounded-full bg-violet-600/10 blur-[60px]" />
+                    </div>
+                    <ResponsiveContainer width="100%" height={360}>
+                        <RadarChart data={radarData} margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
+                            <PolarGrid
+                                stroke="rgba(255,255,255,0.06)"
+                                strokeWidth={1}
+                            />
+                            <PolarAngleAxis
+                                dataKey="category"
+                                tick={{ fill: '#a1a1aa', fontSize: 12, fontWeight: 600, fontFamily: 'Space Grotesk, sans-serif' }}
+                                tickLine={false}
+                            />
+                            <Radar
+                                name="Score"
+                                dataKey="score"
+                                stroke="#a78bfa"
+                                strokeWidth={2}
+                                fill="#7c3aed"
+                                fillOpacity={0.15}
+                                dot={{ fill: '#a78bfa', r: 4, strokeWidth: 0 }}
+                            />
+                            <Tooltip content={<CustomTooltip />} />
+                        </RadarChart>
+                    </ResponsiveContainer>
+                    {/* Center label */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="text-center">
+                            <div className="text-2xl font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>64</div>
+                            <div className="text-[9px] tracking-[0.2em] uppercase text-gray-500 mt-0.5">Overall</div>
+                        </div>
+                    </div>
+                </div>
+                <p className="text-center text-[10px] tracking-[0.3em] uppercase text-gray-600 mt-2">
+                    Sample Audit — Demo Scores
+                </p>
+            </motion.div>
+
+            {/* Category Sidebar */}
+            <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-6 lg:gap-5">
+                {CATEGORIES.map((cat, ci) => (
                     <motion.div
-                        key={dim.name}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        whileInView={{
-                            opacity: 1,
-                            scale: 1,
-                            transition: {
-                                delay: (i % cols) * 0.1 + Math.floor(i / cols) * 0.1,
-                                duration: 0.6,
-                                ease: "easeOut"
-                            }
-                        }}
+                        key={cat.name}
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        transition={{ delay: ci * 0.08, duration: 0.5 }}
                         viewport={{ once: true }}
-                        animate={{
-                            y: [0, -10, 0],
-                            x: [0, 5, 0],
-                            transition: {
-                                duration: dim.animationDuration,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                                delay: dim.animationDelay
-                            }
-                        }}
-                        className="dimension-orb absolute flex flex-col items-center justify-center text-center cursor-default group"
-                        style={{
-                            left: dim.left,
-                            top: dim.top,
-                            transform: 'translate(-50%, -50%)',
-                            '--health-color': dim.healthColor,
-                            width: isMobile ? '140px' : '180px'
-                        } as React.CSSProperties}
                     >
-                        <motion.div
-                            animate={{
-                                opacity: [0.6, 1, 0.6],
-                                scale: [1, 1.15, 1],
-                            }}
-                            transition={{
-                                duration: 2,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                                delay: i * 0.2
-                            }}
-                            className="w-2.5 h-2.5 rounded-full mb-2 shadow-[0_0_15px_var(--health-color)]"
-                            style={{ backgroundColor: dim.healthColor } as React.CSSProperties}
-                        />
-                        <h4 className="text-white font-bold text-[10px] md:text-[13px] tracking-tight mb-0.5 group-hover:text-violet-300 transition-colors leading-tight">
-                            {dim.name}
-                        </h4>
-                        <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-[9px] font-mono text-white/90 bg-white/10 px-1.5 rounded border border-white/5">
-                                {dim.score}
+                        {/* Category header */}
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color, boxShadow: `0 0 8px ${cat.color}` }} />
+                            <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: cat.color, fontFamily: 'Space Grotesk, sans-serif' }}>
+                                {cat.name}
                             </span>
-                            <span className="text-[8px] uppercase tracking-[0.1em] text-gray-500 font-bold">
-                                {dim.category}
-                            </span>
+                            <div className="flex-1 h-px bg-white/5" />
+                            <span className="text-xs font-mono text-white/60">{cat.score}</span>
+                        </div>
+
+                        {/* Dimension rows */}
+                        <div className="space-y-1.5 pl-4">
+                            {cat.dimensions.map((dim) => (
+                                <div key={dim.name} className="flex items-center gap-3">
+                                    <span className="text-[11px] text-gray-400 w-40 flex-shrink-0 truncate">{dim.name}</span>
+                                    <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            whileInView={{ width: `${dim.score}%` }}
+                                            transition={{ delay: ci * 0.08 + 0.2, duration: 0.6, ease: 'easeOut' }}
+                                            viewport={{ once: true }}
+                                            className="h-full rounded-full"
+                                            style={{ backgroundColor: scoreColor(dim.score) }}
+                                        />
+                                    </div>
+                                    <span
+                                        className="text-[9px] font-bold uppercase tracking-wide w-16 text-right flex-shrink-0"
+                                        style={{ color: scoreColor(dim.score) }}
+                                    >
+                                        {scoreLabel(dim.score)}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     </motion.div>
-                );
-            })}
+                ))}
+            </div>
         </div>
     );
 };

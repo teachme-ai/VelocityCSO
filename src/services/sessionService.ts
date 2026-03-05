@@ -8,7 +8,7 @@ export interface StrategySession {
     turnCount: number;
     usedLenses: string[];
     createdAt: number;
-    expiresAt: number;
+    expiresAt: number | admin.firestore.Timestamp;
 }
 
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -24,7 +24,7 @@ export async function saveSession(sessionId: string, data: Omit<StrategySession,
     await db().collection(COLLECTION).doc(sessionId).set({
         ...data,
         createdAt: now,
-        expiresAt: now + SESSION_TTL_MS,
+        expiresAt: admin.firestore.Timestamp.fromMillis(now + SESSION_TTL_MS),
     });
 }
 
@@ -69,7 +69,11 @@ export async function getSession(sessionId: string): Promise<StrategySession | n
     if (!doc.exists) return null;
 
     const data = doc.data() as StrategySession;
-    if (Date.now() > data.expiresAt) {
+    const expiresAtMs = data.expiresAt instanceof admin.firestore.Timestamp
+        ? data.expiresAt.toMillis()
+        : (data.expiresAt as number);
+
+    if (Date.now() > expiresAtMs) {
         // Expired — clean up
         await db().collection(COLLECTION).doc(sessionId).delete();
         return null;

@@ -1,5 +1,7 @@
 import PDFDocument from 'pdfkit';
 import type { AuditMemory } from './memory.js';
+import { renderCharts, type ChartImages } from './chartService.js';
+import { log } from './logger.js';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const NAVY = '#0D1B2A';
@@ -171,12 +173,19 @@ Dimensions: ${dimNames.join(', ')}`.trim();
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
-export async function generatePDF(memory: AuditMemory): Promise<Buffer> {
-    // Run all stress scenarios
+export async function generatePDF(memory: AuditMemory, reportId = ''): Promise<Buffer> {
+    const sessionId = memory.reportId || reportId || 'pdf_gen';
+
+    // Run stress scenarios + chart rendering in parallel
     const scenarioIds = ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT', 'REGULATORY'];
-    const stressResults = await Promise.all(
-        scenarioIds.map(id => runStressScenario(id, memory.businessContext, memory.dimensionScores))
-    );
+    const [stressResults, chartImages] = await Promise.all([
+        Promise.all(scenarioIds.map(id => runStressScenario(id, memory.businessContext, memory.dimensionScores))),
+        renderCharts(memory, sessionId, reportId).catch((err: unknown) => {
+            log({ severity: 'WARNING', message: 'generatePDF | charts_skipped', error: String(err), session_id: sessionId });
+            return {} as ChartImages;
+        }),
+    ]);
+
     const stressMap: Record<string, { stressedScores: Record<string, number>; mitigationCards: any[] }> = {};
     scenarioIds.forEach((id, i) => { stressMap[id] = stressResults[i]; });
 
@@ -186,14 +195,33 @@ export async function generatePDF(memory: AuditMemory): Promise<Buffer> {
         doc.on('data', (chunk: Buffer) => chunks.push(chunk));
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
-        _buildPDF(doc, memory, stressMap);
+        _buildPDF(doc, memory, stressMap, chartImages);
     });
+}
+
+// ─── Chart helpers ─────────────────────────────────────────────────────────────
+function embedChart(doc: PDFKit.PDFDocument, b64: string, x: number, y: number, w: number, h: number): boolean {
+    if (!b64) return false;
+    try {
+        const buf = Buffer.from(b64, 'base64');
+        doc.image(buf, x, y, { width: w, height: h });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function chartFallbackText(doc: PDFKit.PDFDocument, message: string, x: number, y: number, w: number) {
+    doc.rect(x, y, w, 28).fill('#F3F4F6');
+    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica-Oblique')
+        .text(message, x + 8, y + 8, { width: w - 16 });
 }
 
 function _buildPDF(
     doc: PDFKit.PDFDocument,
     memory: AuditMemory,
-    stressMap: Record<string, { stressedScores: Record<string, number>; mitigationCards: any[] }>
+    stressMap: Record<string, { stressedScores: Record<string, number>; mitigationCards: any[] }>,
+    charts: ChartImages = {}
 ): void {
     const orgName = sanitizeText(memory.orgName || extractOrgName(memory.businessContext || ''));
     const killerMove = extractKillerMove(memory.report);
@@ -494,6 +522,227 @@ function _buildPDF(
             }
         }
         drawFooter(doc, page++);
+    }
+
+    // ── STRATEGIC FRAMEWORKS ───────────────────────────────────────────────────
+    const fw = memory.frameworks ?? {};
+    const hasFrameworks = Object.keys(fw).some(k => fw[k]);
+    if (hasFrameworks) {
+        const pageW = doc.page.width;
+        const chartW = pageW - 80;
+        const chartH = 320;
+
+        // Porter's Five Forces
+        if (fw.porter) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, "Porter's Five Forces Analysis", y);
+            if (!embedChart(doc, charts.porter ?? '', 40, y, chartW, chartH)) {
+                const scores = fw.porter?.scores ?? {};
+                for (const [force, entry] of Object.entries(scores) as [string, any][]) {
+                    const label = force.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    y = scoreBar(doc, label, entry?.score ?? 50, undefined, y);
+                }
+            } else { y += chartH + 8; }
+            if (fw.porter?.interaction_effect_warning) {
+                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
+                    .text(`Note: ${sanitizeText(fw.porter.interaction_effect_warning)}`, 40, y, { width: chartW });
+                y = doc.y + 6;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // Ansoff Matrix
+        if (fw.ansoff) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Ansoff Growth Matrix', y);
+            if (!embedChart(doc, charts.ansoff ?? '', 40, y, chartW, chartH)) {
+                chartFallbackText(doc, 'Ansoff matrix chart unavailable — see data below.', 40, y, chartW);
+                y += 36;
+                for (const key of ['market_penetration','market_development','product_development','diversification']) {
+                    const q = fw.ansoff?.[key];
+                    if (!q) continue;
+                    const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    y = scoreBar(doc, label, q.score ?? 50, undefined, y);
+                    if (q.killer_move) {
+                        doc.fontSize(7).fillColor(GRAY).font('Helvetica-Oblique')
+                            .text(`  → ${sanitizeText(q.killer_move)}`, 40, y, { width: chartW });
+                        y = doc.y + 4;
+                    }
+                }
+            } else { y += chartH + 8; }
+            if (fw.ansoff?.strategic_verdict) {
+                doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
+                    .text(sanitizeText(fw.ansoff.strategic_verdict), 40, y, { width: chartW });
+                y = doc.y + 10;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // VRIO
+        if (fw.vrio) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'VRIO Resource Analysis', y);
+            if (!embedChart(doc, charts.vrio ?? '', 40, y, chartW, Math.min(chartH, 280))) {
+                for (const key of ['valuable','rare','inimitable','organised']) {
+                    const entry = fw.vrio?.[key];
+                    if (!entry) continue;
+                    y = scoreBar(doc, key.charAt(0).toUpperCase() + key.slice(1), entry.score ?? 50, undefined, y);
+                    if (entry.evidence) {
+                        doc.fontSize(7).fillColor(GRAY).font('Helvetica').text(sanitizeText(entry.evidence), 50, y, { width: chartW - 10 });
+                        y = doc.y + 4;
+                    }
+                }
+            } else { y += Math.min(chartH, 280) + 8; }
+            if (fw.vrio?.verdict) {
+                doc.rect(40, y, chartW, 22).fill('#EFF6FF');
+                doc.fontSize(9).fillColor(BLUE).font('Helvetica-Bold').text(`Verdict: ${sanitizeText(fw.vrio.verdict)}`, 48, y + 6);
+                y += 30;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // Blue Ocean — Strategy Canvas
+        if (fw.blue_ocean) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Blue Ocean Strategy Canvas', y);
+            if (!embedChart(doc, charts.blue_ocean_canvas ?? '', 40, y, chartW, chartH)) {
+                chartFallbackText(doc, 'Strategy canvas chart unavailable.', 40, y, chartW);
+                y += 36;
+            } else { y += chartH + 12; }
+
+            // ERRC Grid on same or next page
+            if (y > pageBottom - 240) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+            y = sectionTitle(doc, 'Blue Ocean ERRC Grid', y);
+            if (!embedChart(doc, charts.blue_ocean_errc ?? '', 40, y, chartW, 240)) {
+                const errc = fw.blue_ocean?.errc_grid ?? {};
+                for (const [action, items] of Object.entries(errc) as [string, any][]) {
+                    doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text(action.toUpperCase(), 40, y); y += 14;
+                    for (const item of (Array.isArray(items) ? items : [])) {
+                        doc.fontSize(7.5).fillColor(GRAY).font('Helvetica').text(`• ${sanitizeText(String(item))}`, 50, y); y = doc.y + 2;
+                    }
+                    y += 4;
+                }
+            } else { y += 248; }
+            drawFooter(doc, page++);
+        }
+
+        // Wardley Map
+        if (fw.wardley) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Wardley Strategic Map', y);
+            if (!embedChart(doc, charts.wardley ?? '', 40, y, chartW, chartH)) {
+                chartFallbackText(doc, 'Wardley map chart unavailable — see components below.', 40, y, chartW);
+                y += 36;
+                const components = fw.wardley?.components ?? [];
+                for (const c of components.slice(0, 10)) {
+                    doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
+                        .text(`${c.name ?? ''} — Evolution: ${c.evolution ?? '?'}, Position: ${c.value_chain_position ?? '?'}`, 40, y, { width: chartW });
+                    y = doc.y + 3;
+                }
+            } else { y += chartH + 8; }
+            const warnings = fw.wardley?.strategic_warnings ?? [];
+            if (warnings.length > 0) {
+                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
+                    .text(`Strategic warnings: ${warnings.slice(0,2).map((w: string) => sanitizeText(w)).join(' | ')}`, 40, y, { width: chartW });
+                y = doc.y + 8;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // Monte Carlo
+        if (fw.monte_carlo) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Monte Carlo LTV:CAC Simulation', y);
+            if (!embedChart(doc, charts.monte_carlo ?? '', 40, y, chartW, chartH)) {
+                chartFallbackText(doc, 'Monte Carlo histogram unavailable — see percentiles below.', 40, y, chartW);
+                y += 36;
+                const dists = fw.monte_carlo?.distributions ?? [];
+                if (dists.length > 0) {
+                    const vals = dists.map((d: any) => typeof d === 'number' ? d : d?.value ?? 0).filter(Number.isFinite);
+                    if (vals.length) {
+                        const sorted = [...vals].sort((a, b) => a - b);
+                        const p10 = sorted[Math.floor(sorted.length * 0.1)];
+                        const p50 = sorted[Math.floor(sorted.length * 0.5)];
+                        const p90 = sorted[Math.floor(sorted.length * 0.9)];
+                        doc.fontSize(8).fillColor(NAVY).font('Helvetica')
+                            .text(`P10: ${p10?.toFixed(2)}x  |  P50: ${p50?.toFixed(2)}x  |  P90: ${p90?.toFixed(2)}x`, 40, y);
+                        y = doc.y + 10;
+                    }
+                }
+            } else { y += chartH + 8; }
+            const drivers = fw.monte_carlo?.risk_drivers ?? [];
+            if (drivers.length > 0) {
+                doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text('Top Risk Drivers:', 40, y); y += 14;
+                for (const d of drivers.slice(0, 4)) {
+                    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica')
+                        .text(`• ${sanitizeText(d.factor ?? '')}: ${((d.variance_contribution ?? 0) * 100).toFixed(0)}% of variance`, 48, y, { width: chartW });
+                    y = doc.y + 3;
+                }
+            }
+            drawFooter(doc, page++);
+        }
+
+        // PESTLE
+        if (fw.pestle) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'PESTLE Environmental Scan', y);
+            if (!embedChart(doc, charts.pestle ?? '', 40, y, chartW, chartH)) {
+                chartFallbackText(doc, 'PESTLE chart unavailable — see factors below.', 40, y, chartW);
+                y += 36;
+                for (const dim of ['political','economic','social','technological','legal','environmental']) {
+                    const factors = fw.pestle?.[dim];
+                    if (!factors) continue;
+                    const list = Array.isArray(factors) ? factors : [factors];
+                    for (const f of list.slice(0, 2)) {
+                        doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
+                            .text(`${dim.charAt(0).toUpperCase()}: ${sanitizeText(f.factor ?? String(f))}`, 40, y, { width: chartW });
+                        y = doc.y + 3;
+                    }
+                }
+            } else { y += chartH + 8; }
+            if (fw.pestle?.dominant_force) {
+                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
+                    .text(`Dominant Force: ${sanitizeText(fw.pestle.dominant_force)}`, 40, y, { width: chartW });
+                y = doc.y + 8;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // Unit Economics
+        if (fw.unit_economics) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Unit Economics Dashboard', y);
+            if (!embedChart(doc, charts.unit_economics ?? '', 40, y, chartW, chartH)) {
+                const ue = fw.unit_economics;
+                const metrics: [string, string | number | undefined][] = [
+                    ['LTV:CAC Ratio', ue?.ltv_cac_ratio ? `${Number(ue.ltv_cac_ratio).toFixed(2)}x` : undefined],
+                    ['CAC', ue?.cac ? `$${ue.cac}` : undefined],
+                    ['LTV', ue?.ltv ? `$${ue.ltv}` : undefined],
+                    ['ARPU', ue?.arpu ? `$${ue.arpu}` : undefined],
+                    ['Gross Margin', ue?.gross_margin ? `${ue.gross_margin}%` : undefined],
+                    ['Monthly Churn', ue?.churn_rate ? `${ue.churn_rate}%` : undefined],
+                    ['CAC Payback', ue?.payback_period ? `${ue.payback_period} mo` : undefined],
+                    ['NRR', ue?.nrr ? `${ue.nrr}%` : undefined],
+                ];
+                for (const [label, val] of metrics) {
+                    if (!val) continue;
+                    doc.fontSize(8).fillColor(NAVY).font('Helvetica')
+                        .text(`${label}: `, 40, y, { continued: true })
+                        .font('Helvetica-Bold').text(String(val));
+                    y = doc.y + 3;
+                }
+            } else { y += chartH + 8; }
+            const levers = fw.unit_economics?.improvement_levers ?? [];
+            if (levers.length) {
+                doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text('Improvement Levers:', 40, y); y += 14;
+                for (const lever of levers.slice(0, 4)) {
+                    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica')
+                        .text(`• ${sanitizeText(String(lever))}`, 48, y, { width: chartW - 8 });
+                    y = doc.y + 3;
+                }
+            }
+            drawFooter(doc, page++);
+        }
     }
 
     // ── SOURCES APPENDIX ───────────────────────────────────────────────────────

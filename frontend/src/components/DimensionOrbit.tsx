@@ -19,7 +19,7 @@ export function DimensionOrbit() {
                         className="text-xs tracking-[0.4em] uppercase text-violet-400 mb-4 font-bold"
                         style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                     >
-                        Intelligence Architecture
+                        The Diagnostic Engine
                     </motion.p>
                     <motion.h2
                         initial={{ opacity: 0, y: 20 }}
@@ -28,8 +28,8 @@ export function DimensionOrbit() {
                         className="text-4xl md:text-7xl font-bold text-white mb-8 tracking-tight"
                         style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                     >
-                        15 Dimensions.<br />
-                        <span className="text-gradient-main">Zero Guesswork.</span>
+                        Full-Spectrum<br />
+                        <span className="text-gradient-main">Strategy Intelligence.</span>
                     </motion.h2>
                     <motion.p
                         initial={{ opacity: 0 }}
@@ -37,8 +37,8 @@ export function DimensionOrbit() {
                         transition={{ delay: 0.4, duration: 0.8 }}
                         className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto leading-relaxed"
                     >
-                        Our agents interrogate every angle of your model through these 15 strategic lenses
-                        to build a bulletproof defense architecture. No blind spots, just raw intelligence.
+                        Five categories. Fifteen dimensions. Every blind spot surfaced — so your strategy
+                        is built on intelligence, not assumption.
                     </motion.p>
                 </div>
 

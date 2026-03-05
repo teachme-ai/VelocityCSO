@@ -1,8 +1,16 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(gcloud run deploy business-strategy-api --source . --project velocitycso --region us-central1 --quiet)",
+      "Bash(python3 -c \":*)",
+      "Bash(gcloud run deploy business-strategy-api --source . --region us-central1 --project velocitycso --memory 1Gi --timeout 300 --quiet)",
+      "Bash(gcloud run services describe business-strategy-api --region us-central1 --project velocitycso --format='value\\(status.latestReadyRevisionName,status.url\\)')"
+    ],
     "additionalDirectories": [
       "/Users/khalidirfan/projects/Business Agent /frontend/src/components",
-      "/Users/khalidirfan/projects/Business Agent /src"
+      "/Users/khalidirfan/projects/Business Agent /src",
+      "/Users/khalidirfan/projects/Business Agent /charts-service",
+      "/Users/khalidirfan/projects/Business Agent "
     ]
   }
 }

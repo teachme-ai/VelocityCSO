@@ -501,7 +501,7 @@ ${context}`.trim();
     };
 
     return (
-        <section className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-16 overflow-hidden">
+        <section className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-20 md:pt-16 overflow-hidden">
             {/* Deep Space Background */}
             <div className="absolute inset-0 z-0">
                 <StarField />
@@ -509,7 +509,7 @@ ${context}`.trim();
                 <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 40% at 70% 80%, rgba(5,150,105,0.1) 0%, transparent 60%)' }} />
             </div>
 
-            <div className="relative z-10 text-center w-full max-w-4xl mx-auto flex flex-col items-center gap-10">
+            <div className="relative z-10 text-center w-full max-w-4xl mx-auto flex flex-col items-center gap-6 md:gap-10">
                 {/* Branding Logo */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
@@ -520,7 +520,7 @@ ${context}`.trim();
                     <img
                         src={VelocityLogo}
                         alt="VelocityCSO"
-                        className="h-32 md:h-48 w-auto object-contain drop-shadow-[0_0_40px_rgba(139,92,246,0.25)]"
+                        className="h-36 md:h-52 w-auto object-contain drop-shadow-[0_0_40px_rgba(139,92,246,0.25)]"
                         loading="lazy"
                     />
                     <motion.div
