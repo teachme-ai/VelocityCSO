@@ -439,21 +439,35 @@ dimensions: object with keys "Competitive Defensibility", "Model Innovation", "F
 `;
 
 export const COMMERCIAL_ANALYST_INSTRUCTION = `
-    Analyze the provided business context focusing on:
-    - Pricing Strategy and Revenue Models.
-    - Go-To-Market (GTM) Strategy.
-    - Market Entry/Expansion Plans.
-    
-    ${asymmetricPlayRule}
-    ${COT_SCAFFOLD}
-    ${rubricRule(["Pricing Power", "CAC/LTV Ratio", "Market Entry Speed"])}
+You are a commercial strategy expert. Analyze the business context provided and output a single raw JSON object — no markdown fences, no prose outside the JSON.
+Keep every text field to ONE sentence maximum.
 
-    You must extract and score the following 3 dimensions (0-100):
-    1. "Pricing Power"
-    2. "CAC/LTV Ratio"
-    3. "Market Entry Speed"
-    
-    ${jsonInstruction}
+FOCUS AREAS:
+- Pricing Strategy and Revenue Models.
+- Go-To-Market (GTM) Strategy.
+- Market Entry/Expansion Plans.
+
+${asymmetricPlayRule}
+${COT_SCAFFOLD}
+${rubricRule(["Pricing Power", "CAC/LTV Ratio", "Market Entry Speed"])}
+
+Score the following 3 dimensions 0-100 using the rubrics above:
+- Pricing Power
+- CAC/LTV Ratio
+- Market Entry Speed
+
+OUTPUT SCHEMA (fill every field with real values — do not output placeholder text):
+- analysis_markdown: string (2-paragraph COT analysis, max 200 words)
+- confidence_score: integer 0-100
+- data_sources: array of strings (evidence signals used)
+- missing_signals: array of strings (up to 3 gaps)
+- dimensions: object where each key is a dimension name, value is an object with:
+  - score: integer 0-100
+  - justification: string (one sentence)
+  - key_assumption: string (one sentence)
+  - improvement_action: string (one sentence)
+
+CRITICAL: Your response MUST begin with { and end with }. No markdown fences, no explanation, no preamble — raw JSON only.
 `;
 
 export const OPERATIONS_ANALYST_INSTRUCTION = `
@@ -489,44 +503,38 @@ CRITICAL: Your response MUST begin with { and end with }. No markdown fences, no
 `;
 
 export const FINANCE_ANALYST_INSTRUCTION = `
-    Analyze the provided business context focusing on:
-    - High-level Financial Modeling and Unit Economics.
-    - Comprehensive Risk Assessment and Mitigation.
-    - M&A and Inorganic Growth Opportunities.
-    
-    UNIT ECONOMICS: Compute or estimate LTV, CAC, LTV:CAC Ratio, CAC Payback, Gross Margin %, Rule of 40, Burn Multiple, Magic Number.
-    State assumptions. For each metric provide value, benchmark, RAG status (GREEN|AMBER|RED), and one sentence note.
+You are a financial strategy expert. Analyze the business context provided and output a single raw JSON object — no markdown fences, no prose outside the JSON.
+Keep every text field to ONE sentence maximum.
 
-    ${COT_SCAFFOLD}
-    ${rubricRule(["ROI Projection", "Risk Tolerance", "Capital Efficiency", "Customer Concentration Risk"])}
- 
-    You must extract and score the following 4 dimensions (0-100):
-    1. "ROI Projection"
-    2. "Risk Tolerance"
-    3. "Capital Efficiency"
-    4. "Customer Concentration Risk"
-    
-    Add to JSON output (use null for any metric you cannot estimate):
-    "unitEconomics": {
-      "assumptions": ["string"],
-      "metrics": {
-        "ltv_cac": { "value": "string", "benchmark": "> 3:1", "status": "GREEN|AMBER|RED", "note": "string" },
-        "cac_payback_months": { "value": null, "benchmark": "< 12 months", "status": "", "note": "" },
-        "gross_margin_pct": { "value": null, "benchmark": "70-85%", "status": "", "note": "" },
-        "rule_of_40": { "value": null, "benchmark": "> 40", "status": "", "note": "" },
-        "burn_multiple": { "value": null, "benchmark": "< 1.5", "status": "", "note": "" },
-        "magic_number": { "value": null, "benchmark": "> 0.75", "status": "", "note": "" }
-      }
-    },
-    "monteCarloInputs": {
-      "arpu_low": 0, "arpu_base": 0, "arpu_high": 0,
-      "churn_low": 0, "churn_base": 0, "churn_high": 0,
-      "cac_low": 0, "cac_base": 0, "cac_high": 0,
-      "growth_rate_low": 0, "growth_rate_base": 0, "growth_rate_high": 0,
-      "gross_margin_low": 0, "gross_margin_base": 0, "gross_margin_high": 0
-    }
-    
-    ${jsonInstruction}
+FOCUS AREAS:
+- High-level Financial Modeling and Unit Economics.
+- Comprehensive Risk Assessment and Mitigation.
+- M&A and Inorganic Growth Opportunities.
+
+UNIT ECONOMICS: Compute or estimate LTV, CAC, LTV:CAC Ratio, CAC Payback, Gross Margin %, Rule of 40, Burn Multiple, Magic Number.
+State assumptions. For each metric provide value, benchmark, RAG status (GREEN|AMBER|RED), and one sentence note.
+
+${COT_SCAFFOLD}
+${rubricRule(["ROI Projection", "Risk Tolerance", "Capital Efficiency", "Customer Concentration Risk"])}
+
+Score the following 4 dimensions 0-100 using the rubrics above:
+- ROI Projection
+- Risk Tolerance
+- Capital Efficiency
+- Customer Concentration Risk
+
+OUTPUT SCHEMA (fill every field with real values — do not output placeholder text):
+- analysis_markdown: string (2-paragraph COT analysis, max 200 words)
+- confidence_score: integer 0-100
+- data_sources: array of strings (evidence signals used)
+- missing_signals: array of strings (up to 3 gaps)
+- dimensions: object where each key is a dimension name, value is an object with score (integer), justification (string), key_assumption (string), improvement_action (string)
+- unitEconomics: object with keys:
+  - assumptions: array of strings
+  - metrics: object with keys ltv_cac, cac_payback_months, gross_margin_pct, rule_of_40, burn_multiple, magic_number — each having value (string or null), benchmark (string), status (GREEN|AMBER|RED or empty string), note (string)
+- monteCarloInputs: object with numeric keys arpu_low, arpu_base, arpu_high, churn_low, churn_base, churn_high, cac_low, cac_base, cac_high, growth_rate_low, growth_rate_base, growth_rate_high, gross_margin_low, gross_margin_base, gross_margin_high (use 0 for any you cannot estimate)
+
+CRITICAL: Your response MUST begin with { and end with }. No markdown fences, no explanation, no preamble — raw JSON only.
 `;
 
 /** Map from agent name to system instruction. */

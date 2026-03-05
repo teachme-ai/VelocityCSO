@@ -501,7 +501,7 @@ ${context}`.trim();
     };
 
     return (
-        <section className="relative min-h-screen flex flex-col items-center justify-center px-4 overflow-hidden">
+        <section className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-16 overflow-hidden">
             {/* Deep Space Background */}
             <div className="absolute inset-0 z-0">
                 <StarField />
@@ -593,14 +593,26 @@ ${context}`.trim();
 
                                 <textarea
                                     ref={inputRef}
-                                    className="w-full h-36 md:h-36 bg-transparent border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none text-base md:text-sm leading-relaxed"
+                                    className="w-full h-52 bg-transparent border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-y text-base leading-relaxed"
                                     placeholder="Describe your business — model, market, constraints, ambition. Or just name a company. We'll discover the rest."
                                     value={context}
                                     onChange={(e) => setContext(e.target.value)}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="sentences"
+                                    onPaste={(e) => {
+                                        const text = e.clipboardData.getData('text');
+                                        if (text) {
+                                            e.preventDefault();
+                                            const el = e.currentTarget;
+                                            const start = el.selectionStart ?? context.length;
+                                            const end = el.selectionEnd ?? context.length;
+                                            const next = context.slice(0, start) + text + context.slice(end);
+                                            setContext(next);
+                                            requestAnimationFrame(() => {
+                                                el.selectionStart = el.selectionEnd = start + text.length;
+                                            });
+                                        }
+                                    }}
                                     spellCheck="true"
+                                    autoCapitalize="sentences"
                                 />
 
                                 {/* Sector + Scale dropdowns */}
