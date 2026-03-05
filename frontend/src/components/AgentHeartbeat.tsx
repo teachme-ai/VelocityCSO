@@ -39,18 +39,72 @@ export const AgentHeartbeat: React.FC<AgentHeartbeatProps> = ({ events, logs }) 
         }
     };
 
+    const AGENTS = [
+        { name: 'Discovery', icon: '🔍', desc: 'Market signals & PESTLE scan' },
+        { name: 'Porter\'s Forces', icon: '⚔️', desc: 'Competitive landscape mapping' },
+        { name: 'Ansoff Matrix', icon: '📈', desc: 'Growth vector identification' },
+        { name: 'VRIO Analysis', icon: '🏆', desc: 'Resource & capability audit' },
+        { name: 'Blue Ocean', icon: '🌊', desc: 'Uncontested market opportunities' },
+        { name: 'Critic', icon: '🧠', desc: 'Cross-validates all specialist output' },
+    ];
+
     return (
-        <div className="w-full max-w-2xl overflow-hidden" style={{
-            background: '#0a0a0f',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '280px',
-            fontFamily: 'JetBrains Mono, Menlo, monospace',
-            fontSize: '11px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
-        }}>
+        <div className="w-full" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+            {/* Wait time + agent hints banner */}
+            <div style={{
+                background: 'rgba(168,85,247,0.08)',
+                border: '1px solid rgba(168,85,247,0.25)',
+                borderRadius: '12px',
+                padding: '14px 18px',
+            }}>
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    marginBottom: '12px',
+                    fontFamily: 'Space Grotesk, sans-serif',
+                }}>
+                    <span style={{ fontSize: '16px' }}>⏱</span>
+                    <span style={{ color: '#c4b5fd', fontWeight: 600, fontSize: '13px' }}>
+                        Multi-agent analysis in progress — estimated <span style={{ color: '#a855f7' }}>4–6 minutes</span>
+                    </span>
+                </div>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '8px',
+                }}>
+                    {AGENTS.map((agent) => (
+                        <div key={agent.name} style={{
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.07)',
+                            borderRadius: '8px',
+                            padding: '8px 10px',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '8px',
+                        }}>
+                            <span style={{ fontSize: '14px', flexShrink: 0 }}>{agent.icon}</span>
+                            <div>
+                                <div style={{ color: '#e5e7eb', fontSize: '11px', fontWeight: 600, fontFamily: 'Space Grotesk, sans-serif' }}>{agent.name}</div>
+                                <div style={{ color: '#6b7280', fontSize: '10px', marginTop: '2px', fontFamily: 'JetBrains Mono, Menlo, monospace' }}>{agent.desc}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Terminal */}
+            <div className="w-full overflow-hidden" style={{
+                background: '#0a0a0f',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '420px',
+                fontFamily: 'JetBrains Mono, Menlo, monospace',
+                fontSize: '11px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+            }}>
             {/* Window Controls */}
             <div style={{
                 background: 'rgba(255,255,255,0.03)',
@@ -102,6 +156,7 @@ export const AgentHeartbeat: React.FC<AgentHeartbeatProps> = ({ events, logs }) 
                     <span style={{ color: 'rgba(255,255,255,0.2)' }}>[{timestamp()}]</span>
                     <span className="text-emerald-500 animate-pulse">▌</span>
                 </div>
+            </div>
             </div>
         </div>
     );

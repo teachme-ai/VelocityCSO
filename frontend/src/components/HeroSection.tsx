@@ -547,9 +547,28 @@ ${context}`.trim();
                         <span className="text-white">Speed of Thought.</span>
                     </motion.h1>
                     <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6, duration: 0.8 }}
-                        className="text-lg text-gray-400 max-w-xl mx-auto mt-6 leading-relaxed">
-                        A self-correcting AI strategy engine that discovers, interrogates, and diagnoses your business — before a single analysis runs.
+                        className="text-xl text-white font-semibold max-w-2xl mx-auto mt-6 leading-snug" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                        Your business. Fully audited.{' '}
+                        <span className="text-gray-400 font-normal">The kind of strategic clarity that takes months —</span>{' '}
+                        <span className="text-violet-400">delivered in minutes.</span>
                     </motion.p>
+
+                    {/* Proof badge row */}
+                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, duration: 0.7 }}
+                        className="flex flex-wrap justify-center gap-2 mt-5">
+                        {([
+                            { label: '7 Live Frameworks',  cls: 'border-violet-500/30 bg-violet-500/10 text-violet-300',  dot: 'bg-violet-400' },
+                            { label: '20-Dimension Audit', cls: 'border-blue-500/30 bg-blue-500/10 text-blue-300',         dot: 'bg-blue-400' },
+                            { label: '5 Crisis Scenarios', cls: 'border-rose-500/30 bg-rose-500/10 text-rose-300',         dot: 'bg-rose-400' },
+                            { label: '90-Day Roadmap',     cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400' },
+                            { label: 'Board-Ready PDF',    cls: 'border-amber-500/30 bg-amber-500/10 text-amber-300',      dot: 'bg-amber-400' },
+                        ] as const).map(({ label, cls, dot }) => (
+                            <span key={label} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium tracking-wide border ${cls}`}>
+                                <span className={`w-1 h-1 rounded-full ${dot}`} />
+                                {label}
+                            </span>
+                        ))}
+                    </motion.div>
                 </div>
 
                 {/* Primary Input Pod */}
@@ -809,7 +828,7 @@ ${context}`.trim();
                         /* ── Processing State ── */
                         <motion.div key="processing"
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full max-w-2xl"
+                            exit={{ opacity: 0 }} className="flex flex-col items-center gap-4 w-full max-w-4xl"
                         >
                             <AgentOrbs status={agentStatus} />
                             <p className="text-sm text-gray-400 animate-pulse">

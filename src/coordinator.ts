@@ -497,11 +497,12 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
             }
         }
 
+        // NOTE: pdfService reads fw.porter / fw.ansoff / fw.vrio — keys must match exactly.
         const frameworks = {
             blue_ocean: blueOceanResult,
-            five_forces: innovationFrameworks?.portersFiveForces || null,
-            ansoffMatrix: innovationFrameworks?.ansoffMatrix || null,
-            vrioAnalysis: innovationFrameworks?.vrioAnalysis || null,
+            porter: innovationFrameworks?.portersFiveForces || null,
+            ansoff: innovationFrameworks?.ansoffMatrix || null,
+            vrio: innovationFrameworks?.vrioAnalysis || null,
             unit_economics: financeResult?.unitEconomics || null,
             monte_carlo: monteCarloResult,
             wardley: wardleyResult
@@ -682,37 +683,90 @@ CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.tri
             tokens_out: moatCost.outputTokens
         });
 
-        // 3. Safety Receipt Check: If dimensions failed parsing, trigger a specialized re-audit
-        // Note: we check if all dimensions are the default fallback value (50)
-        const hadParseFailures = Object.values(finalDimensions).every(v => v === 50 || v === null);
+        // 3. Safety net: retry only the specific specialists whose API call failed entirely
+        // (output is missing or empty — distinct from a parse error, which robustParse already recovers).
+        // 50 is a legitimate score; null means the agent never wrote to finalDimensions at all.
+        const failedAgents = specialists.filter(s => {
+            const out = specialistOutputs[s.name!];
+            // No output object at all = API call threw before robustParse ran
+            if (!out) return true;
+            // All dimensions still null = robustParse returned the fallback with no real data
+            const dims = Object.values(out.dimensions ?? {});
+            return dims.length === 0 || dims.every(v => v === null);
+        });
 
-        if (hadParseFailures) {
-            log({ severity: 'WARNING', message: 'Dimensions appear generic (Parse Failure) — Triggering specialized re-audit.', session_id: sessionId });
+        if (failedAgents.length > 0) {
+            const failedNames = failedAgents.map(s => s.name!);
+            log({
+                severity: 'ERROR',
+                message: '🚨 SPECIALIST API FAILURE — retrying failed agents only.',
+                session_id: sessionId,
+                failed_agents: failedNames,
+                detail: `Agents [${failedNames.join(', ')}] returned no usable data. Retrying with strict JSON prompt. Successful agents are NOT re-run.`,
+            });
+            emitHeartbeat(sessionId, `⚠ ${failedNames.length} agent(s) failed — retrying: ${failedNames.join(', ')}...`);
 
-            // Re-run specialists once more with extreme JSON enforcement
-            const retryPromises = specialists.map(async (agent) => {
+            const retryUserPrompt = `${businessContext}\n\nRETRY: Your previous response could not be parsed. Your response MUST begin with { and end with }. No markdown fences, no preamble — raw JSON only.`;
+
+            await Promise.all(failedAgents.map(async (agent) => {
                 const agentName = agent.name!;
                 const systemInstruction = specialistInstructions[agentName] || '';
-                const userPrompt = `${businessContext}\n\nRE-AUDIT REQUIRED: Previous output failed parsing. Return ONLY a valid JSON object. No markdown.`;
-
                 let rawOutput = '';
                 try {
-                    rawOutput = await callGemini('gemini-2.5-flash', systemInstruction, userPrompt);
+                    rawOutput = await callGemini('gemini-2.5-flash', systemInstruction, retryUserPrompt);
                 } catch (e) {
-                    log({ severity: 'ERROR', message: `Re-audit API call failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e) });
+                    log({ severity: 'ERROR', message: `Retry failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e) });
                 }
-
                 const result = robustParse(agentName, rawOutput, sessionId);
-                if (result.dimensions) {
-                    Object.assign(finalDimensions, result.dimensions);
-                }
-                if (result.richDimensions) {
-                    Object.assign(richDimensions, result.richDimensions);
-                }
-                return result;
-            });
-            await Promise.all(retryPromises);
+                specialistOutputs[agentName] = result;
+                if (result.dimensions) Object.assign(finalDimensions, result.dimensions);
+                if (result.richDimensions) Object.assign(richDimensions, result.richDimensions);
+            }));
         }
+
+        // ── FINAL AUDIT PIPELINE SUMMARY ─────────────────────────────────────────
+        const agentStatuses: Record<string, string> = {};
+        const frameworkStatuses: Record<string, string> = {};
+        const dimensionStatuses: Record<string, string> = {};
+
+        // Assess each specialist
+        for (const [name, out] of Object.entries(specialistOutputs)) {
+            const dims = Object.values(out?.dimensions ?? {});
+            const hasRealScores = dims.length > 0 && dims.some(v => v !== null && v !== 50);
+            agentStatuses[name] = hasRealScores ? '✅ OK' : out ? '⚠ FALLBACK (all scores defaulted)' : '❌ NO DATA';
+        }
+
+        // Assess each framework
+        frameworkStatuses['porter']     = frameworks.porter  ? '✅ OK' : '❌ MISSING';
+        frameworkStatuses['ansoff']     = frameworks.ansoff  ? '✅ OK' : '❌ MISSING';
+        frameworkStatuses['vrio']       = frameworks.vrio    ? '✅ OK' : '❌ MISSING';
+        frameworkStatuses['blue_ocean'] = frameworks.blue_ocean ? '✅ OK' : '❌ MISSING';
+        frameworkStatuses['wardley']    = frameworks.wardley ? '✅ OK' : '❌ MISSING';
+        frameworkStatuses['monte_carlo']= frameworks.monte_carlo ? '✅ OK' : '❌ MISSING';
+
+        // Assess each dimension
+        for (const [dim, score] of Object.entries(finalDimensions)) {
+            dimensionStatuses[dim] = score === null ? '❌ NULL (missing)' : score === 50 ? '⚠ 50 (possible fallback)' : `✅ ${score}`;
+        }
+
+        const filledDims = Object.values(finalDimensions).filter(v => v !== null && v !== 50).length;
+        const okFrameworks = Object.values(frameworkStatuses).filter(v => v.startsWith('✅')).length;
+
+        log({
+            severity: 'INFO',
+            message: '📋 AUDIT PIPELINE COMPLETE — Final Summary',
+            session_id: sessionId,
+            agent_statuses: agentStatuses,
+            framework_statuses: frameworkStatuses,
+            dimension_statuses: dimensionStatuses,
+            summary: {
+                agents_run: Object.keys(specialistOutputs).length,
+                frameworks_populated: `${okFrameworks}/${Object.keys(frameworkStatuses).length}`,
+                dimensions_filled: `${filledDims}/${Object.keys(finalDimensions).length}`,
+                report_generated: !!finalReport,
+                moat_rationale: !!moatRationale,
+            },
+        });
 
         return {
             report: finalReport,
