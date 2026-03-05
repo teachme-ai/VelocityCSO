@@ -276,8 +276,9 @@ function _buildPDF(
         '2. Strategic Diagnostic Matrix (20 Dimensions)',
         '3. Detailed Tactical Audit',
         '4. Strategic Recommendations (90-Day Roadmap)',
-        '5. Adversarial Stress Scenarios',
-        '6. Sources Appendix'
+        "5. Strategic Framework Analysis (Porter's, Ansoff, VRIO, Blue Ocean, Wardley, Monte Carlo, PESTLE)",
+        '6. Adversarial Stress Scenarios',
+        '7. Sources Appendix',
     ];
 
     let tocY = y + 10;
@@ -434,6 +435,408 @@ function _buildPDF(
         drawFooter(doc, page++);
     }
 
+    // ── STRATEGIC FRAMEWORKS ───────────────────────────────────────────────────
+    const fw = memory.frameworks ?? {};
+    const hasFrameworks = Object.keys(fw).some(k => fw[k]);
+    if (hasFrameworks) {
+        const pageW = doc.page.width;
+        const chartW = pageW - 80;
+        const chartH = 320;
+
+        // ── Porter's Five Forces — text only ──────────────────────────────────
+        if (fw.porter) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, "Porter's Five Forces Analysis", y);
+
+            // Intro blurb
+            doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+                .text("Competitive intensity assessment across five structural forces that shape industry profitability.", 40, y, { width: chartW });
+            y = doc.y + 14;
+
+            const scores = fw.porter?.scores ?? {};
+            const forceOrder = ['threat_of_new_entrants','bargaining_power_of_buyers','bargaining_power_of_suppliers','threat_of_substitutes','competitive_rivalry'];
+            const forceLabels: Record<string,string> = {
+                threat_of_new_entrants: 'Threat of New Entrants',
+                bargaining_power_of_buyers: 'Bargaining Power of Buyers',
+                bargaining_power_of_suppliers: 'Bargaining Power of Suppliers',
+                threat_of_substitutes: 'Threat of Substitutes',
+                competitive_rivalry: 'Competitive Rivalry',
+            };
+
+            for (const force of forceOrder) {
+                const entry = scores[force] as any;
+                if (!entry) continue;
+                const label = forceLabels[force] ?? force.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const score: number = entry?.score ?? 50;
+                const intensity = score >= 70 ? 'HIGH' : score >= 40 ? 'MODERATE' : 'LOW';
+                const intensityColor = score >= 70 ? RED : score >= 40 ? ORANGE : GREEN;
+
+                if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+
+                // Force header row
+                doc.rect(40, y, chartW, 20).fill('#F8FAFC');
+                doc.rect(40, y, 3, 20).fill(intensityColor);
+                doc.fontSize(9).fillColor(NAVY).font('Helvetica-Bold')
+                    .text(label, 50, y + 6, { continued: true, width: chartW - 80 });
+                doc.fontSize(8).fillColor(intensityColor).font('Helvetica-Bold')
+                    .text(`  ${intensity}  (${score}/100)`, { align: 'left' });
+                y += 26;
+
+                if (entry?.rationale || entry?.detail || entry?.description) {
+                    const detail = sanitizeText(entry.rationale ?? entry.detail ?? entry.description ?? '');
+                    if (detail) {
+                        doc.fontSize(7.5).fillColor('#374151').font('Helvetica')
+                            .text(detail, 50, y, { width: chartW - 10, lineGap: 1.5 });
+                        y = doc.y + 8;
+                    }
+                }
+                if (entry?.strategic_implication || entry?.implication) {
+                    const impl = sanitizeText(entry.strategic_implication ?? entry.implication ?? '');
+                    if (impl) {
+                        doc.fontSize(7.5).fillColor(BLUE).font('Helvetica-Oblique')
+                            .text(`Strategic implication: ${impl}`, 50, y, { width: chartW - 10 });
+                        y = doc.y + 8;
+                    }
+                }
+                y += 4;
+            }
+
+            if (fw.porter?.interaction_effect_warning) {
+                if (y > pageBottom - 30) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                doc.rect(40, y, chartW, 24).fill('#FFF7ED');
+                doc.rect(40, y, 3, 24).fill(ORANGE);
+                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
+                    .text(`Interaction note: ${sanitizeText(fw.porter.interaction_effect_warning)}`, 50, y + 7, { width: chartW - 20 });
+                y = doc.y + 14;
+            }
+
+            // Overall verdict from overall_score or derived
+            const allScores = forceOrder.map(f => (scores[f] as any)?.score).filter(Number.isFinite) as number[];
+            if (allScores.length) {
+                const avg = Math.round(allScores.reduce((a,b) => a+b, 0) / allScores.length);
+                const verdict = avg >= 70 ? 'Highly competitive environment — defensive moats critical.'
+                    : avg >= 40 ? 'Moderately competitive — targeted differentiation recommended.'
+                    : 'Low competitive intensity — window exists for market leadership.';
+                if (y > pageBottom - 30) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                doc.rect(40, y, chartW, 26).fill('#EFF6FF');
+                doc.fontSize(9).fillColor(BLUE).font('Helvetica-Bold')
+                    .text(`Overall Industry Pressure: ${avg}/100 — ${verdict}`, 48, y + 8, { width: chartW - 16 });
+                y += 34;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // ── Ansoff Growth Matrix — text only ──────────────────────────────────
+        if (fw.ansoff) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Ansoff Growth Matrix', y);
+
+            doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+                .text("Strategic growth vector assessment across four market-product combinations.", 40, y, { width: chartW });
+            y = doc.y + 14;
+
+            const quadrantOrder = ['market_penetration','market_development','product_development','diversification'];
+            const quadrantMeta: Record<string, { label: string; risk: string; color: string }> = {
+                market_penetration: { label: 'Market Penetration', risk: 'Lowest Risk', color: GREEN },
+                market_development: { label: 'Market Development', risk: 'Medium Risk', color: BLUE },
+                product_development: { label: 'Product Development', risk: 'Medium Risk', color: ORANGE },
+                diversification:     { label: 'Diversification',     risk: 'Highest Risk', color: RED },
+            };
+
+            for (const key of quadrantOrder) {
+                const q = fw.ansoff?.[key] as any;
+                if (!q) continue;
+                const meta = quadrantMeta[key];
+                const score: number = q.score ?? 50;
+
+                if (y > pageBottom - 70) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+
+                doc.rect(40, y, chartW, 20).fill('#F8FAFC');
+                doc.rect(40, y, 3, 20).fill(meta.color);
+                doc.fontSize(9).fillColor(NAVY).font('Helvetica-Bold')
+                    .text(meta.label, 50, y + 6, { continued: true });
+                doc.fontSize(7.5).fillColor(GRAY).font('Helvetica')
+                    .text(`   ${meta.risk}  ·  Score: ${score}/100`);
+                y += 26;
+
+                // Recommendation narrative
+                const rec = sanitizeText(q.recommendation ?? q.rationale ?? q.description ?? '');
+                if (rec) {
+                    doc.fontSize(7.5).fillColor('#374151').font('Helvetica')
+                        .text(rec, 50, y, { width: chartW - 10, lineGap: 1.5 });
+                    y = doc.y + 6;
+                }
+
+                // Killer move
+                if (q.killer_move) {
+                    const km = sanitizeText(q.killer_move);
+                    doc.rect(50, y, chartW - 10, 22).fill('#F0FDF4');
+                    doc.fontSize(7).fillColor(GREEN).font('Helvetica-Bold')
+                        .text('KILLER MOVE:', 58, y + 4, { continued: true });
+                    doc.font('Helvetica').fillColor(NAVY).text(`  ${km}`, { width: chartW - 30 });
+                    y = doc.y + 10;
+                }
+                y += 8;
+            }
+
+            if (fw.ansoff?.strategic_verdict) {
+                if (y > pageBottom - 35) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                doc.rect(40, y, chartW, 28).fill('#EFF6FF');
+                doc.rect(40, y, 3, 28).fill(ACCENT);
+                doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold')
+                    .text('Strategic Verdict: ', 50, y + 9, { continued: true })
+                    .font('Helvetica').fillColor('#374151')
+                    .text(sanitizeText(fw.ansoff.strategic_verdict), { width: chartW - 20 });
+                y = doc.y + 14;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // ── VRIO Resource Analysis — text only ────────────────────────────────
+        if (fw.vrio) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'VRIO Resource Analysis', y);
+
+            doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+                .text("Assessment of core resources across four competitive dimensions to identify sustainable advantage.", 40, y, { width: chartW });
+            y = doc.y + 14;
+
+            const vrioOrder = ['valuable','rare','inimitable','organised'];
+            const vrioDescriptions: Record<string, string> = {
+                valuable:    'Does the resource enable value creation or cost reduction?',
+                rare:        'Is the resource possessed by few or no competitors?',
+                inimitable:  'Is the resource costly or difficult to replicate?',
+                organised:   'Is the organisation structured to exploit the resource?',
+            };
+
+            const vrioRows: Array<{ key: string; score: number; entry: any }> = [];
+            for (const key of vrioOrder) {
+                const entry = fw.vrio?.[key] as any;
+                if (!entry) continue;
+                vrioRows.push({ key, score: entry.score ?? 50, entry });
+            }
+
+            // Summary bar table
+            for (const { key, score, entry } of vrioRows) {
+                if (y > pageBottom - 70) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+
+                const label = key.charAt(0).toUpperCase() + key.slice(1);
+                const achieved = score >= 60;
+                const pillColor = achieved ? GREEN : RED;
+
+                doc.rect(40, y, chartW, 20).fill('#F8FAFC');
+                doc.rect(40, y, 3, 20).fill(pillColor);
+                doc.fontSize(9).fillColor(NAVY).font('Helvetica-Bold').text(label, 50, y + 6, { continued: true });
+                doc.fontSize(7.5).fillColor(GRAY).font('Helvetica')
+                    .text(`   ${vrioDescriptions[key]}`, { width: chartW - 100 });
+                doc.fontSize(9).fillColor(pillColor).font('Helvetica-Bold')
+                    .text(`${score}/100`, 0, y + 6, { align: 'right', width: doc.page.width - 48 });
+                y += 26;
+
+                if (entry?.evidence || entry?.rationale) {
+                    const evidence = sanitizeText(entry.evidence ?? entry.rationale ?? '');
+                    if (evidence) {
+                        doc.fontSize(7.5).fillColor('#374151').font('Helvetica')
+                            .text(evidence, 50, y, { width: chartW - 10, lineGap: 1.5 });
+                        y = doc.y + 6;
+                    }
+                }
+                if (entry?.recommendation || entry?.action) {
+                    const action = sanitizeText(entry.recommendation ?? entry.action ?? '');
+                    if (action) {
+                        doc.fontSize(7.5).fillColor(BLUE).font('Helvetica-Oblique')
+                            .text(`Action: ${action}`, 50, y, { width: chartW - 10 });
+                        y = doc.y + 6;
+                    }
+                }
+                y += 6;
+            }
+
+            // Competitive advantage verdict
+            if (fw.vrio?.verdict || fw.vrio?.competitive_advantage) {
+                if (y > pageBottom - 35) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                const verdict = sanitizeText(fw.vrio.verdict ?? fw.vrio.competitive_advantage ?? '');
+                doc.rect(40, y, chartW, 28).fill('#EFF6FF');
+                doc.rect(40, y, 3, 28).fill(ACCENT);
+                doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold')
+                    .text('Competitive Advantage Verdict: ', 50, y + 9, { continued: true })
+                    .font('Helvetica').fillColor('#374151')
+                    .text(verdict, { width: chartW - 20 });
+                y = doc.y + 14;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // ── Blue Ocean — Strategy Canvas (chart if available, text fallback) ──
+        if (fw.blue_ocean) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Blue Ocean Strategy Canvas', y);
+            if (!embedChart(doc, charts.blue_ocean_canvas ?? '', 40, y, chartW, chartH)) {
+                chartFallbackText(doc, 'Strategy canvas chart unavailable.', 40, y, chartW);
+                y += 36;
+            } else { y += chartH + 12; }
+
+            if (y > pageBottom - 240) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+            y = sectionTitle(doc, 'Blue Ocean ERRC Grid', y);
+            if (!embedChart(doc, charts.blue_ocean_errc ?? '', 40, y, chartW, 240)) {
+                const errc = fw.blue_ocean?.errc_grid ?? {};
+                for (const [action, items] of Object.entries(errc) as [string, any][]) {
+                    doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text(action.toUpperCase(), 40, y); y += 14;
+                    for (const item of (Array.isArray(items) ? items : [])) {
+                        doc.fontSize(7.5).fillColor(GRAY).font('Helvetica').text(`• ${sanitizeText(String(item))}`, 50, y); y = doc.y + 2;
+                    }
+                    y += 4;
+                }
+            } else { y += 248; }
+            drawFooter(doc, page++);
+        }
+
+        // ── Wardley Map — keep visualization ──────────────────────────────────
+        if (fw.wardley) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Wardley Strategic Map', y);
+            if (!embedChart(doc, charts.wardley ?? '', 40, y, chartW, chartH)) {
+                chartFallbackText(doc, 'Wardley map chart unavailable — see components below.', 40, y, chartW);
+                y += 36;
+                const components = fw.wardley?.components ?? [];
+                for (const c of components.slice(0, 10)) {
+                    doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
+                        .text(`${c.name ?? ''} — Evolution: ${c.evolution ?? '?'}, Position: ${c.value_chain_position ?? '?'}`, 40, y, { width: chartW });
+                    y = doc.y + 3;
+                }
+            } else { y += chartH + 8; }
+            const warnings = fw.wardley?.strategic_warnings ?? [];
+            if (warnings.length > 0) {
+                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
+                    .text(`Strategic warnings: ${warnings.slice(0,2).map((w: string) => sanitizeText(w)).join(' | ')}`, 40, y, { width: chartW });
+                y = doc.y + 8;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // ── Monte Carlo — text summary only (no histogram) ────────────────────
+        if (fw.monte_carlo) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'Monte Carlo LTV:CAC Simulation', y);
+
+            // Significance callout
+            doc.rect(40, y, chartW, 36).fill('#EFF6FF');
+            doc.rect(40, y, 3, 36).fill(ACCENT);
+            doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold')
+                .text('Why this matters:', 50, y + 5);
+            doc.fontSize(7.5).fillColor('#374151').font('Helvetica')
+                .text('Monte Carlo simulation runs thousands of randomised LTV:CAC scenarios to quantify the probability distribution of unit economics outcomes — revealing upside potential and downside risk beyond a single-point estimate.', 50, y + 16, { width: chartW - 20, lineGap: 1.5 });
+            y = doc.y + 14;
+
+            // Percentile summary
+            const dists = fw.monte_carlo?.distributions ?? [];
+            if (dists.length > 0) {
+                const vals = dists.map((d: any) => typeof d === 'number' ? d : d?.value ?? 0).filter(Number.isFinite);
+                if (vals.length) {
+                    const sorted = [...vals].sort((a: number, b: number) => a - b);
+                    const p10 = sorted[Math.floor(sorted.length * 0.1)] as number;
+                    const p50 = sorted[Math.floor(sorted.length * 0.5)] as number;
+                    const p90 = sorted[Math.floor(sorted.length * 0.9)] as number;
+                    const mean = vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+
+                    if (y > pageBottom - 80) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+
+                    // Percentile table
+                    doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text('Simulation Percentiles', 40, y); y += 14;
+
+                    const cols = [
+                        { label: 'Pessimistic (P10)', val: `${p10.toFixed(2)}x`, color: RED },
+                        { label: 'Median (P50)',       val: `${p50.toFixed(2)}x`, color: BLUE },
+                        { label: 'Optimistic (P90)',   val: `${p90.toFixed(2)}x`, color: GREEN },
+                        { label: 'Mean',               val: `${mean.toFixed(2)}x`, color: NAVY },
+                    ];
+                    const colW = chartW / cols.length;
+                    for (let ci = 0; ci < cols.length; ci++) {
+                        const cx = 40 + ci * colW;
+                        doc.rect(cx, y, colW - 4, 44).fill('#F8FAFC');
+                        doc.fontSize(7).fillColor(GRAY).font('Helvetica').text(cols[ci].label, cx + 6, y + 6, { width: colW - 12 });
+                        doc.fontSize(16).fillColor(cols[ci].color).font('Helvetica-Bold').text(cols[ci].val, cx + 6, y + 16, { width: colW - 12 });
+                    }
+                    y += 56;
+
+                    // Interpretation
+                    const interpretation = p50 >= 3
+                        ? `Median LTV:CAC of ${p50.toFixed(2)}x indicates healthy unit economics. The P10 scenario of ${p10.toFixed(2)}x remains above breakeven, suggesting resilience even in adverse conditions.`
+                        : p50 >= 1.5
+                        ? `Median LTV:CAC of ${p50.toFixed(2)}x is acceptable but warrants monitoring. The P10 scenario of ${p10.toFixed(2)}x highlights potential vulnerability if acquisition costs rise or retention worsens.`
+                        : `Median LTV:CAC of ${p50.toFixed(2)}x signals unit economics pressure. Immediate focus on CAC reduction and churn management is recommended before scaling.`;
+
+                    doc.fontSize(8).fillColor('#374151').font('Helvetica')
+                        .text(interpretation, 40, y, { width: chartW, lineGap: 1.5 });
+                    y = doc.y + 14;
+                }
+            }
+
+            // Risk drivers
+            const drivers = fw.monte_carlo?.risk_drivers ?? [];
+            if (drivers.length > 0) {
+                if (y > pageBottom - 80) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text('Key Risk Drivers', 40, y); y += 14;
+                for (const d of drivers.slice(0, 5)) {
+                    if (y > pageBottom - 20) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                    const pct = Math.round((d.variance_contribution ?? 0) * 100);
+                    const barW = chartW - 200;
+                    const filled = Math.round((pct / 100) * barW);
+                    doc.fontSize(8).fillColor(NAVY).font('Helvetica')
+                        .text(sanitizeText(d.factor ?? ''), 40, y, { width: 190 });
+                    doc.rect(240, y + 2, barW, 7).fill('#E5E7EB');
+                    doc.rect(240, y + 2, filled, 7).fill(pct >= 30 ? RED : pct >= 15 ? ORANGE : BLUE);
+                    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica-Bold').text(`${pct}%`, 240 + barW + 6, y);
+                    y += 18;
+                }
+            }
+
+            // Scenario outcomes
+            const scenarios = fw.monte_carlo?.scenario_outcomes ?? fw.monte_carlo?.scenarios ?? [];
+            if (scenarios.length > 0) {
+                if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text('Scenario Outcomes', 40, y); y += 14;
+                for (const sc of scenarios.slice(0, 4)) {
+                    if (y > pageBottom - 20) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                    const name = sanitizeText(sc.name ?? sc.scenario ?? '');
+                    const ratio = sc.ltv_cac_ratio ?? sc.value ?? '';
+                    doc.fontSize(7.5).fillColor(NAVY).font('Helvetica-Bold').text(`${name}:`, 40, y, { continued: true });
+                    doc.font('Helvetica').fillColor('#374151').text(`  ${ratio}x`, { width: chartW - 10 });
+                    y = doc.y + 4;
+                }
+            }
+            drawFooter(doc, page++);
+        }
+
+        // ── PESTLE Environmental Scan ──────────────────────────────────────────
+        if (fw.pestle) {
+            y = addPage(doc, orgName);
+            y = sectionTitle(doc, 'PESTLE Environmental Scan', y);
+            if (!embedChart(doc, charts.pestle ?? '', 40, y, chartW, chartH)) {
+                chartFallbackText(doc, 'PESTLE chart unavailable — see factors below.', 40, y, chartW);
+                y += 36;
+                for (const dim of ['political','economic','social','technological','legal','environmental']) {
+                    const factors = fw.pestle?.[dim];
+                    if (!factors) continue;
+                    const list = Array.isArray(factors) ? factors : [factors];
+                    for (const f of list.slice(0, 2)) {
+                        doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
+                            .text(`${dim.charAt(0).toUpperCase()}: ${sanitizeText(f.factor ?? String(f))}`, 40, y, { width: chartW });
+                        y = doc.y + 3;
+                    }
+                }
+            } else { y += chartH + 8; }
+            if (fw.pestle?.dominant_force) {
+                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
+                    .text(`Dominant Force: ${sanitizeText(fw.pestle.dominant_force)}`, 40, y, { width: chartW });
+                y = doc.y + 8;
+            }
+            drawFooter(doc, page++);
+        }
+
+        // Unit Economics — removed per product decision
+    }
+
     // ── STRESS TEST PAGES ──────────────────────────────────────────────────────
     for (const scenarioId of ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT', 'REGULATORY']) {
         const result = stressMap[scenarioId];
@@ -522,227 +925,6 @@ function _buildPDF(
             }
         }
         drawFooter(doc, page++);
-    }
-
-    // ── STRATEGIC FRAMEWORKS ───────────────────────────────────────────────────
-    const fw = memory.frameworks ?? {};
-    const hasFrameworks = Object.keys(fw).some(k => fw[k]);
-    if (hasFrameworks) {
-        const pageW = doc.page.width;
-        const chartW = pageW - 80;
-        const chartH = 320;
-
-        // Porter's Five Forces
-        if (fw.porter) {
-            y = addPage(doc, orgName);
-            y = sectionTitle(doc, "Porter's Five Forces Analysis", y);
-            if (!embedChart(doc, charts.porter ?? '', 40, y, chartW, chartH)) {
-                const scores = fw.porter?.scores ?? {};
-                for (const [force, entry] of Object.entries(scores) as [string, any][]) {
-                    const label = force.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                    y = scoreBar(doc, label, entry?.score ?? 50, undefined, y);
-                }
-            } else { y += chartH + 8; }
-            if (fw.porter?.interaction_effect_warning) {
-                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
-                    .text(`Note: ${sanitizeText(fw.porter.interaction_effect_warning)}`, 40, y, { width: chartW });
-                y = doc.y + 6;
-            }
-            drawFooter(doc, page++);
-        }
-
-        // Ansoff Matrix
-        if (fw.ansoff) {
-            y = addPage(doc, orgName);
-            y = sectionTitle(doc, 'Ansoff Growth Matrix', y);
-            if (!embedChart(doc, charts.ansoff ?? '', 40, y, chartW, chartH)) {
-                chartFallbackText(doc, 'Ansoff matrix chart unavailable — see data below.', 40, y, chartW);
-                y += 36;
-                for (const key of ['market_penetration','market_development','product_development','diversification']) {
-                    const q = fw.ansoff?.[key];
-                    if (!q) continue;
-                    const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                    y = scoreBar(doc, label, q.score ?? 50, undefined, y);
-                    if (q.killer_move) {
-                        doc.fontSize(7).fillColor(GRAY).font('Helvetica-Oblique')
-                            .text(`  → ${sanitizeText(q.killer_move)}`, 40, y, { width: chartW });
-                        y = doc.y + 4;
-                    }
-                }
-            } else { y += chartH + 8; }
-            if (fw.ansoff?.strategic_verdict) {
-                doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
-                    .text(sanitizeText(fw.ansoff.strategic_verdict), 40, y, { width: chartW });
-                y = doc.y + 10;
-            }
-            drawFooter(doc, page++);
-        }
-
-        // VRIO
-        if (fw.vrio) {
-            y = addPage(doc, orgName);
-            y = sectionTitle(doc, 'VRIO Resource Analysis', y);
-            if (!embedChart(doc, charts.vrio ?? '', 40, y, chartW, Math.min(chartH, 280))) {
-                for (const key of ['valuable','rare','inimitable','organised']) {
-                    const entry = fw.vrio?.[key];
-                    if (!entry) continue;
-                    y = scoreBar(doc, key.charAt(0).toUpperCase() + key.slice(1), entry.score ?? 50, undefined, y);
-                    if (entry.evidence) {
-                        doc.fontSize(7).fillColor(GRAY).font('Helvetica').text(sanitizeText(entry.evidence), 50, y, { width: chartW - 10 });
-                        y = doc.y + 4;
-                    }
-                }
-            } else { y += Math.min(chartH, 280) + 8; }
-            if (fw.vrio?.verdict) {
-                doc.rect(40, y, chartW, 22).fill('#EFF6FF');
-                doc.fontSize(9).fillColor(BLUE).font('Helvetica-Bold').text(`Verdict: ${sanitizeText(fw.vrio.verdict)}`, 48, y + 6);
-                y += 30;
-            }
-            drawFooter(doc, page++);
-        }
-
-        // Blue Ocean — Strategy Canvas
-        if (fw.blue_ocean) {
-            y = addPage(doc, orgName);
-            y = sectionTitle(doc, 'Blue Ocean Strategy Canvas', y);
-            if (!embedChart(doc, charts.blue_ocean_canvas ?? '', 40, y, chartW, chartH)) {
-                chartFallbackText(doc, 'Strategy canvas chart unavailable.', 40, y, chartW);
-                y += 36;
-            } else { y += chartH + 12; }
-
-            // ERRC Grid on same or next page
-            if (y > pageBottom - 240) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-            y = sectionTitle(doc, 'Blue Ocean ERRC Grid', y);
-            if (!embedChart(doc, charts.blue_ocean_errc ?? '', 40, y, chartW, 240)) {
-                const errc = fw.blue_ocean?.errc_grid ?? {};
-                for (const [action, items] of Object.entries(errc) as [string, any][]) {
-                    doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text(action.toUpperCase(), 40, y); y += 14;
-                    for (const item of (Array.isArray(items) ? items : [])) {
-                        doc.fontSize(7.5).fillColor(GRAY).font('Helvetica').text(`• ${sanitizeText(String(item))}`, 50, y); y = doc.y + 2;
-                    }
-                    y += 4;
-                }
-            } else { y += 248; }
-            drawFooter(doc, page++);
-        }
-
-        // Wardley Map
-        if (fw.wardley) {
-            y = addPage(doc, orgName);
-            y = sectionTitle(doc, 'Wardley Strategic Map', y);
-            if (!embedChart(doc, charts.wardley ?? '', 40, y, chartW, chartH)) {
-                chartFallbackText(doc, 'Wardley map chart unavailable — see components below.', 40, y, chartW);
-                y += 36;
-                const components = fw.wardley?.components ?? [];
-                for (const c of components.slice(0, 10)) {
-                    doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
-                        .text(`${c.name ?? ''} — Evolution: ${c.evolution ?? '?'}, Position: ${c.value_chain_position ?? '?'}`, 40, y, { width: chartW });
-                    y = doc.y + 3;
-                }
-            } else { y += chartH + 8; }
-            const warnings = fw.wardley?.strategic_warnings ?? [];
-            if (warnings.length > 0) {
-                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
-                    .text(`Strategic warnings: ${warnings.slice(0,2).map((w: string) => sanitizeText(w)).join(' | ')}`, 40, y, { width: chartW });
-                y = doc.y + 8;
-            }
-            drawFooter(doc, page++);
-        }
-
-        // Monte Carlo
-        if (fw.monte_carlo) {
-            y = addPage(doc, orgName);
-            y = sectionTitle(doc, 'Monte Carlo LTV:CAC Simulation', y);
-            if (!embedChart(doc, charts.monte_carlo ?? '', 40, y, chartW, chartH)) {
-                chartFallbackText(doc, 'Monte Carlo histogram unavailable — see percentiles below.', 40, y, chartW);
-                y += 36;
-                const dists = fw.monte_carlo?.distributions ?? [];
-                if (dists.length > 0) {
-                    const vals = dists.map((d: any) => typeof d === 'number' ? d : d?.value ?? 0).filter(Number.isFinite);
-                    if (vals.length) {
-                        const sorted = [...vals].sort((a, b) => a - b);
-                        const p10 = sorted[Math.floor(sorted.length * 0.1)];
-                        const p50 = sorted[Math.floor(sorted.length * 0.5)];
-                        const p90 = sorted[Math.floor(sorted.length * 0.9)];
-                        doc.fontSize(8).fillColor(NAVY).font('Helvetica')
-                            .text(`P10: ${p10?.toFixed(2)}x  |  P50: ${p50?.toFixed(2)}x  |  P90: ${p90?.toFixed(2)}x`, 40, y);
-                        y = doc.y + 10;
-                    }
-                }
-            } else { y += chartH + 8; }
-            const drivers = fw.monte_carlo?.risk_drivers ?? [];
-            if (drivers.length > 0) {
-                doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text('Top Risk Drivers:', 40, y); y += 14;
-                for (const d of drivers.slice(0, 4)) {
-                    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica')
-                        .text(`• ${sanitizeText(d.factor ?? '')}: ${((d.variance_contribution ?? 0) * 100).toFixed(0)}% of variance`, 48, y, { width: chartW });
-                    y = doc.y + 3;
-                }
-            }
-            drawFooter(doc, page++);
-        }
-
-        // PESTLE
-        if (fw.pestle) {
-            y = addPage(doc, orgName);
-            y = sectionTitle(doc, 'PESTLE Environmental Scan', y);
-            if (!embedChart(doc, charts.pestle ?? '', 40, y, chartW, chartH)) {
-                chartFallbackText(doc, 'PESTLE chart unavailable — see factors below.', 40, y, chartW);
-                y += 36;
-                for (const dim of ['political','economic','social','technological','legal','environmental']) {
-                    const factors = fw.pestle?.[dim];
-                    if (!factors) continue;
-                    const list = Array.isArray(factors) ? factors : [factors];
-                    for (const f of list.slice(0, 2)) {
-                        doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
-                            .text(`${dim.charAt(0).toUpperCase()}: ${sanitizeText(f.factor ?? String(f))}`, 40, y, { width: chartW });
-                        y = doc.y + 3;
-                    }
-                }
-            } else { y += chartH + 8; }
-            if (fw.pestle?.dominant_force) {
-                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
-                    .text(`Dominant Force: ${sanitizeText(fw.pestle.dominant_force)}`, 40, y, { width: chartW });
-                y = doc.y + 8;
-            }
-            drawFooter(doc, page++);
-        }
-
-        // Unit Economics
-        if (fw.unit_economics) {
-            y = addPage(doc, orgName);
-            y = sectionTitle(doc, 'Unit Economics Dashboard', y);
-            if (!embedChart(doc, charts.unit_economics ?? '', 40, y, chartW, chartH)) {
-                const ue = fw.unit_economics;
-                const metrics: [string, string | number | undefined][] = [
-                    ['LTV:CAC Ratio', ue?.ltv_cac_ratio ? `${Number(ue.ltv_cac_ratio).toFixed(2)}x` : undefined],
-                    ['CAC', ue?.cac ? `$${ue.cac}` : undefined],
-                    ['LTV', ue?.ltv ? `$${ue.ltv}` : undefined],
-                    ['ARPU', ue?.arpu ? `$${ue.arpu}` : undefined],
-                    ['Gross Margin', ue?.gross_margin ? `${ue.gross_margin}%` : undefined],
-                    ['Monthly Churn', ue?.churn_rate ? `${ue.churn_rate}%` : undefined],
-                    ['CAC Payback', ue?.payback_period ? `${ue.payback_period} mo` : undefined],
-                    ['NRR', ue?.nrr ? `${ue.nrr}%` : undefined],
-                ];
-                for (const [label, val] of metrics) {
-                    if (!val) continue;
-                    doc.fontSize(8).fillColor(NAVY).font('Helvetica')
-                        .text(`${label}: `, 40, y, { continued: true })
-                        .font('Helvetica-Bold').text(String(val));
-                    y = doc.y + 3;
-                }
-            } else { y += chartH + 8; }
-            const levers = fw.unit_economics?.improvement_levers ?? [];
-            if (levers.length) {
-                doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text('Improvement Levers:', 40, y); y += 14;
-                for (const lever of levers.slice(0, 4)) {
-                    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica')
-                        .text(`• ${sanitizeText(String(lever))}`, 48, y, { width: chartW - 8 });
-                    y = doc.y + 3;
-                }
-            }
-            drawFooter(doc, page++);
-        }
     }
 
     // ── SOURCES APPENDIX ───────────────────────────────────────────────────────
