@@ -191,11 +191,14 @@ def render_errc(data: dict) -> str:
         ('create',    create),
     ]
 
+    LINE_HEIGHT = 20   # px per text line in a cell
+    ROW_PADDING = 14   # vertical padding per cell
+
     def wrap_items(items: list) -> list:
-        """Word-wrap each item to ~32 chars for table cell readability."""
+        """Word-wrap each item to ~28 chars — fits column at 1100px/4 cols."""
         result = []
         for item in items:
-            wrapped = '\n'.join(textwrap.wrap(str(item), width=32))
+            wrapped = '\n'.join(textwrap.wrap(str(item), width=28))
             result.append(wrapped)
         return result
 
@@ -208,11 +211,18 @@ def render_errc(data: dict) -> str:
     col_data = {key: pad(wrap_items(items), max_rows)
                 for key, items in sections}
 
+    # Uniform cell height = tallest wrapped item across all cells
+    all_cols = [col_data['eliminate'], col_data['reduce'], col_data['raise'], col_data['create']]
+    max_lines_any = max(
+        (len(cell.split('\n')) for col in all_cols for cell in col if cell),
+        default=1
+    )
+    cell_height = max_lines_any * LINE_HEIGHT + ROW_PADDING
+
     # ── Single unified go.Table ───────────────────────────────────────────────
     header_colors = [ERRC_COLORS[k] for k in ['eliminate', 'reduce', 'raise', 'create']]
     header_labels = [ERRC_LABELS[k] for k in ['eliminate', 'reduce', 'raise', 'create']]
 
-    # Alternating row backgrounds per column (all same dark theme)
     row_fill = [[DARK_CARD if i % 2 == 0 else '#161E2D' for i in range(max_rows)]] * 4
 
     fig = go.Figure(data=[go.Table(
@@ -222,7 +232,7 @@ def render_errc(data: dict) -> str:
             fill_color=header_colors,
             font=dict(color=WHITE, size=12, family='Arial Black'),
             align='center',
-            height=40,
+            height=44,
             line=dict(color=BORDER, width=1),
         ),
         cells=dict(
@@ -235,7 +245,7 @@ def render_errc(data: dict) -> str:
             fill_color=row_fill,
             font=dict(color=OFF_WHITE, size=11, family='Arial'),
             align='center',
-            height=36,
+            height=cell_height,
             line=dict(color=BORDER, width=0.5),
         ),
     )])
@@ -253,7 +263,8 @@ def render_errc(data: dict) -> str:
         margin=dict(l=20, r=20, t=80, b=30),
     )
 
-    result = _fig_to_base64(fig, width=1100, height=max(360, max_rows * 42 + 140))
+    total_height = max(360, max_rows * cell_height + 44 + 110)  # rows + header + title/margin
+    result = _fig_to_base64(fig, width=1100, height=total_height)
     logger.info("blue_ocean_errc | render_end | size_bytes=%d", len(result) * 3 // 4)
     return result
 
