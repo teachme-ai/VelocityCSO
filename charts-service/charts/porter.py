@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from theme import (apply_dark_theme, fig_to_base64, score_color,
-                   NAVY, WHITE, OFF_WHITE, GRAY, ACCENT, RED, GREEN, PORTER_COLOR)
+                   NAVY, WHITE, OFF_WHITE, GRAY, ACCENT, RED, GREEN, AMBER, PORTER_COLOR)
 
 logger = logging.getLogger("vcso.charts.porter")
 

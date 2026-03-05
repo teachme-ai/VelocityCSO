@@ -184,9 +184,9 @@ def render(data: dict) -> str:
         ax_info.text(0.92, y, val, transform=ax_info.transAxes,
                      color=color, fontsize=8.5, va='top', ha='right',
                      fontweight='bold')
-        ax_info.axhline(y=y - 0.025, xmin=0.05, xmax=0.95,
-                        color='#1F2937', linewidth=0.5,
-                        transform=ax_info.transAxes)
+        ax_info.plot([0.05, 0.95], [y - 0.025, y - 0.025],
+                     color='#1F2937', linewidth=0.5,
+                     transform=ax_info.transAxes)
         y -= 0.085
 
     # Risk drivers

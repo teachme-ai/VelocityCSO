@@ -106,10 +106,9 @@ def render(data: dict) -> str:
                     fontsize=7, va='top', style='italic')
 
         # Separator line
-        ax.axhline(y=y - 0.07, xmin=bar_area_left,
-                   xmax=bar_area_right,
-                   color='#1F2937', linewidth=0.8,
-                   transform=ax.transAxes)
+        ax.plot([bar_area_left, bar_area_right], [y - 0.07, y - 0.07],
+                color='#1F2937', linewidth=0.8,
+                transform=ax.transAxes)
 
     # Verdict box
     vcolor = VERDICT_COLORS.get(verdict, VRIO_COLOR)
