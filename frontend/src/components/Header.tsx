@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-import VelocityRocket from '../assets/vcso_rocket_logo.png';
 
 export function Header() {
     return (
@@ -19,7 +18,7 @@ export function Header() {
                 onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             >
                 <img
-                    src={VelocityRocket}
+                    src="/vcso_rocket_logo.png"
                     alt="VelocityCSO"
                     className="h-12 w-auto object-contain"
                     loading="eager"

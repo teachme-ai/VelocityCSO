@@ -16,23 +16,23 @@ RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-# ── Stage 2: Final image (Node + Python in same Alpine) ───────────────────────
-FROM node:20-alpine
+# ── Stage 2: Final image (Node + Python in Debian Bookworm) ───────────────────────
+FROM node:20-bookworm-slim
 
-# Install Python 3 + build deps needed by matplotlib/numpy
-RUN apk add --no-cache \
+# Install Python 3 + build deps needed by matplotlib/numpy/kaleido
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
-    py3-pip \
-    py3-setuptools \
-    py3-wheel \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
     gcc \
-    musl-dev \
     python3-dev \
-    freetype-dev \
+    libfreetype6-dev \
     libpng-dev \
-    openblas-dev \
-    lapack-dev \
-    g++
+    libopenblas-dev \
+    liblapack-dev \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=development
 WORKDIR /app

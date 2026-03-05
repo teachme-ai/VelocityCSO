@@ -30,7 +30,6 @@ import { KpiRow } from './dashboard/KpiRow';
 import { CategorySummary } from './dashboard/CategorySummary';
 import { ReportTabs } from './dashboard/ReportTabs';
 import type { TabId } from './dashboard/ReportTabs';
-import VelocityLogo from '../assets/VelocityCSO_logo_v5.png';
 
 const API_URL = import.meta.env.VITE_API_URL || '/analyze';
 const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
@@ -522,10 +521,11 @@ ${context}`.trim();
                     className="flex flex-col items-center gap-4"
                 >
                     <img
-                        src={VelocityLogo}
+                        src="/VelocityCSO_logo_v5.png"
                         alt="VelocityCSO"
                         className="h-36 md:h-52 w-auto object-contain drop-shadow-[0_0_40px_rgba(139,92,246,0.25)]"
-                        loading="lazy"
+                        loading="eager"
+                        fetchPriority="high"
                     />
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -557,11 +557,11 @@ ${context}`.trim();
                     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9, duration: 0.7 }}
                         className="flex flex-wrap justify-center gap-2 mt-5">
                         {([
-                            { label: '7 Live Frameworks',  cls: 'border-violet-500/30 bg-violet-500/10 text-violet-300',  dot: 'bg-violet-400' },
-                            { label: '20-Dimension Audit', cls: 'border-blue-500/30 bg-blue-500/10 text-blue-300',         dot: 'bg-blue-400' },
-                            { label: '5 Crisis Scenarios', cls: 'border-rose-500/30 bg-rose-500/10 text-rose-300',         dot: 'bg-rose-400' },
-                            { label: '90-Day Roadmap',     cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400' },
-                            { label: 'Board-Ready PDF',    cls: 'border-amber-500/30 bg-amber-500/10 text-amber-300',      dot: 'bg-amber-400' },
+                            { label: '7 Live Frameworks', cls: 'border-violet-500/30 bg-violet-500/10 text-violet-300', dot: 'bg-violet-400' },
+                            { label: '20-Dimension Audit', cls: 'border-blue-500/30 bg-blue-500/10 text-blue-300', dot: 'bg-blue-400' },
+                            { label: '5 Crisis Scenarios', cls: 'border-rose-500/30 bg-rose-500/10 text-rose-300', dot: 'bg-rose-400' },
+                            { label: '90-Day Roadmap', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400' },
+                            { label: 'Board-Ready PDF', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-300', dot: 'bg-amber-400' },
                         ] as const).map(({ label, cls, dot }) => (
                             <span key={label} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium tracking-wide border ${cls}`}>
                                 <span className={`w-1 h-1 rounded-full ${dot}`} />
