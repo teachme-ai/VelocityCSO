@@ -57,7 +57,9 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     networkx==3.3 \
     pandas==2.2.2 \
     Pillow==10.3.0 \
-    pydantic==2.7.1
+    pydantic==2.7.1 \
+    plotly==5.22.0 \
+    kaleido==0.2.1
 
 # Startup script
 COPY start.sh ./start.sh

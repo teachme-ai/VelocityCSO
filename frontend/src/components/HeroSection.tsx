@@ -614,6 +614,10 @@ ${context}`.trim();
                                     </label>
                                 </div>
 
+                                <p className="text-sm font-semibold text-white px-1">
+                                    Describe to us your business and its scenario that needs strategies
+                                </p>
+
                                 <textarea
                                     ref={inputRef}
                                     className="w-full h-52 bg-transparent border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-y text-base leading-relaxed"
