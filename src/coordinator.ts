@@ -345,7 +345,8 @@ export class ChiefStrategyAgent {
             latency_ms: latency,
             cost_usd: cost.usd,
             tokens_in: cost.inputTokens,
-            tokens_out: cost.outputTokens
+            tokens_out: cost.outputTokens,
+            top_level_keys: Object.keys(result),
         });
 
         emitHeartbeat(sessionId, `◆ ${agentName}: analysis complete.`);
@@ -498,6 +499,17 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         }
 
         // NOTE: pdfService reads fw.porter / fw.ansoff / fw.vrio — keys must match exactly.
+        // Log raw innovationFrameworks top-level keys so we can verify extraction.
+        log({
+            severity: 'INFO',
+            message: 'innovation_frameworks: raw top-level keys',
+            session_id: sessionId,
+            keys: Object.keys(innovationFrameworks ?? {}),
+            has_portersFiveForces: !!(innovationFrameworks?.portersFiveForces),
+            has_ansoffMatrix: !!(innovationFrameworks?.ansoffMatrix),
+            has_vrioAnalysis: !!(innovationFrameworks?.vrioAnalysis),
+        });
+
         const frameworks = {
             blue_ocean: blueOceanResult,
             porter: innovationFrameworks?.portersFiveForces || null,
@@ -507,6 +519,18 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
             monte_carlo: monteCarloResult,
             wardley: wardleyResult
         };
+
+        log({
+            severity: 'INFO',
+            message: 'frameworks constructed',
+            session_id: sessionId,
+            porter_present: !!frameworks.porter,
+            ansoff_present: !!frameworks.ansoff,
+            vrio_present: !!frameworks.vrio,
+            blue_ocean_present: !!frameworks.blue_ocean,
+            wardley_present: !!frameworks.wardley,
+            monte_carlo_present: !!frameworks.monte_carlo,
+        });
 
         // 2. Strategic Critic Review
         const criticResult = await this.runCritic(businessContext, specialistOutputs, sessionId);

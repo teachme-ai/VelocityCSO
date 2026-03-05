@@ -454,11 +454,11 @@ function _buildPDF(
             y = doc.y + 14;
 
             const scores = fw.porter?.scores ?? {};
-            const forceOrder = ['threat_of_new_entrants','bargaining_power_of_buyers','bargaining_power_of_suppliers','threat_of_substitutes','competitive_rivalry'];
+            const forceOrder = ['threat_of_new_entrants','buyer_power','supplier_power','threat_of_substitutes','competitive_rivalry'];
             const forceLabels: Record<string,string> = {
                 threat_of_new_entrants: 'Threat of New Entrants',
-                bargaining_power_of_buyers: 'Bargaining Power of Buyers',
-                bargaining_power_of_suppliers: 'Bargaining Power of Suppliers',
+                buyer_power: 'Bargaining Power of Buyers',
+                supplier_power: 'Bargaining Power of Suppliers',
                 threat_of_substitutes: 'Threat of Substitutes',
                 competitive_rivalry: 'Competitive Rivalry',
             };
