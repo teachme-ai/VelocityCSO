@@ -30,7 +30,7 @@ import { KpiRow } from './dashboard/KpiRow';
 import { CategorySummary } from './dashboard/CategorySummary';
 import { ReportTabs } from './dashboard/ReportTabs';
 import type { TabId } from './dashboard/ReportTabs';
-import VelocityLogo from '../assets/VelocityCSO_logo_v4.png';
+import VelocityLogo from '../assets/VelocityCSO_logo_v5.png';
 
 const API_URL = import.meta.env.VITE_API_URL || '/analyze';
 const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
@@ -512,7 +512,8 @@ ${context}`.trim();
                     <img
                         src={VelocityLogo}
                         alt="VelocityCSO"
-                        className="h-16 md:h-24 w-auto object-contain drop-shadow-[0_0_30px_rgba(139,92,246,0.2)]"
+                        className="h-32 md:h-48 w-auto object-contain drop-shadow-[0_0_40px_rgba(139,92,246,0.25)]"
+                        loading="lazy"
                     />
                     <motion.div
                         initial={{ opacity: 0 }}

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import VelocityLogo from '../assets/VelocityCSO_logo_v4.png';
+import VelocityLogo from '../assets/VelocityCSO_logo_v5.png';
 
 export function Header() {
     return (
@@ -16,7 +16,9 @@ export function Header() {
                     <img
                         src={VelocityLogo}
                         alt="VelocityCSO"
-                        className="h-14 w-auto object-contain rounded-sm"
+                        className="h-14 w-auto object-contain"
+                        loading="eager"
+                        fetchPriority="high"
                     />
                     {/* Subtle Pulsating Glow behind the logo */}
                     <motion.div
