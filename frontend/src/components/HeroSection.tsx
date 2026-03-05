@@ -59,12 +59,12 @@ type ReportData = {
     richDimensions?: Record<string, RichDimensionData>;
     frameworks?: {
         unit_economics?: UnitEconomicsData;
-        five_forces?: FiveForcesData;
+        porter?: FiveForcesData;
         wardley?: WardleyResult;
         blue_ocean?: BlueOceanResult;
         monte_carlo?: MonteCarloData;
-        ansoffMatrix?: AnsoffMatrixData;
-        vrioAnalysis?: VrioAnalysisData;
+        ansoff?: AnsoffMatrixData;
+        vrio?: VrioAnalysisData;
     };
 };
 
@@ -1036,8 +1036,8 @@ ${context}`.trim();
                                     )}
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                        {result.frameworks?.five_forces ? (
-                                            <FiveForces data={result.frameworks.five_forces} />
+                                        {result.frameworks?.porter ? (
+                                            <FiveForces data={result.frameworks.porter} />
                                         ) : (
                                             <PlaceholderCard
                                                 icon={ShieldAlert}
@@ -1057,8 +1057,8 @@ ${context}`.trim();
                                                 description="Value chain positioning requires capability and maturity data. Describe your core product dependencies to generate this map."
                                             />
                                         )}
-                                        {result.frameworks?.ansoffMatrix ? (
-                                            <AnsoffMatrix data={result.frameworks.ansoffMatrix} />
+                                        {result.frameworks?.ansoff ? (
+                                            <AnsoffMatrix data={result.frameworks.ansoff} />
                                         ) : (
                                             <PlaceholderCard
                                                 icon={ShieldAlert}
@@ -1066,8 +1066,8 @@ ${context}`.trim();
                                                 description="Growth vector analysis requires product and market context. Describe your current offerings and target segments to unlock."
                                             />
                                         )}
-                                        {result.frameworks?.vrioAnalysis ? (
-                                            <VrioCard data={result.frameworks.vrioAnalysis} />
+                                        {result.frameworks?.vrio ? (
+                                            <VrioCard data={result.frameworks.vrio} />
                                         ) : (
                                             <PlaceholderCard
                                                 icon={ShieldAlert}
