@@ -9,13 +9,6 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# Frontend
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ ./
-RUN npm run build
-
 # ── Stage 2: Final image (Node + Python in Debian Bookworm) ───────────────────────
 FROM node:20-bookworm-slim
 
@@ -40,7 +33,6 @@ WORKDIR /app
 # Node artefacts
 COPY --from=node-builder /app/package*.json ./
 COPY --from=node-builder /app/dist ./dist
-COPY --from=node-builder /app/frontend/dist ./public
 RUN npm install --production
 
 # Python sidecar source
