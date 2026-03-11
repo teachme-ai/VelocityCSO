@@ -1,7 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import admin from 'firebase-admin';
 import { ChiefStrategyAgent } from './coordinator.js';
@@ -27,17 +25,21 @@ const upload = multer({
     }
 });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 admin.initializeApp();
 
 export const app = express();
 const port = Number(process.env.PORT) || 8080;
 
-app.use(cors());
+app.use(cors({
+    origin: [
+        'https://velocitycso.com',
+        'https://www.velocitycso.com',
+        /https:\/\/velocitycso.*\.vercel\.app$/,
+    ],
+    credentials: true,
+}));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
 
 const cso = new ChiefStrategyAgent();
 const discovery = new DiscoveryAgent();
@@ -731,10 +733,6 @@ app.post('/internal/send-digests', async (req, res) => {
     }
 });
 
-// ─── Catch-all SPA route ─────────────────────────────────────────────────────
-app.get('/{*path}', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
-});
 
 if (process.env.NODE_ENV !== 'test') {
     app.listen(port, '0.0.0.0', () => {

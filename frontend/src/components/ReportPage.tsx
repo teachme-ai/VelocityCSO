@@ -1,4 +1,6 @@
 import { useState } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 import { motion } from 'framer-motion';
 import { X, ShieldAlert } from 'lucide-react';
 import { DiagnosticScorecard } from './DiagnosticScorecard';
@@ -61,7 +63,7 @@ export function ReportPage({ result, reportId, reportToken, apiBase, onClose }: 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     {reportId && reportToken && (
                         <a
-                            href={`/report/${reportId}/download?token=${reportToken}`}
+                            href={`${API_BASE}/report/${reportId}/download?token=${reportToken}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 8, background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(37,99,235,0.4)', color: '#93c5fd', textDecoration: 'none' }}

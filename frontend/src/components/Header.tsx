@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 export function Header() {
     return (
         <motion.nav
@@ -18,9 +20,11 @@ export function Header() {
                 onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             >
                 <img
-                    src="/vcso_rocket_logo.png"
+                    src="/vcso_rocket_logo.webp"
                     alt="VelocityCSO"
                     className="h-12 w-auto object-contain"
+                    width={48}
+                    height={48}
                     loading="eager"
                     fetchPriority="high"
                 />
@@ -37,7 +41,7 @@ export function Header() {
                     <a href="#engine" className="hover:text-white transition-colors duration-200 tracking-wide">The Engine</a>
                     <a href="#offerings" className="hover:text-white transition-colors duration-200 tracking-wide">Offerings</a>
                     <a
-                        href="/report/sample?token=00sample"
+                        href={`${API_BASE}/report/sample?token=00sample`}
                         className="transition-colors duration-200 tracking-wide"
                         style={{ color: '#a78bfa' }}
                         onMouseEnter={e => (e.currentTarget.style.color = '#c4b5fd')}

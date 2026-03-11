@@ -31,8 +31,9 @@ import { CategorySummary } from './dashboard/CategorySummary';
 import { ReportTabs } from './dashboard/ReportTabs';
 import type { TabId } from './dashboard/ReportTabs';
 
-const API_URL = import.meta.env.VITE_API_URL || '/analyze';
-const CLARIFY_URL = (import.meta.env.VITE_API_URL || '') + '/analyze/clarify';
+const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_URL = API_BASE + '/analyze';
+const CLARIFY_URL = API_BASE + '/analyze/clarify';
 
 type Phase =
     | 'idle'
@@ -521,9 +522,11 @@ ${context}`.trim();
                     className="flex flex-col items-center gap-4"
                 >
                     <img
-                        src="/VelocityCSO_logo_v5.png"
+                        src="/VelocityCSO_logo_v5.webp"
                         alt="VelocityCSO"
                         className="h-36 md:h-52 w-auto object-contain drop-shadow-[0_0_40px_rgba(139,92,246,0.25)]"
+                        width={144}
+                        height={144}
                         loading="eager"
                         fetchPriority="high"
                     />
@@ -645,8 +648,9 @@ ${context}`.trim();
                                 {/* Sector + Scale dropdowns */}
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs text-gray-500 uppercase tracking-wider pl-1">Sector</label>
+                                        <label htmlFor="org-sector" className="text-xs text-gray-500 uppercase tracking-wider pl-1">Sector</label>
                                         <select
+                                            id="org-sector"
                                             value={orgSector}
                                             onChange={(e) => setOrgSector(e.target.value)}
                                             className="w-full bg-zinc-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors appearance-none cursor-pointer"
@@ -668,8 +672,9 @@ ${context}`.trim();
                                         </select>
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs text-gray-500 uppercase tracking-wider pl-1">Organisation Scale</label>
+                                        <label htmlFor="org-scale" className="text-xs text-gray-500 uppercase tracking-wider pl-1">Organisation Scale</label>
                                         <select
+                                            id="org-scale"
                                             value={orgScale}
                                             onChange={(e) => setOrgScale(e.target.value)}
                                             className="w-full bg-zinc-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 transition-colors appearance-none cursor-pointer"
@@ -871,7 +876,7 @@ ${context}`.trim();
                                     </button>
                                 </div>
                                 {currentReportId && currentReportToken && (
-                                    <a href={`/report/${currentReportId}/download?token=${currentReportToken}`} target="_blank" rel="noopener noreferrer"
+                                    <a href={`${API_BASE}/report/${currentReportId}/download?token=${currentReportToken}`} target="_blank" rel="noopener noreferrer"
                                         style={{ fontSize: 12, fontWeight: 600, padding: '6px 14px', borderRadius: 8, background: 'rgba(37,99,235,0.2)', border: '1px solid rgba(37,99,235,0.4)', color: '#93C5FD', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
                                         ↓ Board-Ready PDF
                                     </a>
