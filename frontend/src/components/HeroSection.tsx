@@ -434,6 +434,7 @@ ${context}`.trim();
                     setPhaseLabel(`${event.category} · ID Score: ${event.idScore}/100`);
                 } else if (event.type === 'NEED_CLARIFICATION') {
                     setPhase('clarifying');
+                    setClarificationInput('');
                     setClarification({
                         sessionId: event.sessionId as string,
                         summary: event.summary as string,

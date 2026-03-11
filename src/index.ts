@@ -408,7 +408,10 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             : enrichedContext;
 
         const { report, roadmap, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
-        if (discoveryResult.pestle) frameworks.pestle = discoveryResult.pestle;
+        if (discoveryResult.pestle) {
+            frameworks.pestle = discoveryResult.pestle;
+            tlog({ severity: 'INFO', message: 'PESTLE injected into frameworks', session_id: sessionId, pestle_dims: Object.keys(discoveryResult.pestle) });
+        }
         const csoCost = estimateCost('gemini-1.5-pro-001', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 

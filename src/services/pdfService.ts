@@ -403,34 +403,110 @@ function _buildPDF(
     drawFooter(doc, page++);
 
     // ── STRATEGY RECOMMENDATIONS (90-Day Actions) ─────────────────────────────
-    const criticalActions = Object.entries(memory.richDimensions || {})
-        .filter(([_, data]) => (data.score ?? 0) < 65 && data.improvement_action)
-        .map(([dim, data]) => ({ dim, action: data.improvement_action, score: data.score ?? 0, justification: data.justification }));
+    const allActions = Object.entries(memory.richDimensions || {})
+        .filter(([_, data]) => data.improvement_action)
+        .map(([dim, data]) => ({ dim, action: data.improvement_action, score: data.score ?? 0, justification: data.justification }))
+        .sort((a, b) => a.score - b.score);
 
-    if (criticalActions.length > 0) {
+    const criticalActions = allActions.filter(a => a.score < 65);
+    const strengthActions = allActions.filter(a => a.score >= 65);
+    log({ severity: 'INFO', message: `PDF | Recommendations: ${criticalActions.length} critical, ${strengthActions.length} strengths, ${allActions.length} total` });
+
+    if (allActions.length > 0) {
         y = addPage(doc, orgName);
         y = sectionTitle(doc, 'Strategic Recommendations (90-Day Roadmap)', y);
-        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
-            .text('The following high-priority tasks have been identified to address structural gaps in the business model.', 40, y);
-        y += 20;
 
-        for (const item of criticalActions) {
-            if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+        // Critical gaps first
+        if (criticalActions.length > 0) {
+            doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+                .text('HIGH-PRIORITY — Structural gaps requiring immediate attention:', 40, y);
+            y += 16;
 
-            doc.rect(40, y, doc.page.width - 80, 20).fill('#F8FAFC');
-            doc.fontSize(9).fillColor(NAVY).font('Helvetica-Bold').text(item.dim, 48, y + 6);
-            doc.fontSize(9).fillColor(BLUE).text(`${item.score}/100`, 0, y + 6, { align: 'right', width: doc.page.width - 48 });
-            y += 25;
+            for (const item of criticalActions) {
+                if (y > pageBottom - 70) { drawFooter(doc, page++); y = addPage(doc, orgName); }
 
-            doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text('DIRECTIVE: ', 40, y, { continued: true })
-                .font('Helvetica').text(sanitizeText(item.action), { width: doc.page.width - 80 });
-            y = doc.y + 6;
+                doc.rect(40, y, doc.page.width - 80, 20).fill('#FEF2F2');
+                doc.rect(40, y, 3, 20).fill(RED);
+                doc.fontSize(9).fillColor(NAVY).font('Helvetica-Bold').text(item.dim, 50, y + 6);
+                doc.fontSize(9).fillColor(RED).text(`${item.score}/100`, 0, y + 6, { align: 'right', width: doc.page.width - 48 });
+                y += 25;
 
-            if (item.justification) {
-                doc.fontSize(7.5).fillColor(GRAY).font('Helvetica-Oblique').text(`Rationale: ${sanitizeText(item.justification)}`, 40, y, { width: doc.page.width - 80 });
-                y = doc.y + 12;
+                doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text('DIRECTIVE: ', 40, y, { continued: true })
+                    .font('Helvetica').text(sanitizeText(item.action), { width: doc.page.width - 80 });
+                y = doc.y + 6;
+
+                if (item.justification) {
+                    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica-Oblique').text(`Rationale: ${sanitizeText(item.justification)}`, 40, y, { width: doc.page.width - 80 });
+                    y = doc.y + 6;
+                }
+                y += 6;
             }
-            y += 4;
+        }
+
+        // Strength-maintenance actions
+        if (strengthActions.length > 0) {
+            if (y > pageBottom - 50) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+            y += 8;
+            doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+                .text('MAINTAIN & EXTEND — Leverage existing strengths:', 40, y);
+            y += 16;
+
+            for (const item of strengthActions) {
+                if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+
+                doc.rect(40, y, doc.page.width - 80, 20).fill('#F0FDF4');
+                doc.rect(40, y, 3, 20).fill(GREEN);
+                doc.fontSize(9).fillColor(NAVY).font('Helvetica-Bold').text(item.dim, 50, y + 6);
+                doc.fontSize(9).fillColor(GREEN).text(`${item.score}/100`, 0, y + 6, { align: 'right', width: doc.page.width - 48 });
+                y += 25;
+
+                doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text('ACTION: ', 40, y, { continued: true })
+                    .font('Helvetica').text(sanitizeText(item.action), { width: doc.page.width - 80 });
+                y = doc.y + 6;
+
+                if (item.justification) {
+                    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica-Oblique').text(`Rationale: ${sanitizeText(item.justification)}`, 40, y, { width: doc.page.width - 80 });
+                    y = doc.y + 6;
+                }
+                y += 4;
+            }
+        }
+        drawFooter(doc, page++);
+    }
+
+    // ── DATA CONFIDENCE & GAPS ─────────────────────────────────────────────────
+    const specialists = Object.entries(memory.specialistOutputs || {});
+    const hasGaps = specialists.some(([_, out]) => (out.missing_signals?.length ?? 0) > 0 || out.confidence_score != null);
+    log({ severity: 'INFO', message: `PDF | Data Confidence: ${specialists.length} specialists, hasGaps=${hasGaps}` });
+    if (hasGaps) {
+        y = addPage(doc, orgName);
+        y = sectionTitle(doc, 'Data Confidence & Gaps', y);
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text('Transparency report: confidence levels and data gaps flagged by each specialist during analysis.', 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 14;
+
+        for (const [name, out] of specialists) {
+            if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+            const label = name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            const confidence = out.confidence_score ?? null;
+            const confColor = confidence != null ? (confidence >= 70 ? GREEN : confidence >= 40 ? ORANGE : RED) : GRAY;
+
+            doc.rect(40, y, doc.page.width - 80, 18).fill('#F8FAFC');
+            doc.fontSize(8.5).fillColor(NAVY).font('Helvetica-Bold').text(label, 48, y + 4);
+            if (confidence != null) {
+                doc.fontSize(8).fillColor(confColor).font('Helvetica-Bold').text(`Confidence: ${confidence}/100`, 0, y + 4, { align: 'right', width: doc.page.width - 48 });
+            }
+            y += 22;
+
+            if (out.missing_signals && out.missing_signals.length > 0) {
+                doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique').text('Missing signals:', 48, y, { width: doc.page.width - 96 });
+                y = doc.y + 2;
+                for (const signal of out.missing_signals.slice(0, 3)) {
+                    doc.fontSize(7.5).fillColor('#374151').font('Helvetica').text(`  \u2022 ${sanitizeText(signal)}`, 52, y, { width: doc.page.width - 100 });
+                    y = doc.y + 2;
+                }
+            }
+            y += 6;
         }
         drawFooter(doc, page++);
     }
@@ -482,8 +558,8 @@ function _buildPDF(
                     .text(`  ${intensity}  (${score}/100)`, { align: 'left' });
                 y += 26;
 
-                if (entry?.rationale || entry?.detail || entry?.description) {
-                    const detail = sanitizeText(entry.rationale ?? entry.detail ?? entry.description ?? '');
+                if (entry?.primary_driver || entry?.rationale || entry?.detail || entry?.description) {
+                    const detail = sanitizeText(entry.primary_driver ?? entry.rationale ?? entry.detail ?? entry.description ?? '');
                     if (detail) {
                         doc.fontSize(7.5).fillColor('#374151').font('Helvetica')
                             .text(detail, 50, y, { width: chartW - 10, lineGap: 1.5 });
@@ -809,6 +885,7 @@ function _buildPDF(
         }
 
         // ── PESTLE Environmental Scan ──────────────────────────────────────────
+        log({ severity: 'INFO', message: `PDF | PESTLE: ${fw.pestle ? 'present, rendering' : 'absent, skipping'}` });
         if (fw.pestle) {
             y = addPage(doc, orgName);
             y = sectionTitle(doc, 'PESTLE Environmental Scan', y);
@@ -820,9 +897,20 @@ function _buildPDF(
                     if (!factors) continue;
                     const list = Array.isArray(factors) ? factors : [factors];
                     for (const f of list.slice(0, 2)) {
-                        doc.fontSize(7.5).fillColor(NAVY).font('Helvetica')
-                            .text(`${dim.charAt(0).toUpperCase()}: ${sanitizeText(f.factor ?? String(f))}`, 40, y, { width: chartW });
-                        y = doc.y + 3;
+                        const label = dim.charAt(0).toUpperCase() + dim.slice(1);
+                        const signal = sanitizeText(f.signal ?? f.factor ?? String(f));
+                        const impact = f.impact != null ? f.impact : null;
+                        const likelihood = f.likelihood != null ? f.likelihood : null;
+                        const scores = (impact != null && likelihood != null) ? `  [Impact: ${impact}/10 · Likelihood: ${likelihood}/10]` : '';
+                        doc.fontSize(7.5).fillColor(NAVY).font('Helvetica-Bold')
+                            .text(`${label}: `, 40, y, { continued: true, width: chartW })
+                            .font('Helvetica').fillColor('#374151').text(signal, { width: chartW });
+                        y = doc.y + 1;
+                        if (scores) {
+                            doc.fontSize(7).fillColor(BLUE).font('Helvetica-Oblique').text(scores.trim(), 52, y, { width: chartW - 12 });
+                            y = doc.y + 2;
+                        }
+                        y += 3;
                     }
                 }
             } else { y += chartH + 8; }

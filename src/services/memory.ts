@@ -5,6 +5,7 @@ export interface SpecialistOutput {
     analysis_markdown?: string;
     confidence_score?: number;
     data_sources?: string[];
+    missing_signals?: string[];
     dimensions?: Record<string, number | null>;
     richDimensions?: Record<string, any>;
 }
