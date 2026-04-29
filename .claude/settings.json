@@ -25,13 +25,19 @@
       "Bash(gcloud builds describe b4935a08-5b93-4fe2-9e59-36352688f216 --project velocitycso --format='json')",
       "Bash(open -a Docker)",
       "Bash(docker info)",
-      "WebFetch(domain:pagespeed.web.dev)"
+      "WebFetch(domain:pagespeed.web.dev)",
+      "Bash(vercel --prod)",
+      "Bash(gcloud run deploy business-strategy-api --source . --region us-central1 --quiet)",
+      "Bash(vercel domains ls)",
+      "Bash(identify \"/Users/khalidirfan/projects/Business Agent /frontend/public/vcso_rocket_logo.png\")",
+      "Bash(npx tsc --noEmit)"
     ],
     "additionalDirectories": [
       "/Users/khalidirfan/projects/Business Agent /frontend/src/components",
       "/Users/khalidirfan/projects/Business Agent /src",
       "/Users/khalidirfan/projects/Business Agent /charts-service",
-      "/Users/khalidirfan/projects/Business Agent "
+      "/Users/khalidirfan/projects/Business Agent ",
+      "/Users/khalidirfan/projects/Business Agent /frontend"
     ]
   }
 }
