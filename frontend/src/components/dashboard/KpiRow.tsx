@@ -4,25 +4,76 @@ import { Activity, Star, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 import type { RichDimensionData } from '../DiagnosticScorecard';
 
+// Dimensions that represent risk absence — high score = low risk, not a strength
+// Mirrors dimensionRegistry.ts isRiskDimension + low moatEligible
+const RISK_DIMENSIONS = new Set([
+    'Customer Concentration Risk',
+    'Risk Tolerance',
+]);
+
+// Dimensions that are operationally important but not strategic moats
+const LOW_MATERIALITY = new Set([
+    'ESG Posture',
+    'Scalability',
+    'ROI Projection',
+    'Capital Efficiency',
+]);
+
+interface SpecialistMeta {
+    agent: string;
+    confidence_score: number | null;
+    data_sources: string[];
+    missing_signals: string[];
+}
+
 interface KpiRowProps {
     dimensions: Record<string, number | null>;
     richDimensions?: Record<string, RichDimensionData>;
+    specialistMetadata?: SpecialistMeta[];
 }
 
-export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions }) => {
+export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions, specialistMetadata }) => {
     const dimValues = Object.values(dimensions).filter((v): v is number => v !== null && v !== undefined);
     const overallScore = dimValues.length > 0
         ? Math.round(dimValues.reduce((a, b) => a + b, 0) / dimValues.length)
         : 0;
 
     const availableEntries = Object.entries(dimensions).filter((entry): entry is [string, number] => entry[1] !== null && entry[1] !== undefined);
-    const topStrength = [...availableEntries].sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
-    const keyRisk = [...availableEntries].sort((a, b) => a[1] - b[1])[0] || ['N/A', 0];
 
-    const richDims = Object.values(richDimensions || {});
-    const confidence = richDims.length > 0
-        ? Math.round(richDims.reduce((a, b) => a + (b.confidence_score || 0), 0) / richDims.length)
-        : 85; // Default if no rich data
+    // Top strength — exclude risk-absence dimensions
+    const topStrength = [...availableEntries]
+        .filter(([k]) => !RISK_DIMENSIONS.has(k))
+        .sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
+
+    // FIX 2.4: Most material risk — prefer strategic dimensions with low scores
+    // Priority: non-risk-absence dimensions scoring < 50, excluding low-materiality ones first
+    const weakDims = availableEntries.filter(([, v]) => v < 50);
+    const strategicWeak = weakDims.filter(([k]) => !RISK_DIMENSIONS.has(k) && !LOW_MATERIALITY.has(k));
+    const keyRisk = strategicWeak.sort((a, b) => a[1] - b[1])[0]
+        || weakDims.sort((a, b) => a[1] - b[1])[0]
+        || [...availableEntries].sort((a, b) => a[1] - b[1])[0]
+        || ['N/A', 0];
+
+    // FIX 1.2: Read confidence from specialistMetadata, not richDimensions
+    let confidence = 0;
+    let confidenceLabel = 'Insufficient data';
+    if (specialistMetadata && specialistMetadata.length > 0) {
+        const validScores = specialistMetadata
+            .map(m => m.confidence_score)
+            .filter((c): c is number => c !== null && c !== undefined && c > 0);
+        if (validScores.length > 0) {
+            confidence = Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length);
+            confidenceLabel = 'Specialist Consensus';
+        }
+    } else if (richDimensions) {
+        // Fallback to richDimensions if specialistMetadata not yet available
+        const richVals = Object.values(richDimensions);
+        const validRich = richVals.map(r => (r as any).confidence_score).filter((c): c is number => c > 0);
+        if (validRich.length > 0) {
+            confidence = Math.round(validRich.reduce((a, b) => a + b, 0) / validRich.length);
+            confidenceLabel = 'Specialist Consensus';
+        }
+    }
 
     const getScoreColor = (score: number) => {
         if (score >= 70) return 'text-emerald-400';
@@ -54,7 +105,7 @@ export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions }) =>
             bg: 'bg-amber-500/10 border-amber-500/20'
         },
         {
-            label: 'Key Risk',
+            label: 'Most Material Risk',
             value: keyRisk[0],
             subValue: `Exposure: ${keyRisk[1]}`,
             icon: AlertTriangle,
@@ -63,11 +114,11 @@ export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions }) =>
         },
         {
             label: 'Analysis Confidence',
-            value: `${confidence}%`,
-            subValue: 'Specialist Consensus',
+            value: confidence > 0 ? `${confidence}%` : 'Insufficient data',
+            subValue: confidenceLabel,
             icon: ShieldCheck,
-            color: 'text-violet-400',
-            bg: 'bg-violet-500/10 border-violet-500/20'
+            color: confidence > 0 ? getScoreColor(confidence) : 'text-zinc-500',
+            bg: confidence > 0 ? getScoreBg(confidence) : 'bg-zinc-500/10 border-zinc-500/20'
         }
     ];
 
@@ -82,7 +133,7 @@ export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions }) =>
                     className={`p-4 rounded-xl border backdrop-blur-md ${kpi.bg} transition-all duration-300 hover:scale-[1.02]`}
                 >
                     <div className="flex items-center gap-3 mb-2">
-                        <div className={`p-2 rounded-lg bg-white/5`}>
+                        <div className="p-2 rounded-lg bg-white/5">
                             <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
                         </div>
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{kpi.label}</span>

@@ -49,6 +49,13 @@ type MonteCarloData = {
     risk_drivers: { factor: string; variance_contribution: number }[];
 };
 
+type SpecialistMeta = {
+    agent: string;
+    confidence_score: number | null;
+    data_sources: string[];
+    missing_signals: string[];
+};
+
 type ReportData = {
     analysis_markdown?: string;
     roadmap?: string;
@@ -56,6 +63,7 @@ type ReportData = {
     confidence_score?: number;
     orgName?: string;
     moatRationale?: string;
+    specialistMetadata?: SpecialistMeta[];
     richDimensions?: Record<string, RichDimensionData>;
     frameworks?: {
         unit_economics?: UnitEconomicsData;
@@ -370,6 +378,7 @@ ${context}`.trim();
                             moatRationale: event.moatRationale as string,
                             richDimensions: event.richDimensions as Record<string, RichDimensionData>,
                             frameworks: event.frameworks as Record<string, unknown>,
+                            specialistMetadata: event.specialistMetadata as SpecialistMeta[] || [],
                         };
                         if (reportId) {
                             // setLastReportId(reportId);
@@ -462,6 +471,7 @@ ${context}`.trim();
                         moatRationale,
                         richDimensions: event.richDimensions as Record<string, RichDimensionData>,
                         frameworks: event.frameworks as ReportData['frameworks'],
+                        specialistMetadata: event.specialistMetadata as SpecialistMeta[] || [],
                     });
                     if (reportId) {
                         setCurrentReportId(reportId);
@@ -897,6 +907,7 @@ ${context}`.trim();
                                 <KpiRow
                                     dimensions={result.dimensions || {}}
                                     richDimensions={result.richDimensions}
+                                    specialistMetadata={result.specialistMetadata}
                                 />
                                 <CategorySummary dimensions={result.dimensions || {}} />
                                 <ReportTabs activeTab={activeTab} onTabChange={setActiveTab} />
