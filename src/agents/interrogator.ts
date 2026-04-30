@@ -97,7 +97,7 @@ Rules:
 Question:`;
 
         try {
-            const raw = await callGemini('gemini-2.5-flash', ADAPTIVE_SYSTEM, prompt, 256);
+            const raw = await callGemini('gemini-2.5-flash', ADAPTIVE_SYSTEM, prompt, 512);
             const question = raw.trim().replace(/^(Question:|Q:|Answer:)/i, '').trim();
             if (question.length > 20) return question;
         } catch (e) {

@@ -25,6 +25,7 @@ interface StressTestPanelProps {
     onStressResult: (result: StressResult) => void;
     apiBase: string;
     originalDimensions?: Record<string, number | null>;
+    ventureScale?: string;
 }
 
 interface StressResult {
@@ -103,7 +104,7 @@ function DimensionTable({ dimensions, originalDimensions, showDelta }: DimTableP
     );
 }
 
-export function StressTestPanel({ reportId, onStressResult, apiBase, originalDimensions }: StressTestPanelProps) {
+export function StressTestPanel({ reportId, onStressResult, apiBase, originalDimensions, ventureScale }: StressTestPanelProps) {
     const [activeScenario, setActiveScenario] = useState<ScenarioId | null>(null);
     const [loadingScenario, setLoadingScenario] = useState<ScenarioId | null>(null);
     const [expandedCard, setExpandedCard] = useState<string | null>(null);
@@ -129,7 +130,7 @@ export function StressTestPanel({ reportId, onStressResult, apiBase, originalDim
             const response = await fetch(`${apiBase}/analyze/stress-test`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reportId, scenarioId }),
+                body: JSON.stringify({ reportId, scenarioId, ventureScale }),
             });
 
             for await (const event of readSSE(response)) {
@@ -162,7 +163,7 @@ export function StressTestPanel({ reportId, onStressResult, apiBase, originalDim
                 </div>
                 <div>
                     <h3 className="text-sm font-semibold text-white">Stress-Test Simulator</h3>
-                    <p className="text-xs text-gray-400">Simulate crisis scenarios — AI recalculates your 15 dimensions instantly</p>
+                    <p className="text-xs text-gray-400">Simulate crisis scenarios — AI recalculates your 20 dimensions instantly</p>
                 </div>
             </div>
 

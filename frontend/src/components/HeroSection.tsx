@@ -1186,6 +1186,7 @@ ${context}`.trim();
                                                 onStressResult={handleStressResult}
                                                 apiBase={import.meta.env.VITE_API_URL || ''}
                                                 originalDimensions={result.dimensions || {}}
+                                                ventureScale={orgScale}
                                             />
                                         </div>
                                     </section>

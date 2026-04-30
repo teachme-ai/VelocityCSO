@@ -17,7 +17,7 @@ const plans = [
         highlight: false,
         features: [
             'One on-demand audit per session',
-            'Full 15-dimension analysis',
+            'Full 20-dimension analysis',
             'Executive report + 90-day roadmap',
             'Stress test simulator',
             'PDF export',
@@ -68,7 +68,7 @@ const plans = [
             'Everything in Strategy Engine',
             'Private deployed instance — isolated compute',
             'Fully bespoke agent configuration',
-            'Custom dimensions beyond the core 15',
+            'Custom dimensions beyond the core 20',
             'Industry-specific scoring rubrics',
             'Internal data ingestion (financials, CRM, market data)',
             'Multi-user access with team seats',
