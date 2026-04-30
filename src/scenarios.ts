@@ -104,6 +104,28 @@ Recalculate how this regulatory shock impacts all 15 strategic dimensions.`,
 
 export type ScenarioId = keyof typeof SCENARIOS;
 
+// FIX 3.3: Venture-type gating — map scale to appropriate scenario IDs
+export type VentureScale = 'pre_revenue' | 'growth' | 'scale_up' | 'enterprise';
+
+const PRE_REVENUE_SCENARIOS: ScenarioId[] = ['RECESSION', 'PRICE_WAR', 'REGULATORY'];
+const GROWTH_SCENARIOS: ScenarioId[] = ['RECESSION', 'PRICE_WAR', 'REGULATORY', 'TALENT'];
+const SCALE_UP_SCENARIOS: ScenarioId[] = ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT', 'REGULATORY'];
+const ENTERPRISE_SCENARIOS: ScenarioId[] = ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT', 'REGULATORY'];
+
+export function getScenariosForScale(scale?: string): ScenarioId[] {
+    switch (scale) {
+        case 'pre_revenue': return PRE_REVENUE_SCENARIOS;
+        case 'growth':      return GROWTH_SCENARIOS;
+        case 'scale_up':    return SCALE_UP_SCENARIOS;
+        case 'enterprise':  return ENTERPRISE_SCENARIOS;
+        default:            return GROWTH_SCENARIOS; // safe default
+    }
+}
+
+export function isScenarioValidForScale(scenarioId: string, scale?: string): boolean {
+    return getScenariosForScale(scale).includes(scenarioId as ScenarioId);
+}
+
 export interface StressResult {
     scenarioId: ScenarioId;
     scenarioLabel: string;

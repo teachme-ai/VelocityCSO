@@ -16,6 +16,7 @@ export interface AuditMemory {
     groundedContext: string;           // Discovery findings
     specialistOutputs: Record<string, SpecialistOutput>; // keyed by agent name
     specialistMetadata?: any[];        // FIX 1.1: confidence, data_sources, missing_signals per specialist
+    confidenceTriad?: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number }; // FIX 3.2
     dimensionScores: Record<string, number | null>; // merged 20-dimension scores
     richDimensions: Record<string, any>;   // aggregated CoT metadata
     report: string;                    // Final Markdown report

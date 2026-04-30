@@ -411,7 +411,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         return result;
     }
 
-    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; specialistMetadata: SpecialistMeta[]; frameworks: any; orgName: string; moatRationale: string }> {
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; specialistMetadata: SpecialistMeta[]; confidenceTriad: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number }; frameworks: any; orgName: string; moatRationale: string }> {
         log({
             severity: 'INFO',
             message: 'CSO analysis started (Parallel Specialist Mode)',
@@ -606,8 +606,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         // ── Synthesis prompt shared context (passed to both parallel calls) ──────
         const sharedContext = `BUSINESS CONTEXT:\n${businessContext}\n\nSPECIALIST DIGEST (scores + key signal per agent):\n${specialistDigest}\n\nMERGED DIMENSION SCORES:\n${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join(', ')}`;
 
-        // ── Call A: Executive narrative + Scenario Analysis ──────────────────────
-        // Focused: no roadmap, ~1,400 tokens output target
+        // ── FIX 2.2: Narrative prompt with mandatory Strategic Choice section ──────
         const narrativePrompt = `${sharedContext}
 
 YOUR TASK: Synthesize into a high-end Tier-1 Consulting strategic report in clean markdown.
@@ -616,17 +615,63 @@ Include these sections: Executive Synthesis, Unit Economics Analysis (if data av
 SCENARIO ANALYSIS — include as "## Scenario Analysis":
 Identify 2 highest-impact macro uncertainties. Define 3 named scenarios (Base ~60%, Optimistic ~25%, Stress ~15%). For each: Name, Conditions (1 sentence), Strategy performance (GREEN|AMBER|RED), and one key action. End with Resilience Score 0-100.
 
+STRATEGIC CHOICE — you MUST include this section as "## Strategic Choice" with EXACTLY this structure:
+Recommended strategic posture: [one clear sentence — the single recommended direction]
+Primary move: [the main action to execute immediately]
+Secondary option: [fallback or hedge if primary conditions change]
+Controlled experiment: [one bounded, low-cost test to run in parallel]
+Rejected move: [what NOT to do, and specifically why]
+What would change this recommendation: [the trigger conditions that would flip the recommendation]
+
 End the report with:
 ## Dimension Scores
 ${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
 
 CRITICAL: Do NOT generate a 90-Day Roadmap here. Do NOT call sub-agents or tools.`.trim();
 
-        // ── Call B: 90-Day Roadmap only ──────────────────────────────────────────
-        // Isolated: focused on actionable output, ~800 tokens target
+        // ── FIX 2.1: Run synthesis FIRST, extract posture, THEN run roadmap ────────
+        emitHeartbeat(sessionId, '◆ CSO: synthesizing executive report...');
+        const synthesisStartTime = Date.now();
+        const phaseE = startPhase('phase_e_synthesis', sessionId);
+        const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
+
+        let mainReport = '';
+        try {
+            mainReport = await callGemini('gemini-2.5-pro', csoInstruction, narrativePrompt, 4096).catch(async (e: any) => {
+                log({ severity: 'WARNING', message: 'CSO narrative call failed, retrying with flash', session_id: sessionId, error: e.message });
+                return callGemini('gemini-2.5-flash', csoInstruction, narrativePrompt, 4096);
+            });
+        } catch (e: any) {
+            log({ severity: 'ERROR', message: 'CSO narrative call failed', session_id: sessionId, error: e.message || String(e) });
+        }
+        cost.track('cso_narrative', 'gemini-2.5-pro', Math.ceil(narrativePrompt.length / 4), Math.ceil(mainReport.length / 4));
+
+        // FIX 2.1: Extract recommended posture from Strategic Choice section
+        const postureMatch = mainReport.match(/Recommended strategic posture:\s*(.+)/i);
+        const recommendedPosture = postureMatch ? postureMatch[1].trim() : '';
+        const rejectedMoveMatch = mainReport.match(/Rejected move:\s*(.+)/i);
+        const rejectedMove = rejectedMoveMatch ? rejectedMoveMatch[1].trim() : '';
+
+        log({
+            severity: 'INFO',
+            message: '[FIX 2.1] Strategic posture extracted for roadmap alignment',
+            session_id: sessionId,
+            recommended_posture: recommendedPosture.slice(0, 200),
+            rejected_move: rejectedMove.slice(0, 200),
+            strategic_choice_present: mainReport.includes('## Strategic Choice'),
+        });
+
+        // ── FIX 2.1: Roadmap runs AFTER synthesis, receives recommended posture ───
         const roadmapPrompt = `${sharedContext}
 
+THE EXECUTIVE SYNTHESIS HAS RECOMMENDED THE FOLLOWING STRATEGIC POSTURE:
+${recommendedPosture || 'See synthesis above for strategic direction.'}
+
+REJECTED MOVE (do NOT include actions that execute this):
+${rejectedMove || 'None specified.'}
+
 YOUR TASK: Generate ONLY a 90-Day Strategic Roadmap in markdown. No other sections.
+Your roadmap MUST align with the recommended posture above.
 
 ## 90-Day Strategic Roadmap
 
@@ -640,34 +685,25 @@ YOUR TASK: Generate ONLY a 90-Day Strategic Roadmap in markdown. No other sectio
 ### Days 61-90: Strategic Bets
 2-3 higher-uncertainty actions with high upside, same format.
 
+### Do Not Do
+1-2 explicit actions to AVOID, referencing the rejected move above.
+
 Each action must reference a specific dimension from the scorecard, name a role, and have a measurable metric.
 CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.trim();
 
-        emitHeartbeat(sessionId, '◆ CSO: synthesizing executive report and roadmap in parallel...');
-        const synthesisStartTime = Date.now();
-        const phaseE = startPhase('phase_e_synthesis', sessionId);
-        const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
-
-        let mainReport = '';
+        emitHeartbeat(sessionId, '◆ CSO: generating posture-aligned 90-day roadmap...');
         let roadmap = '';
         try {
-            [mainReport, roadmap] = await Promise.all([
-                callGemini('gemini-2.5-pro', csoInstruction, narrativePrompt, 4096).catch(async (e: any) => {
-                    log({ severity: 'WARNING', message: 'CSO narrative call failed, retrying with flash', session_id: sessionId, error: e.message });
-                    return callGemini('gemini-2.5-flash', csoInstruction, narrativePrompt, 4096);
-                }),
-                callGemini('gemini-2.5-pro', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap.', roadmapPrompt, 2048).catch(async (e: any) => {
-                    log({ severity: 'WARNING', message: 'CSO roadmap call failed, retrying with flash', session_id: sessionId, error: e.message });
-                    return callGemini('gemini-2.5-flash', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap.', roadmapPrompt, 2048);
-                }),
-            ]);
+            roadmap = await callGemini('gemini-2.5-pro', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap that strictly aligns with the recommended strategic posture provided.', roadmapPrompt, 2048).catch(async (e: any) => {
+                log({ severity: 'WARNING', message: 'CSO roadmap call failed, retrying with flash', session_id: sessionId, error: e.message });
+                return callGemini('gemini-2.5-flash', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap that strictly aligns with the recommended strategic posture provided.', roadmapPrompt, 2048);
+            });
         } catch (e: any) {
-            log({ severity: 'ERROR', message: 'CSO synthesis both calls failed', session_id: sessionId, error: e.message || String(e) });
+            log({ severity: 'ERROR', message: 'CSO roadmap call failed', session_id: sessionId, error: e.message || String(e) });
         }
-
-        cost.track('cso_narrative', 'gemini-2.5-pro', Math.ceil(narrativePrompt.length / 4), Math.ceil(mainReport.length / 4));
         cost.track('cso_roadmap', 'gemini-2.5-pro', Math.ceil(roadmapPrompt.length / 4), Math.ceil(roadmap.length / 4));
-        phaseE.end({ report_chars: mainReport.length, roadmap_chars: roadmap.length });
+        phaseE.end({ report_chars: mainReport.length, roadmap_chars: roadmap.length, posture_extracted: !!recommendedPosture });
+
 
         const finalReport = mainReport + (roadmap ? '\n\n' + roadmap : '');
 
@@ -748,6 +784,29 @@ Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": 
             specialist_count: specialistMetadata.length,
             confidence_scores: specialistMetadata.map(m => ({ agent: m.agent, confidence: m.confidence_score })),
             total_missing_signals: specialistMetadata.flatMap(m => m.missing_signals).length,
+        });
+
+        // FIX 3.2: Compute confidence triad
+        const totalMissingSignals = specialistMetadata.flatMap(m => m.missing_signals).length;
+        const validConfidences = specialistMetadata.map(m => m.confidence_score).filter((c): c is number => c !== null && c > 0);
+        const evidenceConfidence = Math.max(20, Math.min(95, 90 - (totalMissingSignals * 5)));
+        const analyticalConfidence = validConfidences.length > 0
+            ? Math.round(validConfidences.reduce((a, b) => a + b, 0) / validConfidences.length)
+            : 40;
+        const hasCriticalGap = totalMissingSignals > 5;
+        const decisionConfidence = hasCriticalGap
+            ? Math.min(55, Math.min(evidenceConfidence, analyticalConfidence))
+            : Math.min(evidenceConfidence, analyticalConfidence);
+        const confidenceTriad = { evidenceConfidence, analyticalConfidence, decisionConfidence };
+        log({
+            severity: 'INFO',
+            message: '[FIX 3.2] Confidence triad computed',
+            session_id: sessionId,
+            evidence_confidence: evidenceConfidence,
+            analytical_confidence: analyticalConfidence,
+            decision_confidence: decisionConfidence,
+            total_missing_signals: totalMissingSignals,
+            has_critical_gap: hasCriticalGap,
         });
 
         // FIX 1.4: Moat selection — use registry to exclude risk-absence dimensions
@@ -906,6 +965,7 @@ Write 2-3 sentences identifying the strongest genuine moat, or stating that the 
             richDimensions,
             specialistOutputs,
             specialistMetadata,
+            confidenceTriad,
             frameworks,
             orgName,
             moatRationale

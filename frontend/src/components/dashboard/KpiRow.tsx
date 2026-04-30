@@ -26,13 +26,20 @@ interface SpecialistMeta {
     missing_signals: string[];
 }
 
+interface ConfidenceTriad {
+    evidenceConfidence: number;
+    analyticalConfidence: number;
+    decisionConfidence: number;
+}
+
 interface KpiRowProps {
     dimensions: Record<string, number | null>;
     richDimensions?: Record<string, RichDimensionData>;
     specialistMetadata?: SpecialistMeta[];
+    confidenceTriad?: ConfidenceTriad;
 }
 
-export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions, specialistMetadata }) => {
+export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions, specialistMetadata, confidenceTriad }) => {
     const dimValues = Object.values(dimensions).filter((v): v is number => v !== null && v !== undefined);
     const overallScore = dimValues.length > 0
         ? Math.round(dimValues.reduce((a, b) => a + b, 0) / dimValues.length)
@@ -54,10 +61,15 @@ export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions, spec
         || [...availableEntries].sort((a, b) => a[1] - b[1])[0]
         || ['N/A', 0];
 
-    // FIX 1.2: Read confidence from specialistMetadata, not richDimensions
+    // FIX 1.2 + 3.2: Use confidenceTriad.decisionConfidence if available, else fall back to specialistMetadata average
     let confidence = 0;
     let confidenceLabel = 'Insufficient data';
-    if (specialistMetadata && specialistMetadata.length > 0) {
+
+    if (confidenceTriad) {
+        confidence = confidenceTriad.decisionConfidence;
+        confidenceLabel = `Decision: ${confidenceTriad.decisionConfidence}%`;
+
+    } else if (specialistMetadata && specialistMetadata.length > 0) {
         const validScores = specialistMetadata
             .map(m => m.confidence_score)
             .filter((c): c is number => c !== null && c !== undefined && c > 0);
@@ -115,7 +127,9 @@ export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions, spec
         {
             label: 'Analysis Confidence',
             value: confidence > 0 ? `${confidence}%` : 'Insufficient data',
-            subValue: confidenceLabel,
+            subValue: confidenceTriad
+                ? `Evidence ${confidenceTriad.evidenceConfidence}% · Analytical ${confidenceTriad.analyticalConfidence}%`
+                : confidenceLabel,
             icon: ShieldCheck,
             color: confidence > 0 ? getScoreColor(confidence) : 'text-zinc-500',
             bg: confidence > 0 ? getScoreBg(confidence) : 'bg-zinc-500/10 border-zinc-500/20'

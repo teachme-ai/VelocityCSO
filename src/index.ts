@@ -9,7 +9,7 @@ import { saveSession, getSession, deleteSession, incrementTurn, releaseLock } fr
 import { log, createTraceLogger, logAuditCost, estimateCost } from './services/logger.js';
 import { saveAuditMemory, loadAuditMemory } from './services/memory.js';
 import { generatePDF } from './services/pdfService.js';
-import { SCENARIOS, ScenarioId } from './scenarios.js';
+import { SCENARIOS, ScenarioId, isScenarioValidForScale } from './scenarios.js';
 import type { StrategySession } from './services/sessionService.js';
 import { authMiddleware, AuthRequest } from './middleware/auth.js';
 import { registerConnection, unregisterConnection, sseWrite, emitHeartbeat } from './services/sseService.js';
@@ -408,7 +408,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             ? enrichedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
             : enrichedContext;
 
-        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
+        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, confidenceTriad, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
         if (discoveryResult.pestle) {
             frameworks.pestle = discoveryResult.pestle;
             tlog({ severity: 'INFO', message: 'PESTLE injected into frameworks', session_id: sessionId, pestle_dims: Object.keys(discoveryResult.pestle) });
@@ -462,7 +462,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
 
         logAuditCost(sessionId, { discovery: discoveryCost.usd, synthesis: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale, specialistMetadata });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale, specialistMetadata, confidenceTriad });
         if (roadmap) sseWrite(res, { type: 'ROADMAP_COMPLETE', roadmap });
         res.end();
 
@@ -559,7 +559,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             }
         }, 10000);
 
-        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, frameworks, orgName, moatRationale } = await analysisPromise;
+        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, confidenceTriad, frameworks, orgName, moatRationale } = await analysisPromise;
         clearTimeout(safetyReceipt);
         const csoCost = estimateCost('gemini-1.5-pro-001', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
@@ -613,7 +613,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             tlog({ severity: 'WARNING', message: 'Dimensions still empty at emit time', session_id: sessionId });
         }
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale, specialistMetadata });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale, specialistMetadata, confidenceTriad });
         if (roadmap) sseWrite(res, { type: 'ROADMAP_COMPLETE', roadmap });
         res.end();
 
@@ -636,7 +636,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
 // ─── POST /analyze/stress-test ───────────────────────────────────────────────
 // Fast scenario recalculation — bypasses Discovery, uses Firestore cached context.
 app.post('/analyze/stress-test', authMiddleware as any, async (req: AuthRequest, res) => {
-    const { reportId, scenarioId } = req.body;
+    const { reportId, scenarioId, ventureScale } = req.body;
     const userId = req.user?.uid || 'anonymous';
 
     if (!reportId || !scenarioId) {
@@ -644,6 +644,10 @@ app.post('/analyze/stress-test', authMiddleware as any, async (req: AuthRequest,
     }
     if (!SCENARIOS[scenarioId as ScenarioId]) {
         return res.status(400).json({ error: `Unknown scenarioId. Valid: ${Object.keys(SCENARIOS).join(', ')}` });
+    }
+    // FIX 3.3: Gate scenario by venture scale
+    if (ventureScale && !isScenarioValidForScale(scenarioId, ventureScale)) {
+        return res.status(400).json({ error: `Scenario '${scenarioId}' is not appropriate for venture scale '${ventureScale}'.` });
     }
 
     res.setHeader('Content-Type', 'text/event-stream');

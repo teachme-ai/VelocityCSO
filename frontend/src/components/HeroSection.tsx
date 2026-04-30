@@ -64,6 +64,7 @@ type ReportData = {
     orgName?: string;
     moatRationale?: string;
     specialistMetadata?: SpecialistMeta[];
+    confidenceTriad?: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number };
     richDimensions?: Record<string, RichDimensionData>;
     frameworks?: {
         unit_economics?: UnitEconomicsData;
@@ -379,6 +380,7 @@ ${context}`.trim();
                             richDimensions: event.richDimensions as Record<string, RichDimensionData>,
                             frameworks: event.frameworks as Record<string, unknown>,
                             specialistMetadata: event.specialistMetadata as SpecialistMeta[] || [],
+                            confidenceTriad: event.confidenceTriad as ReportData["confidenceTriad"],
                         };
                         if (reportId) {
                             // setLastReportId(reportId);
@@ -472,6 +474,7 @@ ${context}`.trim();
                         richDimensions: event.richDimensions as Record<string, RichDimensionData>,
                         frameworks: event.frameworks as ReportData['frameworks'],
                         specialistMetadata: event.specialistMetadata as SpecialistMeta[] || [],
+                            confidenceTriad: event.confidenceTriad as ReportData["confidenceTriad"],
                     });
                     if (reportId) {
                         setCurrentReportId(reportId);
@@ -908,6 +911,7 @@ ${context}`.trim();
                                     dimensions={result.dimensions || {}}
                                     richDimensions={result.richDimensions}
                                     specialistMetadata={result.specialistMetadata}
+                                    confidenceTriad={result.confidenceTriad}
                                 />
                                 <CategorySummary dimensions={result.dimensions || {}} />
                                 <ReportTabs activeTab={activeTab} onTabChange={setActiveTab} />
