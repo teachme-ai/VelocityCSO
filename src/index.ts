@@ -407,7 +407,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             ? enrichedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
             : enrichedContext;
 
-        const { report, roadmap, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
+        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, frameworks, orgName, moatRationale } = await cso.analyze(finalContext, sessionId);
         if (discoveryResult.pestle) {
             frameworks.pestle = discoveryResult.pestle;
             tlog({ severity: 'INFO', message: 'PESTLE injected into frameworks', session_id: sessionId, pestle_dims: Object.keys(discoveryResult.pestle) });
@@ -558,7 +558,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             }
         }, 10000);
 
-        const { report, roadmap, dimensions, richDimensions, specialistOutputs, frameworks, orgName, moatRationale } = await analysisPromise;
+        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, frameworks, orgName, moatRationale } = await analysisPromise;
         clearTimeout(safetyReceipt);
         const csoCost = estimateCost('gemini-1.5-pro-001', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensions).length });

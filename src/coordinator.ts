@@ -10,9 +10,18 @@ import { log, estimateCost } from './services/logger.js';
 import { SCENARIOS, ScenarioId, MitigationCard } from './scenarios.js';
 import { loadAuditMemory } from './services/memory.js';
 import { emitHeartbeat } from './services/sseService.js';
+import { getMoatEligibleDimensions } from './dimensionRegistry.js';
 
 // Re-export StrategySession type for index.ts
 export type { StrategySession } from './services/sessionService.js';
+
+// ─── FIX 1.1: Specialist metadata type ──────────────────────────────────────
+export interface SpecialistMeta {
+    agent: string;
+    confidence_score: number | null;
+    data_sources: string[];
+    missing_signals: string[];
+}
 
 // ─── Helper: Title case conversion ──────────────────────────────────────────
 function toTitleCase(str: string): string {
@@ -150,6 +159,14 @@ export function robustParse(agentName: string, raw: string, sessionId?: string):
         parsed.dimensions = normalized;
         parsed.richDimensions = rich;
     }
+
+    // FIX 1.1: Preserve root-level specialist metadata so it is not lost after dimension normalisation
+    parsed.specialistMeta = {
+        confidence_score: parsed.confidence_score ?? null,
+        data_sources: Array.isArray(parsed.data_sources) ? parsed.data_sources : [],
+        missing_signals: Array.isArray(parsed.missing_signals) ? parsed.missing_signals : [],
+        agent_name: parsed.agent_name ?? null,
+    };
 
     return { ...fallback, ...parsed };
 }
@@ -396,7 +413,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         return result;
     }
 
-    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; frameworks: any; orgName: string; moatRationale: string }> {
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; specialistMetadata: SpecialistMeta[]; frameworks: any; orgName: string; moatRationale: string }> {
         log({
             severity: 'INFO',
             message: 'CSO analysis started (Parallel Specialist Mode)',
@@ -662,24 +679,60 @@ CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.tri
         // 3. Extract Organisation Name
         const orgName = extractOrgName(businessContext);
 
-        // 4. Generate Moat Rationale
-        const topDimension = Object.entries(finalDimensions)
-            .filter(([_, v]) => v !== null)
-            .reduce((a, b) => (b[1] as number) > (a[1] as number) ? b : a, ['N/A', 0]);
-        const moatPrompt = `
-            <role>Global Executive Strategist</role>
-            <task>Identify why "${topDimension[0]}" is the primary moat for ${orgName}.</task>
-            <context>SCORE: ${topDimension[1]}/100. ${businessContext.slice(0, 500)}</context>
-            <constraint>Return EXACTLY 2 sentences. Use professional, aggressive, and insightful tone. Frame as a Tier-1 Consulting strategic verdict.</constraint>
-        `.trim();
+        // FIX 1.1: Collect specialist metadata array for downstream use (confidence, sources, gaps)
+        const specialistMetadata: SpecialistMeta[] = Object.entries(specialistOutputs)
+            .filter(([name]) => !['blue_ocean', 'wardley', 'monte_carlo', 'innovation_frameworks'].includes(name))
+            .map(([name, out]) => ({
+                agent: name,
+                confidence_score: out?.specialistMeta?.confidence_score ?? out?.confidence_score ?? null,
+                data_sources: out?.specialistMeta?.data_sources ?? out?.data_sources ?? [],
+                missing_signals: out?.specialistMeta?.missing_signals ?? out?.missing_signals ?? [],
+            }));
 
-        emitHeartbeat(sessionId, `◆ CSO: Identifying strategic moat (${topDimension[0]})...`);
+        log({
+            severity: 'INFO',
+            message: '[FIX 1.1] Specialist metadata collected',
+            session_id: sessionId,
+            specialist_count: specialistMetadata.length,
+            confidence_scores: specialistMetadata.map(m => ({ agent: m.agent, confidence: m.confidence_score })),
+            total_missing_signals: specialistMetadata.flatMap(m => m.missing_signals).length,
+        });
+
+        // FIX 1.4: Moat selection — use registry to exclude risk-absence dimensions
+        const moatCandidates = getMoatEligibleDimensions(finalDimensions);
+        const topDimension = moatCandidates.length > 0 ? moatCandidates[0] : ['N/A', 0] as [string, number];
+        const topThreeMoats = moatCandidates.slice(0, 3);
+
+        log({
+            severity: 'INFO',
+            message: '[FIX 1.4] Moat-eligible candidates selected',
+            session_id: sessionId,
+            top_moat: topDimension[0],
+            top_three: topThreeMoats.map(([d, s]) => `${d}: ${s}`),
+        });
+
+        // FIX 1.5: Verdict prompt — evaluate, don't justify; prohibit fabrication
+        const moatPrompt = `Evaluate these moat candidates for ${orgName}:
+${topThreeMoats.map(([dim, score]) => `- ${dim}: ${score}/100`).join('\n')}
+
+Business context (first 800 chars):
+${businessContext.slice(0, 800)}
+
+Rules:
+1. A moat must represent an ACTIVE competitive advantage, not merely the absence of a weakness.
+2. If the business is pre-revenue or pre-launch, acknowledge that moats are aspirational, not established.
+3. Do not claim 'sustained competitive advantage' unless evidence of 2+ year inimitability is present in the context.
+4. Reference specific evidence from the business context, not generic strategy language.
+
+Write 2-3 sentences identifying the strongest genuine moat, or stating that the business has not yet established a defensible moat.`;
+
+        emitHeartbeat(sessionId, `◆ CSO: Evaluating strategic moat candidates (${topDimension[0]})...`);
         const moatStartTime = Date.now();
         let moatRationale = '';
         try {
             moatRationale = await callGemini(
                 'gemini-2.5-flash',
-                'Write a concise 2-sentence Moat Rationale. Use professional, aggressive, insightful tone. Frame as a Tier-1 Consulting strategic verdict.',
+                'You are a rigorous strategy analyst. Evaluate the provided moat candidates honestly. Be honest about moat strength — if no dimension represents a genuine defensible moat, say so. Do not fabricate evidence or capabilities not present in the business context.',
                 moatPrompt
             );
         } catch (e) {
@@ -798,6 +851,7 @@ CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.tri
             dimensions: finalDimensions,
             richDimensions,
             specialistOutputs,
+            specialistMetadata,
             frameworks,
             orgName,
             moatRationale

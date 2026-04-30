@@ -447,7 +447,7 @@ ${context}`.trim();
                 } else if (event.type === 'READY_FOR_AUDIT') {
                     setPhaseLabel(`ID Score ${event.idScore}/100 — Unlocking specialist analysis...`);
                 } else if (event.type === 'ANALYSIS_START') {
-                    setPhaseLabel('Running 15-dimension diagnostic...');
+                    setPhaseLabel('Running 20-dimension diagnostic...');
                 } else if (event.type === 'REPORT_COMPLETE') {
                     const raw = event.report as string;
                     const dims = event.dimensions as Record<string, number> | undefined;
