@@ -406,6 +406,34 @@ ${context}`.trim();
                 }
             }
         } catch {
+            // SSE stream died — attempt recovery from Firestore via GET /report/:id
+            const savedId = localStorage.getItem(LAST_REPORT_KEY);
+            if (savedId && phase !== 'idle') {
+                try {
+                    const base = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : '';
+                    const rec = await fetch(`${base}/report/${savedId}?token=${savedId.slice(-8)}`);
+                    if (rec.ok) {
+                        const data = await rec.json();
+                        if (data.report) {
+                            setResult({
+                                analysis_markdown: data.report,
+                                dimensions: data.dimensions || {},
+                                richDimensions: data.richDimensions,
+                                frameworks: data.frameworks,
+                                orgName: data.orgName,
+                                moatRationale: data.moatRationale,
+                                specialistMetadata: data.specialistMetadata,
+                                confidenceTriad: data.confidenceTriad,
+                            });
+                            setCurrentReportId(savedId);
+                            setCurrentReportToken(savedId.slice(-8));
+                            setPhase('done');
+                            console.log('[RECOVERY] Report recovered from Firestore after SSE disconnect', { id: savedId });
+                            return;
+                        }
+                    }
+                } catch { /* recovery failed, fall through to error */ }
+            }
             setError('Connection failed. Please try again.');
             setPhase('error');
         }
@@ -489,6 +517,34 @@ ${context}`.trim();
                 }
             }
         } catch {
+            // SSE stream died — attempt recovery from Firestore
+            const savedId = localStorage.getItem(LAST_REPORT_KEY);
+            if (savedId) {
+                try {
+                    const base = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : '';
+                    const rec = await fetch(`${base}/report/${savedId}?token=${savedId.slice(-8)}`);
+                    if (rec.ok) {
+                        const data = await rec.json();
+                        if (data.report) {
+                            setResult({
+                                analysis_markdown: data.report,
+                                dimensions: data.dimensions || {},
+                                richDimensions: data.richDimensions,
+                                frameworks: data.frameworks,
+                                orgName: data.orgName,
+                                moatRationale: data.moatRationale,
+                                specialistMetadata: data.specialistMetadata,
+                                confidenceTriad: data.confidenceTriad,
+                            });
+                            setCurrentReportId(savedId);
+                            setCurrentReportToken(savedId.slice(-8));
+                            setPhase('done');
+                            console.log('[RECOVERY] Report recovered from Firestore after SSE disconnect', { id: savedId });
+                            return;
+                        }
+                    }
+                } catch { /* recovery failed */ }
+            }
             setError('Connection failed during clarification.');
             setPhase('error');
         }

@@ -87,8 +87,15 @@ app.get('/report/:id', async (req, res) => {
 
         res.json({
             id,
+            token: id.slice(-8),
             report: memory.report,
             dimensions: memory.dimensionScores,
+            richDimensions: memory.richDimensions,
+            frameworks: memory.frameworks,
+            orgName: memory.orgName,
+            moatRationale: memory.moatRationale,
+            specialistMetadata: memory.specialistMetadata,
+            confidenceTriad: (memory as any).confidenceTriad,
             grounded_context: memory.groundedContext,
             business_context: memory.businessContext,
             created_at: memory.createdAt,
