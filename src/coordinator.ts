@@ -672,18 +672,61 @@ CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.tri
         const finalReport = mainReport + (roadmap ? '\n\n' + roadmap : '');
 
         const synthesisLatency = Date.now() - synthesisStartTime;
-        const synthesisCost = estimateCost('gemini-2.5-pro', narrativePrompt.length + roadmapPrompt.length, finalReport.length);
         log({
             severity: 'INFO',
-            message: 'CSO synthesis complete',
+            message: '[PHASE END] phase_e_synthesis',
             agent_id: 'chief_strategy_agent',
             phase: 'synthesis',
             session_id: sessionId,
             latency_ms: synthesisLatency,
-            cost_usd: synthesisCost.usd,
-            tokens_in: synthesisCost.inputTokens,
-            tokens_out: synthesisCost.outputTokens
+            report_chars: mainReport.length,
+            roadmap_chars: roadmap.length,
         });
+
+        // FIX 1.6: Post-synthesis coherence check
+        emitHeartbeat(sessionId, '\u25c6 Coherence: cross-checking synthesis, roadmap and frameworks for contradictions...');
+        const coherencePhase = startPhase('phase_f_coherence', sessionId);
+        let coherenceResult: { coherent: boolean; contradictions: any[]; score_mismatches: any[] } = { coherent: true, contradictions: [], score_mismatches: [] };
+        try {
+            const coherencePrompt = `You are a strategy report quality auditor. Check this report for internal contradictions.
+
+EXECUTIVE SYNTHESIS (first 2000 chars): ${mainReport.slice(0, 2000)}
+ROADMAP (first 1000 chars): ${roadmap.slice(0, 1000)}
+DIMENSION SCORES: ${Object.entries(finalDimensions).map(([k,v]) => `${k}:${v}`).join(', ')}
+
+Check for:
+1. Does the roadmap contradict the synthesis recommendation?
+2. Are any dimension scores mentioned in the narrative that differ from the canonical scores above?
+3. Are there mutually exclusive recommendations across sections?
+
+Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": ["A","B"], "issue": "...", "severity": "critical|warning"}], "score_mismatches": [{"dimension": "...", "canonical": 0, "narrative_stated": 0}] }`;
+
+            const coherenceRaw = await callGemini('gemini-2.5-flash', 'You are a strategy report quality auditor. Return only raw JSON.', coherencePrompt, 1024);
+            cost.track('coherence_check', 'gemini-2.5-flash', Math.ceil(coherencePrompt.length / 4), Math.ceil(coherenceRaw.length / 4));
+            const parsed = robustParse('coherence_check', coherenceRaw, sessionId);
+            coherenceResult = {
+                coherent: parsed.coherent ?? true,
+                contradictions: parsed.contradictions ?? [],
+                score_mismatches: parsed.score_mismatches ?? [],
+            };
+        } catch (e) {
+            log({ severity: 'WARNING', message: '[FIX 1.6] Coherence check failed — skipping', session_id: sessionId, error: String(e) });
+        }
+
+        const criticalContradictions = coherenceResult.contradictions.filter((c: any) => c.severity === 'critical');
+        coherencePhase.end({
+            coherent: coherenceResult.coherent,
+            contradictions: coherenceResult.contradictions.length,
+            critical: criticalContradictions.length,
+            score_mismatches: coherenceResult.score_mismatches.length,
+        });
+
+        if (criticalContradictions.length > 0) {
+            log({ severity: 'WARNING', message: '[FIX 1.6] Critical contradictions detected in synthesis', session_id: sessionId, contradictions: criticalContradictions });
+            emitHeartbeat(sessionId, `\u26a0 Coherence: ${criticalContradictions.length} critical contradiction(s) detected — flagged in report`, 'warning');
+        } else {
+            log({ severity: 'INFO', message: '[FIX 1.6] Coherence check passed', session_id: sessionId, coherent: coherenceResult.coherent });
+        }
 
         // 3. Extract Organisation Name
         const orgName = extractOrgName(businessContext);
