@@ -52,4 +52,4 @@ jobs:
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REGISTRY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           env_vars: |-
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-          flags: '--allow-unauthenticated'
+          flags: '--allow-unauthenticated --timeout=3600'
