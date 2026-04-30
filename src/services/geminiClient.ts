@@ -16,14 +16,28 @@ const genAI = new GoogleGenerativeAI(apiKey);
 
 /**
  * Call a Gemini model directly with a system instruction + user prompt.
- * Returns the raw text response.
+ * Returns the raw text response AND real token usage from the API.
  */
 export async function callGemini(
     model: string,
     systemInstruction: string,
     userPrompt: string,
     maxOutputTokens?: number
-): Promise<string> {
+): Promise<string>;
+export async function callGemini(
+    model: string,
+    systemInstruction: string,
+    userPrompt: string,
+    maxOutputTokens: number | undefined,
+    returnUsage: true
+): Promise<{ text: string; inputTokens: number; outputTokens: number; totalTokens: number }>;
+export async function callGemini(
+    model: string,
+    systemInstruction: string,
+    userPrompt: string,
+    maxOutputTokens?: number,
+    returnUsage?: boolean
+): Promise<any> {
     try {
         const client = genAI.getGenerativeModel({
             model,
@@ -39,20 +53,22 @@ export async function callGemini(
             throw new Error('Empty response text from Gemini');
         }
 
-        // Log real token counts from API metadata when available.
-        // Replaces char/4 estimation (which underestimates JSON by 25-40%).
         const usage = response.usageMetadata;
-        if (usage) {
-            log({
-                severity: 'DEBUG',
-                message: `Token usage [${model}]`,
-                model_requested: model,
-                input_tokens_actual: usage.promptTokenCount,
-                output_tokens_actual: usage.candidatesTokenCount,
-                total_tokens_actual: usage.totalTokenCount,
-            });
-        }
+        const inputTokens = usage?.promptTokenCount ?? Math.ceil(userPrompt.length / 4);
+        const outputTokens = usage?.candidatesTokenCount ?? Math.ceil(text.length / 4);
+        const totalTokens = usage?.totalTokenCount ?? (inputTokens + outputTokens);
 
+        log({
+            severity: 'DEBUG',
+            message: `[TOKEN] ${model} — in:${inputTokens} out:${outputTokens} total:${totalTokens}${usage ? ' (actual)' : ' (estimated)'}`,
+            model,
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+            total_tokens: totalTokens,
+            token_source: usage ? 'api_actual' : 'char_estimate',
+        });
+
+        if (returnUsage) return { text, inputTokens, outputTokens, totalTokens };
         return text;
     } catch (e: any) {
         const keyStatus = apiKey ? `present (${apiKey.slice(0, 4)}...${apiKey.slice(-4)})` : 'missing';
@@ -63,7 +79,7 @@ export async function callGemini(
             api_key_status: keyStatus,
             model_requested: model
         });
-        throw e; // Re-throw to allow coordinator to handle/log
+        throw e;
     }
 }
 

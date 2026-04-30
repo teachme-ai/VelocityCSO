@@ -6,7 +6,7 @@ import { blueOceanAgent } from './agents/blueOceanAgent.js';
 import { wardleyAgent } from './agents/wardleyAgent.js';
 import { runMonteCarlo } from './services/monteCarloService.js';
 import { DiscoveryResult } from './agents/discovery.js';
-import { log, estimateCost } from './services/logger.js';
+import { log, estimateCost, createCostTracker, startPhase, guardContext } from './services/logger.js';
 import { SCENARIOS, ScenarioId, MitigationCard } from './scenarios.js';
 import { loadAuditMemory } from './services/memory.js';
 import { emitHeartbeat } from './services/sseService.js';
@@ -288,44 +288,39 @@ export class ChiefStrategyAgent {
         return summary;
     }
 
-    private async runSpecialist(agent: LlmAgent, context: string, sessionId: string): Promise<any> {
+    private async runSpecialist(agent: LlmAgent, context: string, sessionId: string, costTracker?: ReturnType<typeof createCostTracker>): Promise<any> {
         const startTime = Date.now();
         const agentName = agent.name!;
-        // Fallback to agent.instruction if not found in the custom mapping
         const systemInstruction = (specialistInstructions[agentName] || agent.instruction || '').toString();
-        const userPrompt = `${context}\n\nCRITICAL: You MUST return your analysis as a clean JSON object according to your schema. Do NOT include markdown text outside the JSON. All dimensions for your lens MUST be scored 0-100.`;
+        const safeContext = guardContext(context, sessionId, agentName);
+        const userPrompt = `${safeContext}\n\nCRITICAL: You MUST return your analysis as a clean JSON object according to your schema. Do NOT include markdown text outside the JSON. All dimensions for your lens MUST be scored 0-100.`;
 
         emitHeartbeat(sessionId, `◆ ${agentName}: sensing market signals and identifying asymmetric plays...`);
         let rawOutput = '';
         try {
             rawOutput = await callGemini('gemini-2.5-flash', systemInstruction, userPrompt);
         } catch (e: any) {
-            log({
-                severity: 'ERROR',
-                message: `Specialist API call failed: ${agentName}`,
-                agent_id: agentName,
-                session_id: sessionId,
-                error: e.message || String(e)
-            });
+            log({ severity: 'ERROR', message: `Specialist API call failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: e.message || String(e) });
         }
 
         const result = robustParse(agentName, rawOutput, sessionId);
         const latency = Date.now() - startTime;
-        const outChars = JSON.stringify(result).length;
-        const cost = estimateCost('gemini-2.5-flash', context.length, outChars);
+        const inputTokens = Math.ceil(userPrompt.length / 4);
+        const outputTokens = Math.ceil(rawOutput.length / 4);
+        costTracker?.track(agentName, 'gemini-2.5-flash', inputTokens, outputTokens);
 
         log({
             severity: 'INFO',
-            message: `Specialist complete: ${agentName}`,
+            message: `[AGENT] ${agentName} complete`,
             agent_id: agentName,
             phase: 'specialist_run',
             session_id: sessionId,
             latency_ms: latency,
-            agent_input: context.slice(0, 1000) + '...',
-            agent_output: result,
-            cost_usd: cost.usd,
-            tokens_in: cost.inputTokens,
-            tokens_out: cost.outputTokens
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+            dimensions_scored: Object.keys(result.dimensions || {}).length,
+            confidence_score: result.confidence_score ?? null,
+            missing_signals_count: (result.missing_signals || []).length,
         });
 
         emitHeartbeat(sessionId, `◆ ${agentName}: analysis complete. alignment verified.`);
@@ -336,10 +331,11 @@ export class ChiefStrategyAgent {
      * Runs a named specialist by instruction key (not LlmAgent instance).
      * Supports maxOutputTokens to hard-cap output size.
      */
-    private async runSpecialistDirect(agentName: string, context: string, sessionId: string, maxOutputTokens?: number): Promise<any> {
+    private async runSpecialistDirect(agentName: string, context: string, sessionId: string, maxOutputTokens?: number, costTracker?: ReturnType<typeof createCostTracker>): Promise<any> {
         const startTime = Date.now();
         const systemInstruction = (specialistInstructions[agentName] || '').toString();
-        const userPrompt = `${context}\n\nCRITICAL: Your response MUST begin with { and end with }. No markdown fences, no explanation, no preamble — raw JSON only.`;
+        const safeContext = guardContext(context, sessionId, agentName);
+        const userPrompt = `${safeContext}\n\nCRITICAL: Your response MUST begin with { and end with }. No markdown fences, no explanation, no preamble — raw JSON only.`;
 
         emitHeartbeat(sessionId, `◆ ${agentName}: running focused analysis...`);
         let rawOutput = '';
@@ -351,18 +347,19 @@ export class ChiefStrategyAgent {
 
         const result = robustParse(agentName, rawOutput, sessionId);
         const latency = Date.now() - startTime;
-        const cost = estimateCost('gemini-2.5-flash', context.length, rawOutput.length);
+        const inputTokens = Math.ceil(userPrompt.length / 4);
+        const outputTokens = Math.ceil(rawOutput.length / 4);
+        costTracker?.track(agentName, 'gemini-2.5-flash', inputTokens, outputTokens);
 
         log({
             severity: 'INFO',
-            message: `Specialist complete: ${agentName}`,
+            message: `[AGENT] ${agentName} complete`,
             agent_id: agentName,
             phase: 'specialist_run',
             session_id: sessionId,
             latency_ms: latency,
-            cost_usd: cost.usd,
-            tokens_in: cost.inputTokens,
-            tokens_out: cost.outputTokens,
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
             top_level_keys: Object.keys(result),
         });
 
@@ -394,20 +391,21 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
 
         const result = robustParse('strategic_critic', raw, sessionId);
         const latency = Date.now() - startTime;
-        const cost = estimateCost('gemini-2.5-flash', criticInput.length, raw.length);
+        const criticCost = estimateCost('gemini-2.5-flash', criticInput.length, raw.length);
 
         log({
             severity: 'INFO',
-            message: 'Critic review complete',
+            message: '[AGENT] strategic_critic complete',
             agent_id: 'strategic_critic',
             phase: 'critic_run',
             session_id: sessionId,
             latency_ms: latency,
-            agent_input: criticInput.slice(0, 1000) + '...',
-            agent_output: result,
-            cost_usd: cost.usd,
-            tokens_in: cost.inputTokens,
-            tokens_out: cost.outputTokens
+            coherence_score: result.overall_coherence_score ?? null,
+            flags_count: (result.flags || []).length,
+            requires_rerun: result.requires_rerun || [],
+            input_tokens: criticCost.inputTokens,
+            output_tokens: criticCost.outputTokens,
+            cost_usd: criticCost.usd,
         });
 
         return result;
@@ -423,6 +421,9 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         });
         emitHeartbeat(sessionId, '◆ CSO: analysis started (Parallel Specialist Mode)');
 
+        const cost = createCostTracker(sessionId);
+        const auditStart = Date.now();
+
         const finalDimensions: Record<string, number | null> = {
             'TAM Viability': null, 'Target Precision': null, 'Trend Adoption': null,
             'Competitive Defensibility': null, 'Model Innovation': null, 'Flywheel Potential': null,
@@ -435,16 +436,15 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         const richDimensions: Record<string, any> = {};
         const specialistOutputs: Record<string, any> = {};
 
-        // ── PHASE A: Market + Innovation (parallel, innovation split into 2 calls) ──
-        // innovation_analyst → dimensions + analysis_markdown only (~1,500 tokens)
-        // innovation_frameworks → Porter's + Ansoff + VRIO only (~1,800 tokens)
-        // Split prevents JSON truncation at ~11K tokens from a single combined call.
+        // ── PHASE A: Market + Innovation (parallel) ──────────────────────────────────────
         emitHeartbeat(sessionId, '◆ CSO Phase A: Market & Innovation analysis...');
+        const phaseA = startPhase('phase_a_market_innovation', sessionId);
         const [marketResult, innovationResult, innovationFrameworks] = await Promise.all([
-            this.runSpecialist(specialists.find(s => s.name === 'market_analyst')!, businessContext, sessionId),
-            this.runSpecialistDirect('innovation_analyst', businessContext, sessionId),
-            this.runSpecialistDirect('innovation_frameworks', businessContext, sessionId),
+            this.runSpecialist(specialists.find(s => s.name === 'market_analyst')!, businessContext, sessionId, cost),
+            this.runSpecialistDirect('innovation_analyst', businessContext, sessionId, undefined, cost),
+            this.runSpecialistDirect('innovation_frameworks', businessContext, sessionId, 2048, cost),
         ]);
+        phaseA.end({ agents: ['market_analyst', 'innovation_analyst', 'innovation_frameworks'] });
 
         specialistOutputs['market_analyst'] = marketResult;
         specialistOutputs['innovation_analyst'] = innovationResult;
@@ -461,12 +461,13 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         const summarizedPhaseA = await this.summarize(phaseAFindings, sessionId);
 
         emitHeartbeat(sessionId, '◆ CSO Phase B: Commercial & Operations analysis...');
-        // Context = original business description + compressed Phase A signal
+        const phaseB = startPhase('phase_b_commercial_operations', sessionId);
         const phaseBContext = `BUSINESS CONTEXT:\n${businessContext}\n\nPHASE A INTELLIGENCE:\n${summarizedPhaseA}`;
         const [commercialResult, operationsResult] = await Promise.all([
-            this.runSpecialist(specialists.find(s => s.name === 'commercial_analyst')!, phaseBContext, sessionId),
-            this.runSpecialist(specialists.find(s => s.name === 'operations_analyst')!, phaseBContext, sessionId)
+            this.runSpecialist(specialists.find(s => s.name === 'commercial_analyst')!, phaseBContext, sessionId, cost),
+            this.runSpecialist(specialists.find(s => s.name === 'operations_analyst')!, phaseBContext, sessionId, cost)
         ]);
+        phaseB.end({ agents: ['commercial_analyst', 'operations_analyst'] });
 
         specialistOutputs['commercial_analyst'] = commercialResult;
         specialistOutputs['operations_analyst'] = operationsResult;
@@ -482,12 +483,14 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         const summarizedPhaseB = await this.summarize(`${summarizedPhaseA}\n\n${phaseBFindings}`, sessionId);
 
         emitHeartbeat(sessionId, '◆ CSO Phase C: Financial structure analysis...');
-        // Finance only gets the compressed A+B summary — no need for raw businessContext again
+        const phaseC = startPhase('phase_c_finance', sessionId);
         const financeResult = await this.runSpecialist(
             specialists.find(s => s.name === 'finance_analyst')!,
             `BUSINESS CONTEXT:\n${businessContext}\n\nCOMPRESSED INTELLIGENCE (A+B):\n${summarizedPhaseB}`,
-            sessionId
+            sessionId,
+            cost
         );
+        phaseC.end({ agents: ['finance_analyst'] });
 
         specialistOutputs['finance_analyst'] = financeResult;
         Object.assign(finalDimensions, financeResult.dimensions);
@@ -495,10 +498,12 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
 
         // ── PHASE D: Specialized Frameworks ──────────────────────────────────────
         emitHeartbeat(sessionId, '◆ CSO Phase D: Executing specialized strategic frameworks...');
+        const phaseD = startPhase('phase_d_frameworks', sessionId);
         const [blueOceanResult, wardleyResult] = await Promise.all([
-            this.runSpecialist(blueOceanAgent, phaseBFindings, sessionId),
-            this.runSpecialist(wardleyAgent, businessContext, sessionId)
+            this.runSpecialist(blueOceanAgent, phaseBFindings, sessionId, cost),
+            this.runSpecialist(wardleyAgent, businessContext, sessionId, cost)
         ]);
+        phaseD.end({ agents: ['blue_ocean', 'wardley'] });
 
         specialistOutputs['blue_ocean'] = blueOceanResult;
         specialistOutputs['wardley'] = wardleyResult;
@@ -640,25 +645,29 @@ CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.tri
 
         emitHeartbeat(sessionId, '◆ CSO: synthesizing executive report and roadmap in parallel...');
         const synthesisStartTime = Date.now();
+        const phaseE = startPhase('phase_e_synthesis', sessionId);
         const csoInstruction = this.agent.instruction as string || 'You are the Chief Strategy Officer. Synthesize specialist analyses into a comprehensive markdown report.';
 
-        // Run both Pro calls in parallel — wall-clock = max(A, B) ≈ 25-30s vs 50-55s serial
         let mainReport = '';
         let roadmap = '';
         try {
             [mainReport, roadmap] = await Promise.all([
-                callGemini('gemini-2.5-pro', csoInstruction, narrativePrompt).catch(async (e: any) => {
+                callGemini('gemini-2.5-pro', csoInstruction, narrativePrompt, 4096).catch(async (e: any) => {
                     log({ severity: 'WARNING', message: 'CSO narrative call failed, retrying with flash', session_id: sessionId, error: e.message });
-                    return callGemini('gemini-2.5-flash', csoInstruction, narrativePrompt);
+                    return callGemini('gemini-2.5-flash', csoInstruction, narrativePrompt, 4096);
                 }),
-                callGemini('gemini-2.5-pro', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap.', roadmapPrompt).catch(async (e: any) => {
+                callGemini('gemini-2.5-pro', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap.', roadmapPrompt, 2048).catch(async (e: any) => {
                     log({ severity: 'WARNING', message: 'CSO roadmap call failed, retrying with flash', session_id: sessionId, error: e.message });
-                    return callGemini('gemini-2.5-flash', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap.', roadmapPrompt);
+                    return callGemini('gemini-2.5-flash', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap.', roadmapPrompt, 2048);
                 }),
             ]);
         } catch (e: any) {
             log({ severity: 'ERROR', message: 'CSO synthesis both calls failed', session_id: sessionId, error: e.message || String(e) });
         }
+
+        cost.track('cso_narrative', 'gemini-2.5-pro', Math.ceil(narrativePrompt.length / 4), Math.ceil(mainReport.length / 4));
+        cost.track('cso_roadmap', 'gemini-2.5-pro', Math.ceil(roadmapPrompt.length / 4), Math.ceil(roadmap.length / 4));
+        phaseE.end({ report_chars: mainReport.length, roadmap_chars: roadmap.length });
 
         const finalReport = mainReport + (roadmap ? '\n\n' + roadmap : '');
 
@@ -743,21 +752,20 @@ Write 2-3 sentences identifying the strongest genuine moat, or stating that the 
             log({ severity: 'WARNING', message: 'Moat agent returned empty — using fallback', session_id: sessionId });
             moatRationale = `${orgName}'s primary competitive advantage is its ${topDimension[0]} (${topDimension[1]}/100), which positions it defensibly against well-funded incumbents. Sustained investment in this dimension represents the highest-leverage strategic priority.`;
         }
+        cost.track('moat_analyst', 'gemini-2.5-flash', Math.ceil(moatPrompt.length / 4), Math.ceil(moatRationale.length / 4));
+
         const moatLatency = Date.now() - moatStartTime;
-        const moatCost = estimateCost('gemini-2.5-flash', moatPrompt.length, moatRationale.length);
 
         log({
             severity: 'INFO',
-            message: 'Moat rationale complete',
+            message: '[AGENT] moat_analyst complete',
             agent_id: 'moat_analyst',
             phase: 'moat_rationale',
             session_id: sessionId,
             latency_ms: moatLatency,
-            agent_input: moatPrompt,
-            agent_output: moatRationale,
-            cost_usd: moatCost.usd,
-            tokens_in: moatCost.inputTokens,
-            tokens_out: moatCost.outputTokens
+            top_moat: topDimension[0],
+            top_moat_score: topDimension[1],
+            moat_candidates: topThreeMoats.map(([d, s]) => `${d}:${s}`),
         });
 
         // 3. Safety net: retry only the specific specialists whose API call failed entirely
@@ -842,8 +850,11 @@ Write 2-3 sentences identifying the strongest genuine moat, or stating that the 
                 dimensions_filled: `${filledDims}/${Object.keys(finalDimensions).length}`,
                 report_generated: !!finalReport,
                 moat_rationale: !!moatRationale,
+                total_duration_ms: Date.now() - auditStart,
             },
         });
+
+        cost.finalise();
 
         return {
             report: finalReport,
