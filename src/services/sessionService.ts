@@ -1,5 +1,11 @@
 import admin from 'firebase-admin';
 
+export interface ClarifierTurn {
+    question: string;
+    answer: string;
+    turnNumber: number;
+}
+
 export interface StrategySession {
     originalContext: string;
     enrichedContext: string;
@@ -7,6 +13,11 @@ export interface StrategySession {
     gaps: string[];
     turnCount: number;
     usedLenses: string[];
+    clarifierExchange: ClarifierTurn[];
+    sector?: string | null;
+    orgScale?: string | null;
+    urlSource?: string | null;
+    documentFilename?: string | null;
     createdAt: number;
     expiresAt: number | admin.firestore.Timestamp;
 }
@@ -23,12 +34,13 @@ export async function saveSession(sessionId: string, data: Omit<StrategySession,
     const now = Date.now();
     await db().collection(COLLECTION).doc(sessionId).set({
         ...data,
+        clarifierExchange: data.clarifierExchange ?? [],
         createdAt: now,
         expiresAt: admin.firestore.Timestamp.fromMillis(now + SESSION_TTL_MS),
     });
 }
 
-export async function incrementTurn(sessionId: string, enrichedContext: string, gaps: string[], lensUsed?: string): Promise<{ turnCount: number; usedLenses: string[] } | null> {
+export async function incrementTurn(sessionId: string, enrichedContext: string, gaps: string[], lensUsed?: string, newTurn?: ClarifierTurn): Promise<{ turnCount: number; usedLenses: string[] } | null> {
     const ref = db().collection(COLLECTION).doc(sessionId);
 
     return await db().runTransaction(async (t) => {
@@ -36,13 +48,16 @@ export async function incrementTurn(sessionId: string, enrichedContext: string, 
         if (!doc.exists) return null;
 
         const data = doc.data();
-        if (data?.processing === true) return null; // locked — discard duplicate
+        if (data?.processing === true) return null;
 
         const current = (data?.turnCount as number) || 0;
         const existingLenses: string[] = (data?.usedLenses as string[]) || [];
         const usedLenses = lensUsed && !existingLenses.includes(lensUsed)
             ? [...existingLenses, lensUsed]
             : existingLenses;
+
+        const existingExchange: ClarifierTurn[] = (data?.clarifierExchange as ClarifierTurn[]) || [];
+        const clarifierExchange = newTurn ? [...existingExchange, newTurn] : existingExchange;
 
         const next = current + 1;
         t.update(ref, {
@@ -51,6 +66,7 @@ export async function incrementTurn(sessionId: string, enrichedContext: string, 
             gaps,
             processing: true,
             usedLenses,
+            clarifierExchange,
             lastAccessed: Date.now()
         });
 

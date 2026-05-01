@@ -267,13 +267,20 @@ app.post('/enrich/document',
 
 // ─── POST /analyze ───────────────────────────────────────────────────────────
 app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
-    const { business_context, stress_test } = req.body;
+    const { business_context, stress_test, sector, org_scale, url_source, document_filename } = req.body;
     const userId = req.userId || 'anonymous';
     const orgId = req.orgId || 'default-org';
 
     if (!business_context) {
         return res.status(400).json({ error: 'business_context is required' });
     }
+
+    // Append sector and scale as structured tags so specialists see them
+    const taggedContext = [
+        business_context,
+        sector ? `[SECTOR: ${sector}]` : '',
+        org_scale ? `[ORG SCALE: ${org_scale}]` : '',
+    ].filter(Boolean).join(' ');
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -310,12 +317,17 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
         if (!ir.isAuditable) {
             emitHeartbeat(sessionId, '⚠ Strategic Gap Detected: Requesting user clarification...', 'warning');
             await saveSession(sessionId, {
-                originalContext: business_context,
-                enrichedContext: business_context,
+                originalContext: taggedContext,
+                enrichedContext: taggedContext,
                 discoveryFindings: '',
                 gaps: [ir.question],
                 turnCount: 1,
                 usedLenses: [],
+                clarifierExchange: [{ question: ir.question, answer: '', turnNumber: 1 }],
+                sector: sector || null,
+                orgScale: org_scale || null,
+                urlSource: url_source || null,
+                documentFilename: document_filename || null,
             });
             sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: ir.strategyContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown });
             res.end();
@@ -367,12 +379,17 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
 
         if (!proceed && gap) {
             await saveSession(sessionId, {
-                originalContext: business_context,
-                enrichedContext: business_context,
+                originalContext: taggedContext,
+                enrichedContext: taggedContext,
                 discoveryFindings: discoveryFindingsStr,
                 gaps: discoveryResult.gaps,
                 turnCount: 0,
                 usedLenses: [],
+                clarifierExchange: [],
+                sector: sector || null,
+                orgScale: org_scale || null,
+                urlSource: url_source || null,
+                documentFilename: document_filename || null,
             });
             tlog({ severity: 'WARNING', message: 'Clarification required — session saved', session_id: sessionId });
             sseWrite(res, {
@@ -390,15 +407,15 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
         let benchmarkContext = '';
         try {
             const { getBenchmarkForSector } = await import('./services/benchmarkService.js');
-            const industryMatch = business_context.match(/\b(saas|fintech|healthtech|edtech|marketplace|ecommerce|logistics|ai|security|energy)\b/i);
-            const sector = industryMatch ? industryMatch[0] : 'SaaS';
-            const benchmark = await getBenchmarkForSector(sector);
-            benchmarkContext = `\n\n--- ${sector.toUpperCase()} INDUSTRY BENCHMARKS ---\n` +
+            const industryMatch = taggedContext.match(/\b(saas|fintech|healthtech|edtech|marketplace|ecommerce|logistics|ai|security|energy)\b/i);
+            const detectedSector = industryMatch ? industryMatch[0] : (sector || 'SaaS');
+            const benchmark = await getBenchmarkForSector(detectedSector);
+            benchmarkContext = `\n\n--- ${detectedSector.toUpperCase()} INDUSTRY BENCHMARKS ---\n` +
                 `- Avg CAC Payback: ${benchmark.avg_cac_payback_months} months\n` +
                 `- Avg LTV/CAC: ${benchmark.avg_ltv_cac}x\n` +
                 `- Top Quartile Growth: ${benchmark.growth_benchmark_top_quartile * 100}%\n` +
                 `- Market Multiples: ${benchmark.market_multiple_range[0]}x - ${benchmark.market_multiple_range[1]}x\n`;
-            emitHeartbeat(sessionId, `✓ Industry Calibration: Loaded ${sector} benchmarks.`);
+            emitHeartbeat(sessionId, `✓ Industry Calibration: Loaded ${detectedSector} benchmarks.`);
         } catch (err: any) {
             log({ severity: 'WARNING', message: `Benchmarking skipped: ${err.message}` });
         }
@@ -408,8 +425,8 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
         emitHeartbeat(sessionId, '◆ CSO: initializing 5-specialist tactical audit...');
 
         const enrichedContext = (discoveryFindingsStr || benchmarkContext)
-            ? `${business_context}${benchmarkContext}\n\n--- MARKET GROUNDING INTELLIGENCE ---\n${discoveryFindingsStr}`
-            : business_context;
+            ? `${taggedContext}${benchmarkContext}\n\n--- MARKET GROUNDING INTELLIGENCE ---\n${discoveryFindingsStr}`
+            : taggedContext;
 
         const finalContext = stress_test
             ? enrichedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
@@ -423,22 +440,27 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
         const csoCost = estimateCost('gemini-1.5-pro-001', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
 
-        // Save to Firestore with structured memory
         let docId = `local-${randomUUID()}`;
         try {
             const fingerprint = business_context.trim().slice(0, 80).toLowerCase();
-            // NOTE: Enable Firestore TTL in GCP Console → Firestore → Indexes → TTL Policies
-            // Field: expiresAt, Collection: enterprise_strategy_reports
             const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
             const docRef = await admin.firestore().collection('enterprise_strategy_reports').add({
                 business_context,
+                sector: sector || null,
+                org_scale: org_scale || null,
+                url_source: url_source || null,
+                document_filename: document_filename || null,
                 fingerprint,
                 report,
+                roadmap: roadmap || '',
                 dimension_scores: dimensions,
                 rich_dimensions: richDimensions,
                 frameworks,
                 discovery_findings: discoveryFindingsStr,
                 grounded_context: discoveryFindingsStr,
+                clarifier_exchange: [],
+                specialist_metadata: specialistMetadata || [],
+                confidence_triad: confidenceTriad || null,
                 stress_test: !!stress_test,
                 org_name: orgName,
                 moat_rationale: moatRationale,
@@ -449,7 +471,6 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             });
             docId = docRef.id;
 
-            // Persist full memory for Radar reload
             await saveAuditMemory(docId, {
                 reportId: docId,
                 businessContext: business_context,
@@ -462,7 +483,13 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
                 roadmap,
                 stressTest: !!stress_test,
                 orgName,
-                moatRationale
+                moatRationale,
+                clarifierExchange: [],
+                sector: sector || null,
+                orgScale: org_scale || null,
+                urlSource: url_source || null,
+                documentFilename: document_filename || null,                specialistMetadata,
+                confidenceTriad,
             });
         } catch (dbErr: any) {
             tlog({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });
@@ -524,7 +551,13 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
         // Use enrichedContext as base (not originalContext) so Q1, Q2, Q3 answers all accumulate
         const turnLabel = (session.turnCount || 0) + 1;
         const cumulativeContext = `${session.enrichedContext}\n\n[USER CLARIFICATION TURN ${turnLabel}]: ${clarification}`;
-        const turnResult = await incrementTurn(sessionId, cumulativeContext, session.gaps);
+
+        // Capture the question that was asked in the previous turn
+        // The last gap stored in session is the question the user is now answering
+        const questionAsked = session.gaps?.[session.gaps.length - 1] || '';
+        const newTurn = { question: questionAsked, answer: clarification, turnNumber: turnLabel };
+
+        const turnResult = await incrementTurn(sessionId, cumulativeContext, session.gaps, undefined, newTurn);
 
         if (!turnResult) {
             sseWrite(res, { type: 'ERROR', message: 'Request already processing. Please wait.' });
@@ -537,7 +570,19 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
 
         sseWrite(res, { type: 'INTERROGATOR_RESPONSE', category: ir.category, idScore: ir.idScore, idBreakdown: ir.idBreakdown, isAuditable: ir.isAuditable });
 
+        // If another clarification round fires, store the new question
         if (!ir.isAuditable) {
+            // Update the last clarifier exchange entry with the answer, add new pending question
+            const updatedSession = await getSession(sessionId);
+            const existingExchange = updatedSession?.clarifierExchange || [];
+            // Mark the answer on the last pending entry if it exists
+            const patchedExchange = existingExchange.map((t, i) =>
+                i === existingExchange.length - 1 && !t.answer
+                    ? { ...t, answer: clarification }
+                    : t
+            );
+            patchedExchange.push({ question: ir.question, answer: '', turnNumber: turnLabel + 1 });
+            await admin.firestore().collection('velocity_cso_sessions').doc(sessionId).update({ clarifierExchange: patchedExchange });
             sseWrite(res, { type: 'NEED_CLARIFICATION', sessionId, summary: `${ir.category} · ID Score: ${ir.idScore}/100`, gap: ir.question, findings: cumulativeContext, idScore: ir.idScore, idBreakdown: ir.idBreakdown });
             await releaseLock(sessionId);
             res.end();
@@ -580,14 +625,22 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             const fingerprint = session.enrichedContext.trim().slice(0, 80).toLowerCase();
             const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
             const docRef = await admin.firestore().collection('enterprise_strategy_reports').add({
-                business_context: session.enrichedContext,
+                business_context: session.originalContext,
+                sector: (session as any).sector || null,
+                org_scale: (session as any).orgScale || null,
+                url_source: (session as any).urlSource || null,
+                document_filename: (session as any).documentFilename || null,
                 fingerprint,
                 user_clarification: clarification,
+                clarifier_exchange: session.clarifierExchange || [],
                 report,
+                roadmap: roadmap || '',
                 dimension_scores: dimensions,
                 rich_dimensions: richDimensions,
                 frameworks,
                 grounded_context: session.discoveryFindings,
+                specialist_metadata: specialistMetadata || [],
+                confidence_triad: confidenceTriad || null,
                 stress_test: !!stress_test,
                 org_name: orgName,
                 moat_rationale: moatRationale,
@@ -609,7 +662,10 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
                 roadmap,
                 stressTest: !!stress_test,
                 orgName,
-                moatRationale
+                moatRationale,
+                clarifierExchange: session.clarifierExchange || [],
+                specialistMetadata,
+                confidenceTriad,
             });
         } catch (dbErr: any) {
             tlog({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });

@@ -13,18 +13,23 @@ export interface SpecialistOutput {
 export interface AuditMemory {
     reportId: string;
     businessContext: string;
-    groundedContext: string;           // Discovery findings
-    specialistOutputs: Record<string, SpecialistOutput>; // keyed by agent name
-    specialistMetadata?: any[];        // FIX 1.1: confidence, data_sources, missing_signals per specialist
-    confidenceTriad?: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number }; // FIX 3.2
-    roadmap?: string;                  // 90-day roadmap text
-    dimensionScores: Record<string, number | null>; // merged 20-dimension scores
-    richDimensions: Record<string, any>;   // aggregated CoT metadata
-    report: string;                    // Final Markdown report
+    groundedContext: string;
+    specialistOutputs: Record<string, SpecialistOutput>;
+    specialistMetadata?: any[];
+    confidenceTriad?: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number };
+    clarifierExchange?: { question: string; answer: string; turnNumber: number }[];
+    sector?: string | null;
+    orgScale?: string | null;
+    urlSource?: string | null;
+    documentFilename?: string | null;
+    roadmap?: string;
+    dimensionScores: Record<string, number | null>;
+    richDimensions: Record<string, any>;
+    report: string;
     stressTest: boolean;
-    moatRationale?: string;           // 2-sentence explanation of top dimension
-    orgName?: string;                 // Extracted Organisation Name
-    frameworks?: Record<string, any>; // Strategic Framework results (v3+)
+    moatRationale?: string;
+    orgName?: string;
+    frameworks?: Record<string, any>;
     createdAt: number;
 }
 
@@ -106,10 +111,18 @@ export async function loadAuditMemory(reportId: string): Promise<AuditMemory | n
             dimensionScores: data.dimension_scores || {},
             richDimensions: data.rich_dimensions || {},
             report: data.report || '',
+            roadmap: data.roadmap || '',
             stressTest: data.stress_test || false,
             moatRationale: data.moat_rationale || '',
             orgName: data.org_name || '',
             frameworks: data.frameworks ?? {},
+            clarifierExchange: data.clarifier_exchange || [],
+            specialistMetadata: data.specialist_metadata || [],
+            confidenceTriad: data.confidence_triad || null,
+            sector: data.sector || null,
+            orgScale: data.org_scale || null,
+            urlSource: data.url_source || null,
+            documentFilename: data.document_filename || null,
             createdAt: data.created_at?.toMillis() ?? Date.now(),
         };
     } catch (err: any) {

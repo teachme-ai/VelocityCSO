@@ -268,6 +268,7 @@ export function HeroSection() {
     const [briefExpanded, setBriefExpanded] = useState(false);
     const [orgSector, setOrgSector] = useState<string>('');
     const [orgScale, setOrgScale] = useState<string>('');
+    const [documentFilename, setDocumentFilename] = useState<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
     const enrichFromUrl = async () => {
@@ -336,6 +337,7 @@ ${data.text}
 ${context}`.trim();
 
             setContext(enrichedText);
+            setDocumentFilename(file.name);
             setPhaseLabel('Context enriched from document.');
             setTimeout(() => setPhaseLabel(''), 3000);
         } catch (err: unknown) {
@@ -373,12 +375,12 @@ ${context}`.trim();
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    business_context: [
-                        context,
-                        orgSector ? `[SECTOR: ${orgSector}]` : '',
-                        orgScale ? `[ORG SCALE: ${orgScale}]` : '',
-                    ].filter(Boolean).join(' '),
-                    stress_test: stressTest
+                    business_context: context,
+                    sector: orgSector || null,
+                    org_scale: orgScale || null,
+                    stress_test: stressTest,
+                    url_source: urlEnriched ? companyUrl : null,
+                    document_filename: documentFilename || null,
                 }),
             });
 

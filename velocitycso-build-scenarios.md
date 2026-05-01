@@ -265,9 +265,17 @@ What we explicitly do NOT claim as a 2-yr moat: Risk model (7,400 borrowers is t
 
 # SCENARIO 3 — Halcyon Operations (Enterprise CTRM, Scale-Up)
 
-**Diagnostic purpose:** Tests enterprise-scale coherence (D2), three-fork strategic choice (Fix 2.2), EMIR moat recognition (H14), Finance Agent isolation (D3) on a financially strong entity, Customer Concentration Risk nuance (D1) with switching costs.
+**Version:** S3-v2 (canonical — replaces all prior Halcyon runs)
+**Last clean run:** IypooT4O (Run 2, enriched Q1+Q2)
+**Diagnostic purpose:** Tests enterprise-scale coherence, three-fork strategic choice, EMIR moat recognition, Finance Agent isolation on a financially strong entity, Customer Concentration Risk nuance with switching costs, TCO pricing depth, and incumbent counter-move awareness.
 
-**What the broken system produced:** Team/Founder Strength selected as primary moat despite detailed EMIR moat answer. "Multi-million ARR" hallucinated for a $72M ARR company. ESG Posture (15/100) shown as Key Risk instead of Geneva anchor loss. Finance Index of 50 for an EBITDA-positive KKR-backed company.
+**Known failures as of S3-v2 run:**
+- S3-F: Most Material Risk shows Network Effects Strength (20) instead of Geneva anchor / Snowflake threat — materiality logic bug
+- S3-G: ROI Projection scores 28 despite Rule of 40 = 60 and LTV:CAC = 6.96 — finance dimension not reflecting computed unit economics
+- S3-I: VRIO returns "Sustained Competitive Advantage" without Snowflake/EU AI Act threat qualification
+- S3-C: Strategic Choice card not verified (requires Synthesis tab check)
+
+**What the original broken system produced:** Team/Founder Strength as primary moat. "Multi-million ARR" hallucinated. ESG Posture as Key Risk. Finance Index 50 for EBITDA-positive KKR-backed company.
 
 ---
 
@@ -321,6 +329,34 @@ Where we are vulnerable: Snowflake's Q1 announcement has caused two late-stage d
 Supplier leverage: Market data providers (Refinitiv, Bloomberg, Platts, ICIS) — HIGH and rising. Refinitiv raised our annual licence 18% on last renewal. Combined data costs are 14% of our revenue. Specialised talent (quant developers with commodity desk experience) — HIGH. Singapore and Geneva talent pools are tiny. Average TC for senior quants up 35% over 24 months. Cloud infrastructure (AWS) — MEDIUM, on 3-year reserved capacity through FY27.
 
 Buyer leverage: Top 5 customers (47% ARR) — HIGH structurally. Geneva anchor customer has negotiated annual escalators down from 8% list to 3%. Mid-market customers — LOW individually but NRR 132% confirms pricing power on expansion modules. Snowflake threat creating indirect leverage: customers now requesting revenue-share-on-Snowflake-credits pricing.
+
+On the specific value proposition driving replacement and 5-year pricing comparison:
+
+The replacement trigger is almost never price alone — it is the combination of three things incumbents cannot offer simultaneously: (1) native exotic instrument pricing without a custom professional services engagement, (2) SaaS delivery eliminating the on-premise maintenance burden, and (3) EMIR pre-certification removing a procurement blocker that would otherwise require 14+ months of independent validation.
+
+On-premise incumbents (ION, Allegro) require a dedicated IT team of 3-5 FTEs for version management, patching, and integration maintenance. At $150-200K fully-loaded cost per FTE in Geneva or Singapore, that is $450K-$1M per year in hidden infrastructure cost before the licence fee. They also charge $2-4M in implementation and customisation fees upfront, and major version upgrades (every 18-24 months) cost $500K-$1.5M in professional services each cycle.
+
+5-year TCO comparison for a representative mid-tier trader ($1B annual turnover):
+
+ION RightAngle:
+- Year 1: $1.8M licence + $3M implementation = $4.8M
+- Years 2-5: $1.8M licence + $600K maintenance + $800K average upgrade/customisation = $3.2M/year
+- 5-year total: approximately $17.6M
+- Hidden: 4 FTE IT team at $700K/year = $3.5M over 5 years
+- True 5-year TCO: ~$21M
+
+Halcyon:
+- Year 1: $1.7M ACV + $400K implementation = $2.1M
+- Years 2-5: $1.7M × (1.08)^n escalator, no separate maintenance fee, no upgrade cost
+- Year 2: $1.84M, Year 3: $1.98M, Year 4: $2.14M, Year 5: $2.31M
+- 5-year total licence: ~$9.97M
+- Implementation: $400K (one-time)
+- No dedicated IT team required (SaaS)
+- True 5-year TCO: ~$10.4M
+
+Delta: Halcyon is approximately 2.0-2.5x cheaper on true 5-year TCO for this profile. The 2.5-3x claim in our materials uses the upper end of ION's professional services range and a 5-FTE IT assumption — accurate for larger traders, conservative for smaller ones.
+
+The Geneva anchor customer's 3% escalator (vs our 8% list) means their Year 5 ACV is $1.97M vs $2.31M at list — a $340K/year discount by Year 5. This was negotiated in 2021 when we needed the logo. Current standard contracts hold 8% escalators and we have not conceded this since FY23.
 ```
 
 ---
@@ -336,6 +372,16 @@ What makes it hard to copy in under 2 years:
 2. The risk engine handles exotic instruments incumbents cannot price natively. Our pricing library covers Asian-style options on freight indices (Baltic Capesize 5TC), weather-correlated commodity hybrids, and structured cross-commodity baskets. The barrier is the calibration data — 4-6 years of trader feedback on real positions, fed back and used to retrain the model against actual P&L outcomes. We acquired this via a former Goldman Sachs commodities desk we hired in 2020: 7 senior quants and 2 desk heads with 12+ years of average experience on these books, plus 6 years of subsequent customer feedback from 41 logos. A competitor can hire quants. They cannot compress 6 years of position-level feedback into 18 months.
 
 3. Customer-side switching costs compound the moat. Average customer has 4.2 years of trade history in our system. Migration requires re-validation of 4+ years of historical risk calculations for audit purposes (typically 6-9 months and $2-4M of professional services) plus a parallel-run period. NRR 132% is partially structural — leaving us is genuinely hard.
+
+On what incumbents are actively doing to close the exotic pricing gap:
+
+ION Group has not launched a direct exotic instrument pricing initiative. Their response has been acquisitive — Brady (2016), Openlink (2017), Triple Point (2018) — consolidating legacy codebases rather than rebuilding the pricing engine. Their exotic instrument coverage remains dependent on custom professional services at $300-500/hour. No public roadmap item addresses Asian freight options or weather-correlated hybrids natively. ION's engineering resources are spread across integrating three acquired codebases.
+
+Allegro (now Hitachi Energy since 2021) has added weather derivative support for power trading (temperature-indexed contracts for energy hedging) but this is a different instrument class from our freight index options and cross-commodity baskets. Their quant team is energy-domain specialists, not multi-commodity exotic pricing specialists. Hitachi's focus has shifted toward energy transition assets — grid management, renewable energy trading, carbon markets — taking them further from our core segment.
+
+The real threat to our exotic pricing moat is NOT the incumbents. It is two other vectors:
+1. QuantLib + cloud deployment: a well-resourced internal quant team (exactly what Geneva is building) can deploy QuantLib on AWS with a modern API layer in 12-18 months. This is the build-vs-buy threat Geneva represents.
+2. Snowflake acquiring a pricing library vendor: Numerix already covers most of our exotic instrument classes and has an existing API. If Snowflake acquires or deeply integrates Numerix, the moat narrows materially within 18-24 months. This is the specific acquisition vector we are watching.
 
 Honest counter-pressure: Snowflake can commoditise the non-certified surface area of our platform over time. EU AI Act compliance could partially reset the moat if we cannot meet the H2 2026 interpretability requirements. Geneva's build-vs-buy review signals that well-resourced traders are considering internal AI capability as an alternative.
 
@@ -354,8 +400,8 @@ What we explicitly do NOT claim as a 2-year moat: brand (niche only), cloud arch
   "conservative_stress_test": false,
   "business_context": "Halcyon Operations — Singapore HQ. CTRM vertical SaaS. ARR $72M, 38% YoY growth. 22% EBITDA margin. EBITDA-positive since FY24. $85M Series C from KKR at $640M post-money. 41 logos including 4 Fortune 500. Top 5 customers = 47% ARR. Top customer = 14% ARR (Geneva metals trader, contracted through 2029). NRR 132%. 5-year contracts, average $1.7M ACV. EU AI Act compliance gap (black-box risk engine, $8-12M, 9 months). Snowflake CTRM-adjacent product announced Q1 FY26. Geneva anchor exploring build-vs-buy. EMIR pre-certification moat (14-month replication clock). Goldman quant team (7 senior quants, 6 years position-level feedback). Three forks: (a) Fortify and IPO, (b) strategic sale >$1.6B, (c) API-first platform pivot.",
   "clarifier_responses": {
-    "q1_competitors": "ION RightAngle (incumbent, 5-7x footprint, CIO risk-aversion), Allegro (energy-specific depth), OpenLink (top-tier banks, different segment). Win on TCO (2.5-3x cheaper than incumbents), time-to-value (4-6 months vs 12-18), exotic instrument pricing. Snowflake causing two late-stage deal stalls since February. Market data provider costs 14% of revenue, Refinitiv up 18% on renewal. Quant talent costs up 35% over 24 months.",
-    "q2_moat": "EMIR Trade Repository pre-certification (14-month regulatory clock, FIFO queue, currently 11+ months, cannot be compressed with capital) plus exotic instrument risk engine (6 years position-level calibration data from Goldman quant team). Explicitly NOT claiming: brand, cloud architecture, UX. Counter-pressure: Snowflake commoditises non-certified surface, EU AI Act interpretability requirement could reset moat, Geneva build-vs-buy signal."
+    "q1_competitors": "ION RightAngle (incumbent, 5-7x footprint, CIO risk-aversion), Allegro (energy-specific depth), OpenLink (top-tier banks, different segment). Win on TCO (2.5-3x cheaper than incumbents), time-to-value (4-6 months vs 12-18), exotic instrument pricing. Snowflake causing two late-stage deal stalls since February. Market data provider costs 14% of revenue, Refinitiv up 18% on renewal. Quant talent costs up 35% over 24 months. 5-year TCO comparison: ION true TCO ~$21M (licence $1.8M/yr + $3M implementation + $700K/yr IT team + $800K/yr upgrades) vs Halcyon ~$10.4M (SaaS, no IT team, 8% escalator, $400K implementation). Replacement trigger is combination of native exotic instrument pricing, SaaS delivery eliminating on-prem IT burden, and EMIR pre-certification removing procurement blocker. Geneva anchor on 3% escalator vs 8% list — $340K/year discount by Year 5, negotiated 2021, not repeated since FY23.",
+    "q2_moat": "EMIR Trade Repository pre-certification (14-month regulatory clock, FIFO queue, currently 11+ months, cannot be compressed with capital) plus exotic instrument risk engine (6 years position-level calibration data from Goldman quant team, covers Asian freight options, weather-correlated hybrids, cross-commodity baskets). Customer switching costs: 4.2 years trade history, 6-9 months and $2-4M migration cost. Incumbents NOT closing the gap: ION consolidating legacy codebases (no exotic pricing roadmap), Allegro pivoting to energy transition under Hitachi. Real threat is NOT incumbents: (1) Geneva building internally via QuantLib on AWS in 12-18 months, (2) Snowflake acquiring Numerix which already covers our exotic instrument classes. Explicitly NOT claiming: brand, cloud architecture, UX. Counter-pressure: Snowflake/Numerix acquisition vector, EU AI Act interpretability requirement, Geneva build-vs-buy."
   },
   "expected_dimension_score_ranges": {
     "Competitive Defensibility": [75, 92],
@@ -385,6 +431,9 @@ What we explicitly do NOT claim as a 2-year moat: brand (niche only), cloud arch
 | S3-I | VRIO verdict | "Conditional Competitive Advantage" or "Niche Advantage" with threat-adjusted language | "Sustained Competitive Advantage" without addressing Snowflake or EU AI Act |
 | S3-J | 90-day roadmap alignment | Roadmap actions execute the SAME fork recommended in Synthesis | Roadmap recommends fork (c) API pivot tactics while Synthesis recommended fork (a) Fortify & IPO |
 | S3-K | Monte Carlo | Shows distribution relevant to CTRM SaaS metrics, OR explicitly states model limitations | "Churn Rate 3800%" with no connection to $72M ARR company context |
+| S3-L | 5-year TCO pricing analysis | Finance or synthesis section references the ION vs Halcyon TCO delta with year-by-year escalator logic, OR explicitly names the Geneva 3% vs 8% list escalator gap as a pricing risk | Generic "competitive pricing" language with no line-item TCO comparison |
+| S3-M | Numerix/Snowflake acquisition vector | Synthesis or Strategic Blindspots names Numerix or a pricing library acquisition as the specific Snowflake threat vector, not just "Snowflake has $4B" | Only generic "Snowflake is well-capitalised" language with no named acquisition target |
+| S3-N | Incumbent counter-move accuracy | Report correctly states ION/Allegro are NOT closing the exotic pricing gap via organic R&D; threat is Geneva internal build and Snowflake ecosystem | Report treats ION or Allegro as the primary exotic pricing threat |
 
 ---
 

@@ -1088,16 +1088,58 @@ function _buildPDF(
     y = addPage(doc, orgName);
     y = sectionTitle(doc, 'Evidence, Sources & Assumptions', y);
 
+    // 0. Audit Inputs — sector, scale, URL, document
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('1. Audit Inputs', 40, y); y += 16;
+    const inputRows: [string, string][] = [
+        ['Sector', (memory as any).sector || 'Not specified'],
+        ['Organisation Scale', (memory as any).orgScale || 'Not specified'],
+        ['URL Enrichment', (memory as any).urlSource || 'None'],
+        ['Document Upload', (memory as any).documentFilename || 'None'],
+        ['Stress Test Mode', memory.stressTest ? 'Enabled' : 'Disabled'],
+    ];
+    for (const [label, value] of inputRows) {
+        doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold').text(`${label}: `, 40, y, { continued: true });
+        doc.font('Helvetica').fillColor(GRAY).text(sanitizeText(value));
+        y = doc.y + 3;
+    }
+    y += 10;
+
     // 1. User-provided context
-    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('1. User-Provided Context', 40, y); y += 16;
+    if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('2. Original Business Brief', 40, y); y += 16;
     const bizCtx = memory.businessContext?.trim();
     doc.fontSize(8).fillColor(GRAY).font('Helvetica')
-        .text(bizCtx ? bizCtx.slice(0, 600) : 'Original input not available in this report version.', 40, y, { width: doc.page.width - 80 });
+        .text(bizCtx ? bizCtx.slice(0, 800) : 'Original input not available in this report version.', 40, y, { width: doc.page.width - 80 });
     y = doc.y + 14;
+
+    // 1b. Strategic Dialogue (clarifier Q&A)
+    const exchange = (memory as any).clarifierExchange as { question: string; answer: string; turnNumber: number }[] | undefined;
+    if (exchange && exchange.length > 0 && exchange.some(t => t.answer)) {
+        if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+        doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('3. Strategic Dialogue (Clarifier Q&A)', 40, y); y += 16;
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text('The following questions were asked by the AI interrogator and answered by the user to deepen the audit context.', 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 10;
+        for (const turn of exchange) {
+            if (!turn.answer) continue;
+            if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+            // Question
+            doc.rect(40, y, doc.page.width - 80, 18).fill('#EFF6FF');
+            doc.rect(40, y, 3, 18).fill(ACCENT);
+            doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold')
+                .text(`Q${turn.turnNumber}: ${sanitizeText(turn.question)}`, 50, y + 5, { width: doc.page.width - 100 });
+            y += 22;
+            // Answer
+            doc.fontSize(8).fillColor('#374151').font('Helvetica')
+                .text(sanitizeText(turn.answer), 50, y, { width: doc.page.width - 100 });
+            y = doc.y + 12;
+        }
+        y += 4;
+    }
 
     // 2. Specialist data sources
     if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('2. Data Sources Referenced by Analysts', 40, y); y += 16;
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('4. Data Sources Referenced by Analysts', 40, y); y += 16;
     const metaEntries: any[] = memory.specialistMetadata || [];
     if (metaEntries.length === 0) {
         doc.fontSize(8).fillColor(GRAY).font('Helvetica')
@@ -1131,7 +1173,7 @@ function _buildPDF(
         }
     }
     if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('3. Missing Critical Signals', 40, y); y += 16;
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('5. Missing Critical Signals', 40, y); y += 16;
     if (allMissing.length === 0) {
         doc.fontSize(8).fillColor(GRAY).font('Helvetica').text('No critical signal gaps flagged by analysts.', 40, y); y = doc.y + 10;
     } else {
@@ -1149,7 +1191,7 @@ function _buildPDF(
 
     // 4. Confidence limitations — always present
     if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('4. Confidence Limitations', 40, y); y += 16;
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('6. Confidence Limitations', 40, y); y += 16;
     const triad = (memory as any).confidenceTriad;
     if (triad) {
         doc.fontSize(8).fillColor(GRAY).font('Helvetica')
@@ -1170,7 +1212,7 @@ function _buildPDF(
     // 5. Discovery context
     if (memory.groundedContext) {
         if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-        doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('5. Discovery Intelligence (Raw)', 40, y); y += 16;
+        doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('7. Discovery Intelligence (Raw)', 40, y); y += 16;
         const contextLines = memory.groundedContext.split('\n');
         for (const line of contextLines) {
             if (y > pageBottom - 20) { drawFooter(doc, page++); y = addPage(doc, orgName); }
