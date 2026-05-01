@@ -78,7 +78,7 @@ function scoreBar(doc: PDFKit.PDFDocument, label: string, score: number, baselin
     const color = score >= 70 ? GREEN : score >= 40 ? BLUE : RED;
     const dropped = baseline !== undefined && (baseline - score) > 10;
     doc.fontSize(7.5).fillColor(dropped ? ORANGE : NAVY).font(dropped ? 'Helvetica-Bold' : 'Helvetica')
-        .text((dropped ? '▼ ' : '') + label, colX, y, { width: 148 });
+        .text((dropped ? 'v ' : '') + label, colX, y, { width: 148 });
     doc.rect(barX, y + 2, barW, 7).fill('#E5E7EB');
     doc.rect(barX, y + 2, filled, 7).fill(color);
     if (baseline !== undefined && dropped) {
@@ -87,7 +87,7 @@ function scoreBar(doc: PDFKit.PDFDocument, label: string, score: number, baselin
     }
     doc.fontSize(7.5).fillColor(color).font('Helvetica-Bold').text(`${score}`, barX + barW + 4, y);
     if (baseline !== undefined && dropped) {
-        doc.fontSize(6.5).fillColor(RED).font('Helvetica').text(`↓${baseline - score}`, barX + barW + 22, y + 1);
+        doc.fontSize(6.5).fillColor(RED).font('Helvetica').text('-' + (baseline - score), barX + barW + 22, y + 1);
     }
     return y + 15;
 }
@@ -96,6 +96,17 @@ function addPage(doc: PDFKit.PDFDocument, orgName: string) {
     doc.addPage();
     drawHeader(doc, orgName);
     return 60;
+}
+
+// Fix 3.J: guard against page-bottom text overflow corruption
+function ensureSpace(doc: PDFKit.PDFDocument, neededHeight: number, page: number, orgName: string): { y: number; page: number } {
+    const pageBottom = doc.page.height - 44;
+    if (doc.y + neededHeight > pageBottom) {
+        drawFooter(doc, page);
+        const y = addPage(doc, orgName);
+        return { y, page: page + 1 };
+    }
+    return { y: doc.y, page };
 }
 
 function extractOrgName(context: string): string {
@@ -376,13 +387,16 @@ function _buildPDF(
 
     const cleanReport = memory.report
         .replace(/```[a-z]*/gi, '').replace(/```/g, '')
-        .replace(/\r\n/g, '\n');
+        .replace(/\r\n/g, '\n')
+        // Fix 3.D: strip redundant Dimension Scores block — already on Page 3 with visual bars
+        .replace(/^##\s*Dimension Scores[\s\S]*?(?=^##|$)/im, '');
 
     const lines = cleanReport.split('\n');
     const pageBottom = doc.page.height - 44;
 
     for (const line of lines) {
-        if (y > pageBottom) {
+        // Fix 3.J: check AFTER each render too, not just at loop top
+        if (y > pageBottom - 20) {
             drawFooter(doc, page++);
             y = addPage(doc, orgName);
         }
@@ -1069,51 +1083,60 @@ function _buildPDF(
         drawFooter(doc, page++);
     }
 
-    // ── SOURCES APPENDIX (FIX 3.1) ────────────────────────────────────────────
+
+    // ── SOURCES APPENDIX (Fix 3.I — always render, never blank) ──────────────
     y = addPage(doc, orgName);
     y = sectionTitle(doc, 'Evidence, Sources & Assumptions', y);
 
-    // User-provided context
-    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('User-Provided Context', 40, y); y += 16;
+    // 1. User-provided context
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('1. User-Provided Context', 40, y); y += 16;
+    const bizCtx = memory.businessContext?.trim();
     doc.fontSize(8).fillColor(GRAY).font('Helvetica')
-        .text(memory.businessContext?.slice(0, 600) || 'None provided', 40, y, { width: doc.page.width - 80 });
+        .text(bizCtx ? bizCtx.slice(0, 600) : 'Original input not available in this report version.', 40, y, { width: doc.page.width - 80 });
     y = doc.y + 14;
 
-    // Specialist data sources from specialistMetadata (Fix 1.1)
+    // 2. Specialist data sources
+    if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('2. Data Sources Referenced by Analysts', 40, y); y += 16;
     const metaEntries: any[] = memory.specialistMetadata || [];
-    if (metaEntries.length > 0) {
-        if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-        doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('Data Sources by Specialist', 40, y); y += 16;
+    if (metaEntries.length === 0) {
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text('Detailed source tracking available in reports generated after 1 May 2026.', 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 10;
+    } else {
         for (const meta of metaEntries) {
             if (y > pageBottom - 20) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-            doc.fontSize(9).fillColor(WHITE).font('Helvetica-Bold').text(meta.agent || 'unknown', 40, y); y += 12;
+            const agentLabel = (meta.agent || 'analyst').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+            doc.fontSize(9).fillColor(WHITE).font('Helvetica-Bold').text(agentLabel, 40, y); y += 12;
             const sources: string[] = meta.data_sources || [];
             if (sources.length === 0) {
                 doc.fontSize(7).fillColor(GRAY).font('Helvetica').text('  No explicit sources reported', 50, y); y += 10;
             } else {
                 for (const src of sources.slice(0, 5)) {
                     if (y > pageBottom - 10) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-                    doc.fontSize(7).fillColor(GRAY).font('Helvetica').text(`  \u2022 ${sanitizeText(src)}`, 50, y, { width: doc.page.width - 90 });
+                    doc.fontSize(7).fillColor(GRAY).font('Helvetica').text(`  - ${sanitizeText(src)}`, 50, y, { width: doc.page.width - 90 });
                     y = doc.y + 3;
                 }
             }
             y += 4;
         }
-        y += 8;
     }
+    y += 8;
 
-    // Missing critical signals
+    // 3. Missing critical signals
     const allMissing: { agent: string; signal: string }[] = [];
     for (const meta of metaEntries) {
         for (const signal of (meta.missing_signals || [])) {
             allMissing.push({ agent: meta.agent, signal });
         }
     }
-    if (allMissing.length > 0) {
-        if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-        doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('Missing Critical Signals', 40, y); y += 16;
+    if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('3. Missing Critical Signals', 40, y); y += 16;
+    if (allMissing.length === 0) {
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica').text('No critical signal gaps flagged by analysts.', 40, y); y = doc.y + 10;
+    } else {
         doc.fontSize(8).fillColor(GRAY).font('Helvetica')
-            .text('The following signals were flagged as absent by specialists. Confidence scores are reduced accordingly.', 40, y, { width: doc.page.width - 80 });
+            .text('The following signals were flagged as absent. Confidence scores are reduced accordingly.', 40, y, { width: doc.page.width - 80 });
         y = doc.y + 10;
         for (const { agent, signal } of allMissing.slice(0, 20)) {
             if (y > pageBottom - 10) { drawFooter(doc, page++); y = addPage(doc, orgName); }
@@ -1121,20 +1144,33 @@ function _buildPDF(
             doc.fillColor(GRAY).font('Helvetica').text(` ${sanitizeText(signal)}`, { width: doc.page.width - 90 });
             y = doc.y + 4;
         }
-        y += 8;
+    }
+    y += 8;
+
+    // 4. Confidence limitations — always present
+    if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('4. Confidence Limitations', 40, y); y += 16;
+    const triad = (memory as any).confidenceTriad;
+    if (triad) {
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text(`Evidence Confidence: ${triad.evidenceConfidence}% - reflects completeness of input data provided.`, 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 4;
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text(`Analytical Confidence: ${triad.analyticalConfidence}% - reflects specialist agreement across frameworks.`, 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 4;
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text(`Decision Confidence: ${triad.decisionConfidence}% - safe threshold for acting on this recommendation.`, 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 10;
+    } else {
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text('All scores are derived from the information provided at audit time. Dimensions with insufficient input data default to conservative estimates. This report should not be used as the sole basis for capital allocation decisions without independent verification of key assumptions.', 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 10;
     }
 
-    // Confidence limitations
-    if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-    doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('Confidence Limitations', 40, y); y += 16;
-    doc.fontSize(8).fillColor(GRAY).font('Helvetica')
-        .text('All scores are derived from the information provided at audit time. Dimensions with insufficient input data default to conservative estimates. This report should not be used as the sole basis for capital allocation decisions without independent verification of key assumptions.', 40, y, { width: doc.page.width - 80 });
-    y = doc.y + 10;
-
-    // Discovery context (grounded intelligence)
+    // 5. Discovery context
     if (memory.groundedContext) {
         if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-        doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('Discovery Intelligence (Raw)', 40, y); y += 16;
+        doc.fontSize(10).fillColor(VIOLET).font('Helvetica-Bold').text('5. Discovery Intelligence (Raw)', 40, y); y += 16;
         const contextLines = memory.groundedContext.split('\n');
         for (const line of contextLines) {
             if (y > pageBottom - 20) { drawFooter(doc, page++); y = addPage(doc, orgName); }
@@ -1148,3 +1184,4 @@ function _buildPDF(
     drawFooter(doc, page++);
     doc.end();
 }
+

@@ -30,19 +30,23 @@ function toTitleCase(str: string): string {
 
 // ─── Helper: Extract Org Name mnemonic heuristic ───────────────────────────
 function extractOrgName(context: string): string {
-    // Pattern 1: Named entity — "VelocityCSO is a..." or "Medically Inc builds..."
-    const namedEntity = context.match(/^([A-Z][a-zA-Z0-9\s&\-\.]{2,40}?)\s+(?:is|are|was|builds|provides|offers|helps)/);
+    // Pattern 1: "OrgName — " or "OrgName - " (most common in audit inputs e.g. "UdyamFlow Capital — Bengaluru")
+    const dashMatch = context.match(/^([A-Z][a-zA-Z0-9\s&.\-]{2,40}?)\s*[\u2014\-]/);
+    if (dashMatch) return dashMatch[1].trim();
+
+    // Pattern 2: Named entity — "VelocityCSO is a..." or "UdyamFlow Capital builds..."
+    const namedEntity = context.match(/^([A-Z][a-zA-Z0-9\s&\-\.]{2,40}?)\s+(?:is|are|was|builds|provides|offers|helps|Capital|Inc|Ltd|Corp)/);
     if (namedEntity) return namedEntity[1].trim();
 
-    // Pattern 2: "a platform for X" → derive from the service noun
+    // Pattern 3: "a platform for X" → derive from the service noun
     const serviceNoun = context.match(/\b(?:platform|app|service|tool|system|marketplace|network)\s+for\s+([a-z\s]+?)(?:\.|,|that|which|$)/i);
     if (serviceNoun) return toTitleCase(serviceNoun[1].trim()) + ' Platform';
 
-    // Pattern 3: "we help X" → derive from the domain
+    // Pattern 4: "we help X" → derive from the domain
     const weHelp = context.match(/we help\s+([a-z\s]+?)(?:\s+to|\s+with|\.|,|$)/i);
     if (weHelp) return toTitleCase(weHelp[1].trim());
 
-    return 'The Venture';
+    return 'Your Organisation';
 }
 
 /**

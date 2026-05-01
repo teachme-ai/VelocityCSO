@@ -138,14 +138,16 @@ def render(data: dict) -> str:
                                  linewidth=1.0, alpha=0.6, zorder=4)
             ax.add_patch(circle)
 
-        # Label — offset to avoid overlap
+        # Label — word-wrapped to avoid truncation (Fix 3.G)
+        import textwrap
+        wrapped_name = '\n'.join(textwrap.wrap(name, width=18))
         offset_y = 3.5 if y < 90 else -5
-        ax.text(x, y + offset_y, name[:22],
+        ax.text(x, y + offset_y, wrapped_name,
                 ha='center', va='bottom' if y < 90 else 'top',
                 color=WHITE if is_diff else OFF_WHITE,
-                fontsize=7, fontweight='bold' if is_diff else 'normal',
+                fontsize=6.5, fontweight='bold' if is_diff else 'normal',
                 path_effects=[pe.withStroke(linewidth=2, foreground='#0B1120')],
-                zorder=6)
+                zorder=6, linespacing=1.3)
 
         # Build/Buy badge
         if bbp and bbp != 'build':
