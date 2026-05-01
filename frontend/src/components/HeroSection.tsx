@@ -26,6 +26,7 @@ import { WardleyMap } from './WardleyMap';
 import { MonteCarloChart } from './MonteCarloChart';
 import { AnsoffMatrix } from './AnsoffMatrix';
 import { VrioCard } from './VrioCard';
+import { ErrorBoundary } from './ErrorBoundary';
 import { KpiRow } from './dashboard/KpiRow';
 import { CategorySummary } from './dashboard/CategorySummary';
 import { ReportTabs } from './dashboard/ReportTabs';
@@ -88,6 +89,56 @@ type ClarificationState = {
 };
 
 const LAST_REPORT_KEY = 'vcso_last_report_id';
+
+// ─── Schema normalisers — handle both old and new innovation_frameworks schemas ──
+// Old schema: { scores: { competitive_rivalry: { score, primary_driver } }, structural_attractiveness_score, interaction_effect_warning }
+// New schema: { forces: { competitive_rivalry: { score, driver } }, structural_attractiveness_score, verdict }
+function normPorter(raw: any): any {
+    if (!raw) return null;
+    // Already old schema
+    if (raw.scores) return raw;
+    // New compact schema — map forces → scores
+    const forces = raw.forces || {};
+    const scores: Record<string, any> = {};
+    for (const [k, v] of Object.entries(forces) as [string, any][]) {
+        scores[k] = { score: v?.score ?? 50, primary_driver: v?.driver ?? '' };
+    }
+    return {
+        scores,
+        structural_attractiveness_score: raw.structural_attractiveness_score ?? 50,
+        interaction_effect_warning: raw.verdict ?? null,
+    };
+}
+
+// Old: { market_penetration: { score, rationale, killer_move }, primary_vector, strategic_verdict }
+// New: { vectors: { market_penetration: { score, move } }, primary_vector, verdict }
+function normAnsoff(raw: any): any {
+    if (!raw) return null;
+    if (raw.market_penetration) return raw; // already old schema
+    const vectors = raw.vectors || {};
+    const result: any = { primary_vector: raw.primary_vector ?? '', strategic_verdict: raw.verdict ?? '' };
+    for (const [k, v] of Object.entries(vectors) as [string, any][]) {
+        result[k] = { score: v?.score ?? 50, rationale: v?.move ?? '', killer_move: v?.move ?? '' };
+    }
+    return result;
+}
+
+// Old: { resource_evaluated, valuable: { score, evidence }, rare, inimitable, organised, verdict, verdict_rationale }
+// New: { resource, scores: { valuable, rare, inimitable, organised }, verdict, rationale }
+function normVrio(raw: any): any {
+    if (!raw) return null;
+    if (raw.resource_evaluated !== undefined || raw.valuable?.evidence !== undefined) return raw; // old schema
+    const s = raw.scores || {};
+    return {
+        resource_evaluated: raw.resource ?? '',
+        valuable:   { score: s.valuable   ?? 50, evidence: '' },
+        rare:       { score: s.rare       ?? 50, evidence: '' },
+        inimitable: { score: s.inimitable ?? 50, evidence: '' },
+        organised:  { score: s.organised  ?? 50, evidence: '' },
+        verdict: raw.verdict ?? 'No Advantage',
+        verdict_rationale: raw.rationale ?? '',
+    };
+}
 
 function StarField() {
     return (
@@ -574,6 +625,38 @@ ${context}`.trim();
         }
     };
 
+    const handleRecover = async () => {
+        const savedId = localStorage.getItem(LAST_REPORT_KEY);
+        if (!savedId) return;
+        setPhase('analyzing');
+        setPhaseLabel('Recovering last report...');
+        try {
+            const base = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/analyze', '') : '';
+            const res = await fetch(`${base}/report/${savedId}?token=${savedId.slice(-8)}`);
+            if (!res.ok) throw new Error('Report not found');
+            const data = await res.json();
+            if (!data.report) throw new Error('Empty report');
+            setResult({
+                analysis_markdown: data.report,
+                dimensions: data.dimensions || {},
+                richDimensions: data.richDimensions,
+                frameworks: data.frameworks,
+                orgName: data.orgName,
+                moatRationale: data.moatRationale,
+                specialistMetadata: data.specialistMetadata,
+                confidenceTriad: data.confidenceTriad,
+                roadmap: data.roadmap,
+            });
+            setCurrentReportId(savedId);
+            setCurrentReportToken(savedId.slice(-8));
+            setPhase('done');
+            console.log('[RECOVER] Report loaded from Firestore', { id: savedId });
+        } catch (e: any) {
+            setError(`Recovery failed: ${e.message}. Run a new audit.`);
+            setPhase('error');
+        }
+    };
+
     return (
         <section className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-14 md:pt-12 overflow-hidden">
             {/* Deep Space Background */}
@@ -775,6 +858,22 @@ ${context}`.trim();
                                 </div>
                                 {error && <p className="text-red-400 text-xs">{error}</p>}
                             </form>
+
+                            {/* Recover Last Report */}
+                            {localStorage.getItem(LAST_REPORT_KEY) && (
+                                <motion.div
+                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                    className="mt-3 flex justify-center"
+                                >
+                                    <button
+                                        onClick={handleRecover}
+                                        className="flex items-center gap-2 text-xs text-zinc-500 hover:text-violet-400 transition-colors px-4 py-2 rounded-lg hover:bg-violet-500/10 border border-transparent hover:border-violet-500/20"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                                        Recover last report
+                                    </button>
+                                </motion.div>
+                            )}
                         </motion.div>
                     ) : phase === 'clarifying' && clarification ? (
                         /* ── Chat Bubble: NEED_CLARIFICATION ── */
@@ -1106,6 +1205,7 @@ ${context}`.trim();
                                     animate={{ opacity: 1, y: 0 }}
                                     className="max-w-7xl mx-auto w-full space-y-12"
                                 >
+                                    <ErrorBoundary name="Unit Economics">
                                     {result.frameworks?.unit_economics ? (
                                         <UnitEconomicsDashboard data={result.frameworks.unit_economics} />
                                     ) : (
@@ -1115,10 +1215,12 @@ ${context}`.trim();
                                             description="Insufficient LTV/CAC signal depth to model unit economics. Provide specific pricing and customer acquisition data to unlock this view."
                                         />
                                     )}
+                                    </ErrorBoundary>
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                        <ErrorBoundary name="Porter's Five Forces">
                                         {result.frameworks?.porter ? (
-                                            <FiveForces data={result.frameworks.porter} />
+                                            <FiveForces data={normPorter(result.frameworks.porter)} />
                                         ) : (
                                             <PlaceholderCard
                                                 icon={ShieldAlert}
@@ -1126,6 +1228,8 @@ ${context}`.trim();
                                                 description="Insufficient competitive signal to model Porter's Five Forces. Provide competitor names and market dynamics to unlock."
                                             />
                                         )}
+                                        </ErrorBoundary>
+                                        <ErrorBoundary name="Wardley Map">
                                         {result.frameworks?.wardley ? (
                                             <WardleyMap
                                                 capabilities={result.frameworks.wardley.capabilities}
@@ -1138,8 +1242,10 @@ ${context}`.trim();
                                                 description="Value chain positioning requires capability and maturity data. Describe your core product dependencies to generate this map."
                                             />
                                         )}
+                                        </ErrorBoundary>
+                                        <ErrorBoundary name="Ansoff Matrix">
                                         {result.frameworks?.ansoff ? (
-                                            <AnsoffMatrix data={result.frameworks.ansoff} />
+                                            <AnsoffMatrix data={normAnsoff(result.frameworks.ansoff)} />
                                         ) : (
                                             <PlaceholderCard
                                                 icon={ShieldAlert}
@@ -1147,8 +1253,10 @@ ${context}`.trim();
                                                 description="Growth vector analysis requires product and market context. Describe your current offerings and target segments to unlock."
                                             />
                                         )}
+                                        </ErrorBoundary>
+                                        <ErrorBoundary name="VRIO Analysis">
                                         {result.frameworks?.vrio ? (
-                                            <VrioCard data={result.frameworks.vrio} />
+                                            <VrioCard data={normVrio(result.frameworks.vrio)} />
                                         ) : (
                                             <PlaceholderCard
                                                 icon={ShieldAlert}
@@ -1156,8 +1264,10 @@ ${context}`.trim();
                                                 description="Competitive advantage evaluation requires a clearly stated core capability. Describe your primary differentiator to unlock."
                                             />
                                         )}
+                                        </ErrorBoundary>
                                     </div>
 
+                                    <ErrorBoundary name="Monte Carlo">
                                     {result.frameworks?.monte_carlo ? (
                                         <MonteCarloChart
                                             distributions={result.frameworks.monte_carlo.distributions}
@@ -1170,6 +1280,7 @@ ${context}`.trim();
                                             description="Probabilistic risk modeling requires revenue and growth rate distributions. Add financial targets to simulate variance scenarios."
                                         />
                                     )}
+                                    </ErrorBoundary>
                                 </motion.div>
                             )}
 
