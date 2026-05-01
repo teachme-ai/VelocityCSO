@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-export type TabId = 'overview' | 'matrix' | 'frameworks' | 'synthesis';
+export type TabId = 'overview' | 'matrix' | 'frameworks' | 'synthesis' | 'stress';
 
 interface ReportTabsProps {
     activeTab: TabId;
@@ -13,6 +13,7 @@ const TABS: { id: TabId; label: string }[] = [
     { id: 'matrix', label: 'Dimension Matrix' },
     { id: 'frameworks', label: 'Strategic Frameworks' },
     { id: 'synthesis', label: 'Executive Synthesis' },
+    { id: 'stress', label: 'Stress Simulator' },
 ];
 
 export const ReportTabs: React.FC<ReportTabsProps> = ({ activeTab, onTabChange }) => {

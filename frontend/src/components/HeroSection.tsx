@@ -199,14 +199,36 @@ const SavvyRecommendation = ({ children }: { children: React.ReactNode }) => (
  */
 function sanitizeReport(text: string): string {
     return text
-        .replace(/```json[\s\S]*?```/g, '') // Remove json code blocks
-        .replace(/\{[\s\S]*?\}/g, '')       // Remove raw JSON objects
-        .replace(/```markdown/g, '')        // Remove markdown tags
-        .replace(/```/g, '')                // Remove any remaining backticks
-        .replace(/#{1,4}\s*90.Day Strategic Roadmap[\s\S]*$/im, '') // strip roadmap (now separate)
-        .replace(/#{1,4}\s*Dimension Scores[\s\S]*$/im, '') // any heading level
+        .replace(/```json[\s\S]*?```/g, '')
+        .replace(/```markdown/g, '')
+        .replace(/```/g, '')
+        .replace(/#{1,4}\s*90.Day Strategic Roadmap[\s\S]*$/im, '')
+        .replace(/#{1,4}\s*Strategic Choice[\s\S]*?(?=#{1,4}\s|$)/im, '') // strip — rendered separately
+        .replace(/#{1,4}\s*Dimension Scores[\s\S]*$/im, '')
         .replace(/Dimension Scores:?[\s\S]*$/im, '')
         .trim();
+}
+
+/** Extract the ## Strategic Choice block from the report markdown */
+function extractStrategicChoice(text: string): Record<string, string> | null {
+    const match = text.match(/#{1,4}\s*Strategic Choice[\s\S]*?(?=#{1,4}\s|$)/im);
+    if (!match) return null;
+    const block = match[0];
+    const fields: Record<string, string> = {};
+    const keys = [
+        'Recommended strategic posture',
+        'Primary move',
+        'Secondary option',
+        'Controlled experiment',
+        'Rejected move',
+        'What would change this recommendation',
+    ];
+    for (const key of keys) {
+        const re = new RegExp(`${key}:\\s*(.+)`, 'i');
+        const m = block.match(re);
+        if (m) fields[key] = m[1].trim();
+    }
+    return Object.keys(fields).length > 0 ? fields : null;
 }
 
 const PlaceholderCard = ({ title, description, icon: Icon }: { title: string, description: string, icon: React.ElementType }) => (
@@ -1300,7 +1322,37 @@ ${context}`.trim();
                                         />
                                     )}
 
-                                    {/* Executive Report & Stress Test */}
+                                    {/* Strategic Choice Card */}
+                                    {(() => {
+                                        const choice = extractStrategicChoice(result.analysis_markdown || '');
+                                        if (!choice) return null;
+                                        const rows: { label: string; color: string }[] = [
+                                            { label: 'Recommended strategic posture', color: 'text-violet-300' },
+                                            { label: 'Primary move', color: 'text-emerald-300' },
+                                            { label: 'Secondary option', color: 'text-blue-300' },
+                                            { label: 'Controlled experiment', color: 'text-amber-300' },
+                                            { label: 'Rejected move', color: 'text-rose-300' },
+                                            { label: 'What would change this recommendation', color: 'text-zinc-400' },
+                                        ];
+                                        return (
+                                            <div className="bg-zinc-900/60 border border-violet-500/20 rounded-2xl p-8 backdrop-blur-xl">
+                                                <div className="flex items-center gap-3 mb-6">
+                                                    <div className="w-2 h-2 rounded-full bg-violet-500" />
+                                                    <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-violet-400">Strategic Choice</h3>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {rows.map(({ label, color }) => choice[label] ? (
+                                                        <div key={label} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                                                            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">{label}</p>
+                                                            <p className={`text-sm leading-relaxed font-medium ${color}`}>{choice[label]}</p>
+                                                        </div>
+                                                    ) : null)}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Executive Report */}
                                     <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-start">
                                         <div className="space-y-6">
                                             <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 backdrop-blur-xl">
@@ -1328,7 +1380,7 @@ ${context}`.trim();
                                             </div>
                                         </div>
 
-                                        {/* 90-Day Roadmap — arrives via ROADMAP_COMPLETE after main report */}
+                                        {/* 90-Day Roadmap */}
                                         {result.roadmap ? (
                                             <div className="bg-zinc-900/50 border border-violet-500/20 rounded-2xl p-8 backdrop-blur-xl mt-6">
                                                 <div className="report-content prose prose-invert prose-sm max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-p:text-zinc-300 prose-p:leading-relaxed prose-strong:text-white">
@@ -1346,17 +1398,23 @@ ${context}`.trim();
                                                 <p className="text-[10px] text-zinc-600 mt-3 uppercase tracking-widest font-bold">90-Day Roadmap generating...</p>
                                             </div>
                                         )}
-
-                                        <div className="space-y-6">
-                                            <StressTestPanel
-                                                reportId={currentReportId || ''}
-                                                onStressResult={handleStressResult}
-                                                apiBase={import.meta.env.VITE_API_URL || ''}
-                                                originalDimensions={result.dimensions || {}}
-                                                ventureScale={orgScale}
-                                            />
-                                        </div>
                                     </section>
+                                </motion.div>
+                            )}
+
+                            {activeTab === 'stress' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="max-w-4xl mx-auto w-full"
+                                >
+                                    <StressTestPanel
+                                        reportId={currentReportId || ''}
+                                        onStressResult={handleStressResult}
+                                        apiBase={import.meta.env.VITE_API_URL || ''}
+                                        originalDimensions={result.dimensions || {}}
+                                        ventureScale={orgScale}
+                                    />
                                 </motion.div>
                             )}
                         </div>

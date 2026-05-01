@@ -611,16 +611,17 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         // ── Synthesis prompt shared context (passed to both parallel calls) ──────
         const sharedContext = `BUSINESS CONTEXT:\n${businessContext}\n\nSPECIALIST DIGEST (scores + key signal per agent):\n${specialistDigest}\n\nMERGED DIMENSION SCORES:\n${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join(', ')}`;
 
-        // ── FIX 2.2: Narrative prompt with mandatory Strategic Choice section ──────
+        // ── FIX 2.2: Narrative prompt — Strategic Choice FIRST so it is never truncated ──
         const narrativePrompt = `${sharedContext}
 
 YOUR TASK: Synthesize into a high-end Tier-1 Consulting strategic report in clean markdown.
-Include these sections: Executive Synthesis, Unit Economics Analysis (if data available), Risk & Monte Carlo Projections (if data available).
+Write sections IN THIS ORDER:
 
-SCENARIO ANALYSIS — include as "## Scenario Analysis":
-Identify 2 highest-impact macro uncertainties. Define 3 named scenarios (Base ~60%, Optimistic ~25%, Stress ~15%). For each: Name, Conditions (1 sentence), Strategy performance (GREEN|AMBER|RED), and one key action. End with Resilience Score 0-100.
+## Executive Synthesis
+3-4 paragraphs covering business position, key strengths, and the 3 most critical pressure points.
 
-STRATEGIC CHOICE — you MUST include this section as "## Strategic Choice" with EXACTLY this structure:
+## Strategic Choice
+You MUST include ALL six lines below, each on its own line:
 Recommended strategic posture: [one clear sentence — the single recommended direction]
 Primary move: [the main action to execute immediately]
 Secondary option: [fallback or hedge if primary conditions change]
@@ -628,7 +629,15 @@ Controlled experiment: [one bounded, low-cost test to run in parallel]
 Rejected move: [what NOT to do, and specifically why]
 What would change this recommendation: [the trigger conditions that would flip the recommendation]
 
-End the report with:
+## Unit Economics Analysis
+2-3 paragraphs (skip if no financial data available).
+
+## Scenario Analysis
+Identify 2 highest-impact macro uncertainties. Define 3 named scenarios (Base ~60%, Optimistic ~25%, Stress ~15%). For each: Name, Conditions (1 sentence), Strategy performance (GREEN|AMBER|RED), one key action.
+
+## Strategic Blindspots
+2-3 bullet points on unresolved contradictions or low-confidence dimensions.
+
 ## Dimension Scores
 ${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
 
