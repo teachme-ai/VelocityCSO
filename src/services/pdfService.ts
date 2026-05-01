@@ -99,8 +99,16 @@ function addPage(doc: PDFKit.PDFDocument, orgName: string) {
 }
 
 function extractOrgName(context: string): string {
-    const match = context.match(/^([A-Z][a-zA-Z\s&]{2,40})/);
-    return match ? match[1].trim() : 'Your Organisation';
+    // Pattern 1: "OrgName — " or "OrgName - " (common in our audit inputs)
+    const dashMatch = context.match(/^([A-Z][a-zA-Z0-9\s&.]{2,40}?)\s*[\u2014\-]/);
+    if (dashMatch) return dashMatch[1].trim();
+    // Pattern 2: Named entity at start of sentence
+    const namedEntity = context.match(/^([A-Z][a-zA-Z0-9\s&.]{2,40}?)\s+(?:is|are|was|builds|provides|offers|helps|Capital|Inc|Ltd|Corp)/);
+    if (namedEntity) return namedEntity[1].trim();
+    // Pattern 3: First capitalised phrase
+    const firstCap = context.match(/^([A-Z][a-zA-Z0-9\s&.]{2,40}?)(?:\.|,|\n)/);
+    if (firstCap) return firstCap[1].trim();
+    return 'Your Organisation';
 }
 
 function extractKillerMove(report: string): string {
@@ -405,6 +413,49 @@ function _buildPDF(
     drawFooter(doc, page++);
 
     // ── STRATEGY RECOMMENDATIONS (90-Day Actions) ─────────────────────────────
+    // Part 1: CSO-generated 90-day roadmap text
+    if (memory.roadmap && memory.roadmap.trim().length > 100) {
+        y = addPage(doc, orgName);
+        y = sectionTitle(doc, 'Strategic Recommendations (90-Day Roadmap)', y);
+
+        const roadmapLines = memory.roadmap
+            .replace(/```[a-z]*/gi, '').replace(/```/g, '')
+            .replace(/\r\n/g, '\n')
+            .split('\n');
+
+        for (const line of roadmapLines) {
+            if (y > pageBottom) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+            const trimmed = line.trim();
+            if (!trimmed) { y += 4; continue; }
+
+            if (/^#{1,2}\s/.test(trimmed)) {
+                if (y > pageBottom - 30) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                y += 6;
+                doc.rect(40, y, 4, 14).fill(ACCENT);
+                doc.fontSize(10).fillColor(NAVY).font('Helvetica-Bold')
+                    .text(trimmed.replace(/^#+\s*/, ''), 52, y + 1, { width: doc.page.width - 92 });
+                y = doc.y + 8;
+            } else if (/^###\s/.test(trimmed)) {
+                if (y > pageBottom - 24) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+                doc.fontSize(9).fillColor(BLUE).font('Helvetica-Bold')
+                    .text(trimmed.replace(/^#+\s*/, ''), 40, y, { width: doc.page.width - 80 });
+                y = doc.y + 6;
+            } else if (/^[-*]\s/.test(trimmed) || /^\*\*Action:/.test(trimmed)) {
+                const text = sanitizeText(trimmed.replace(/^[-*]\s*/, '').replace(/\*\*/g, ''));
+                doc.fontSize(8).fillColor(NAVY).font('Helvetica')
+                    .text(`\u2022 ${text}`, 52, y, { width: doc.page.width - 92 });
+                y = doc.y + 4;
+            } else {
+                const text = sanitizeText(trimmed.replace(/\*\*/g, '').replace(/\*/g, ''));
+                doc.fontSize(8).fillColor('#374151').font('Helvetica')
+                    .text(text, 40, y, { width: doc.page.width - 80, lineGap: 1.5 });
+                y = doc.y + 4;
+            }
+        }
+        drawFooter(doc, page++);
+    }
+
+    // Part 2: Dimension-based improvement actions
     const allActions = Object.entries(memory.richDimensions || {})
         .filter(([_, data]) => data.improvement_action)
         .map(([dim, data]) => ({ dim, action: data.improvement_action, score: data.score ?? 0, justification: data.justification }))
@@ -857,7 +908,8 @@ function _buildPDF(
                 doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text('Key Risk Drivers', 40, y); y += 14;
                 for (const d of drivers.slice(0, 5)) {
                     if (y > pageBottom - 20) { drawFooter(doc, page++); y = addPage(doc, orgName); }
-                    const pct = Math.round((d.variance_contribution ?? 0) * 100);
+                    // variance_contribution is already an integer percentage (e.g. 38 = 38%)
+                    const pct = Math.min(100, Math.round(d.variance_contribution ?? 0));
                     const barW = chartW - 200;
                     const filled = Math.round((pct / 100) * barW);
                     doc.fontSize(8).fillColor(NAVY).font('Helvetica')

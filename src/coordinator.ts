@@ -522,21 +522,22 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
 
         // NOTE: pdfService reads fw.porter / fw.ansoff / fw.vrio — keys must match exactly.
         // Log raw innovationFrameworks top-level keys so we can verify extraction.
+        // New schema uses: porter, ansoff, vrio (compact keys)
         log({
             severity: 'INFO',
             message: 'innovation_frameworks: raw top-level keys',
             session_id: sessionId,
             keys: Object.keys(innovationFrameworks ?? {}),
-            has_portersFiveForces: !!(innovationFrameworks?.portersFiveForces),
-            has_ansoffMatrix: !!(innovationFrameworks?.ansoffMatrix),
-            has_vrioAnalysis: !!(innovationFrameworks?.vrioAnalysis),
+            has_porter: !!(innovationFrameworks?.porter),
+            has_ansoff: !!(innovationFrameworks?.ansoff),
+            has_vrio: !!(innovationFrameworks?.vrio),
         });
 
         const frameworks = {
             blue_ocean: blueOceanResult,
-            porter: innovationFrameworks?.portersFiveForces || null,
-            ansoff: innovationFrameworks?.ansoffMatrix || null,
-            vrio: innovationFrameworks?.vrioAnalysis || null,
+            porter: innovationFrameworks?.porter || null,
+            ansoff: innovationFrameworks?.ansoff || null,
+            vrio: innovationFrameworks?.vrio || null,
             unit_economics: financeResult?.unitEconomics || null,
             monte_carlo: monteCarloResult,
             wardley: wardleyResult
@@ -664,42 +665,52 @@ CRITICAL: Do NOT generate a 90-Day Roadmap here. Do NOT call sub-agents or tools
         // ── FIX 2.1: Roadmap runs AFTER synthesis, receives recommended posture ───
         const roadmapPrompt = `${sharedContext}
 
-THE EXECUTIVE SYNTHESIS HAS RECOMMENDED THE FOLLOWING STRATEGIC POSTURE:
-${recommendedPosture || 'See synthesis above for strategic direction.'}
+Strategic context for this roadmap:
+The executive synthesis has identified the following recommended direction: ${recommendedPosture || 'focus on the highest-scoring strategic dimensions'}.
+${rejectedMove ? `The synthesis explicitly rejected: ${rejectedMove}. Do not include actions that pursue this direction.` : ''}
 
-REJECTED MOVE (do NOT include actions that execute this):
-${rejectedMove || 'None specified.'}
-
-YOUR TASK: Generate ONLY a 90-Day Strategic Roadmap in markdown. No other sections.
-Your roadmap MUST align with the recommended posture above.
+Generate a 90-Day Strategic Roadmap in markdown with exactly these sections.
+Minimum 6 actions total across the three horizons.
 
 ## 90-Day Strategic Roadmap
 
 ### Days 1-30: Quick Wins
-3 specific actions. Each formatted as:
-**Action:** [specific action] | **Owner:** [role] | **Success metric:** [number] | **Why now:** [1 sentence urgency]
+Three specific, immediately executable actions. Format each as:
+**Action:** [what to do] | **Owner:** [role] | **Success metric:** [measurable number] | **Why now:** [one sentence urgency]
 
 ### Days 31-60: Foundation Building
-3 specific actions in same format.
+Three actions that build structural capability. Same format.
 
 ### Days 61-90: Strategic Bets
-2-3 higher-uncertainty actions with high upside, same format.
+Two or three higher-uncertainty actions with asymmetric upside. Same format.
 
 ### Do Not Do
-1-2 explicit actions to AVOID, referencing the rejected move above.
+One or two explicit actions to avoid based on the rejected strategic direction.
 
-Each action must reference a specific dimension from the scorecard, name a role, and have a measurable metric.
-CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.trim();
+Each action should reference a specific dimension from the scorecard and name a measurable outcome.
+Return only the roadmap markdown. No preamble, no summary, no other sections.`.trim();
 
         emitHeartbeat(sessionId, '◆ CSO: generating posture-aligned 90-day roadmap...');
         let roadmap = '';
         try {
-            roadmap = await callGemini('gemini-2.5-pro', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap that strictly aligns with the recommended strategic posture provided.', roadmapPrompt, 4096).catch(async (e: any) => {
-                log({ severity: 'WARNING', message: 'CSO roadmap call failed, retrying with flash', session_id: sessionId, error: e.message });
-                return callGemini('gemini-2.5-flash', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap that strictly aligns with the recommended strategic posture provided.', roadmapPrompt, 4096);
+            roadmap = await callGemini('gemini-2.5-pro', 'You are a Chief Strategy Officer generating a precise 90-day action roadmap. Be specific, actionable, and concrete.', roadmapPrompt, 4096).catch(async (e: any) => {
+                log({ severity: 'WARNING', message: 'CSO roadmap Pro call failed, retrying with flash', session_id: sessionId, error: e.message });
+                return callGemini('gemini-2.5-flash', 'You are a Chief Strategy Officer generating a precise 90-day action roadmap. Be specific, actionable, and concrete.', roadmapPrompt, 4096);
             });
         } catch (e: any) {
             log({ severity: 'ERROR', message: 'CSO roadmap call failed', session_id: sessionId, error: e.message || String(e) });
+        }
+
+        // Token guard: if roadmap is under 300 tokens (~1200 chars), it's a generation failure — retry once
+        if (roadmap.length < 1200) {
+            log({ severity: 'WARNING', message: '[ROADMAP GUARD] Roadmap too short, retrying', session_id: sessionId, chars: roadmap.length });
+            emitHeartbeat(sessionId, '◆ CSO: roadmap too short — regenerating...', 'warning');
+            try {
+                roadmap = await callGemini('gemini-2.5-flash', 'You are a Chief Strategy Officer. Generate a detailed 90-day strategic roadmap with at least 6 specific actions across three time horizons.', roadmapPrompt, 4096);
+                log({ severity: 'INFO', message: '[ROADMAP GUARD] Retry succeeded', session_id: sessionId, chars: roadmap.length });
+            } catch (e: any) {
+                log({ severity: 'ERROR', message: '[ROADMAP GUARD] Retry also failed', session_id: sessionId, error: e.message || String(e) });
+            }
         }
         cost.track('cso_roadmap', 'gemini-2.5-pro', Math.ceil(roadmapPrompt.length / 4), Math.ceil(roadmap.length / 4));
         phaseE.end({ report_chars: mainReport.length, roadmap_chars: roadmap.length, posture_extracted: !!recommendedPosture });
@@ -830,8 +841,8 @@ Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": 
         const moatPrompt = `Evaluate these moat candidates for ${orgName}:
 ${topThreeMoats.map(([dim, score]) => `- ${dim}: ${score}/100`).join('\n')}
 
-Business context (first 800 chars):
-${businessContext.slice(0, 800)}
+Business context (first 2000 chars — includes all clarifier answers):
+${businessContext.slice(0, 2000)}
 
 Rules:
 1. A moat must represent an ACTIVE competitive advantage, not merely the absence of a weakness.

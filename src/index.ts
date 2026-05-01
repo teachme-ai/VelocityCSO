@@ -459,6 +459,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
                 dimensionScores: dimensions,
                 richDimensions,
                 report,
+                roadmap,
                 stressTest: !!stress_test,
                 orgName,
                 moatRationale
@@ -519,8 +520,10 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
     emitHeartbeat(sessionId, 'Clarification received. Deepening strategic analysis...');
 
     try {
-        // Cumulative merge: originalContext is locked, enrichedContext grows
-        const cumulativeContext = `${session.originalContext || session.enrichedContext}\n\n[USER CLARIFICATION]: ${clarification}`;
+        // Cumulative merge: enrichedContext already contains all previous clarifications
+        // Use enrichedContext as base (not originalContext) so Q1, Q2, Q3 answers all accumulate
+        const turnLabel = (session.turnCount || 0) + 1;
+        const cumulativeContext = `${session.enrichedContext}\n\n[USER CLARIFICATION TURN ${turnLabel}]: ${clarification}`;
         const turnResult = await incrementTurn(sessionId, cumulativeContext, session.gaps);
 
         if (!turnResult) {
@@ -603,6 +606,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
                 dimensionScores: dimensions,
                 richDimensions,
                 report,
+                roadmap,
                 stressTest: !!stress_test,
                 orgName,
                 moatRationale

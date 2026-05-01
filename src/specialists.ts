@@ -389,35 +389,52 @@ export const MARKET_ANALYST_INSTRUCTION = `
 // Call 1: Frameworks only (Porter's + Ansoff + VRIO). No dimensions, no CoT prose.
 // Target output: ~1,800 tokens. Hard-capped at 2,048 tokens via maxOutputTokens.
 export const INNOVATION_FRAMEWORKS_INSTRUCTION = `
-You are a competitive strategy expert. Analyze the business context provided and output a single raw JSON object — no markdown fences, no prose outside the JSON.
+You are a competitive strategy expert. Output a single raw JSON object — no markdown, no prose outside the JSON.
 
-Keep every text field to ONE sentence maximum.
+Target output: under 800 tokens. Scores and one-line verdicts only. No extended prose.
 
-PORTER'S FIVE FORCES: Score each force 0-100 (higher = more competitive pressure on the business).
-- competitive_rivalry: rivals, differentiation, price wars
-- threat_of_new_entrants: barriers to entry, capital, regulation
-- threat_of_substitutes: alternatives, switching costs
-- buyer_power: buyer concentration, switching ease
-- supplier_power: supplier concentration, forward integration
-structural_attractiveness_score = 100 minus weighted average (Rivalry 25%, Entrants 20%, Substitutes 20%, Buyers 20%, Suppliers 15%).
+Analyze the business context and return EXACTLY this structure:
 
-ANSOFF MATRIX: Score each vector 0-100 for attractiveness given current position.
-- market_penetration: existing product × existing market
-- market_development: existing product × new market
-- product_development: new product × existing market
-- diversification: new product × new market
-Pick the highest-scoring as primary_vector.
+{
+  "porter": {
+    "forces": {
+      "competitive_rivalry": { "score": 0-100, "driver": "one sentence" },
+      "threat_of_new_entrants": { "score": 0-100, "driver": "one sentence" },
+      "threat_of_substitutes": { "score": 0-100, "driver": "one sentence" },
+      "buyer_power": { "score": 0-100, "driver": "one sentence" },
+      "supplier_power": { "score": 0-100, "driver": "one sentence" }
+    },
+    "structural_attractiveness_score": 0-100,
+    "verdict": "one sentence summary of competitive position"
+  },
+  "ansoff": {
+    "vectors": {
+      "market_penetration": { "score": 0-100, "move": "one sentence killer move" },
+      "market_development": { "score": 0-100, "move": "one sentence killer move" },
+      "product_development": { "score": 0-100, "move": "one sentence killer move" },
+      "diversification": { "score": 0-100, "move": "one sentence killer move" }
+    },
+    "primary_vector": "market_penetration|market_development|product_development|diversification",
+    "verdict": "one sentence strategic growth recommendation"
+  },
+  "vrio": {
+    "resource": "name of primary competitive advantage being evaluated",
+    "scores": {
+      "valuable": 0-100,
+      "rare": 0-100,
+      "inimitable": 0-100,
+      "organised": 0-100
+    },
+    "verdict": "Sustained Competitive Advantage|Temporary Advantage|Competitive Parity|No Advantage",
+    "rationale": "one sentence explaining the verdict"
+  }
+}
 
-VRIO: Evaluate the business's primary claimed competitive advantage.
-- valuable, rare, inimitable, organised: each scored 0-100
-- verdict: one of "Sustained Competitive Advantage", "Temporary Advantage", "Competitive Parity", "No Advantage"
-
-OUTPUT SCHEMA (fill every field with real values — do not output placeholder text):
-portersFiveForces.scores: object with keys competitive_rivalry, threat_of_new_entrants, threat_of_substitutes, buyer_power, supplier_power — each has score (number) and primary_driver (string).
-portersFiveForces.structural_attractiveness_score: number.
-portersFiveForces.interaction_effect_warning: string or null.
-ansoffMatrix: object with keys market_penetration, market_development, product_development, diversification — each has score (number), rationale (string), killer_move (string). Also primary_vector (string) and strategic_verdict (string).
-vrioAnalysis: object with resource_evaluated (string), valuable/rare/inimitable/organised each having score (number) and evidence (string), verdict (string), verdict_rationale (string).
+Rules:
+- Every score must be a number 0-100
+- Every text field must be one sentence maximum
+- No arrays, no nested objects beyond the schema above
+- Response MUST begin with { and end with }
 `;
 
 // Call 2: Dimensions + brief analysis. No frameworks. Target output: ~1,500 tokens.
