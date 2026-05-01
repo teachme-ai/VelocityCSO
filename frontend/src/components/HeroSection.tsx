@@ -95,48 +95,51 @@ const LAST_REPORT_KEY = 'vcso_last_report_id';
 // New schema: { forces: { competitive_rivalry: { score, driver } }, structural_attractiveness_score, verdict }
 function normPorter(raw: any): any {
     if (!raw) return null;
-    // Already old schema
-    if (raw.scores) return raw;
-    // New compact schema — map forces → scores
+    // Old schema: has scores object directly
+    if (raw.scores && typeof raw.scores === 'object') return raw;
+    // New compact schema: has forces object
     const forces = raw.forces || {};
     const scores: Record<string, any> = {};
     for (const [k, v] of Object.entries(forces) as [string, any][]) {
-        scores[k] = { score: v?.score ?? 50, primary_driver: v?.driver ?? '' };
+        scores[k] = { score: v?.score ?? 50, primary_driver: v?.driver ?? v?.primary_driver ?? '' };
     }
     return {
         scores,
         structural_attractiveness_score: raw.structural_attractiveness_score ?? 50,
-        interaction_effect_warning: raw.verdict ?? null,
+        interaction_effect_warning: raw.verdict ?? raw.interaction_effect_warning ?? null,
     };
 }
 
-// Old: { market_penetration: { score, rationale, killer_move }, primary_vector, strategic_verdict }
-// New: { vectors: { market_penetration: { score, move } }, primary_vector, verdict }
 function normAnsoff(raw: any): any {
     if (!raw) return null;
-    if (raw.market_penetration) return raw; // already old schema
+    // Old schema: quadrant keys exist at root level
+    if (raw.market_penetration && typeof raw.market_penetration === 'object' && 'score' in raw.market_penetration) return raw;
+    // New compact schema: quadrants nested under vectors
     const vectors = raw.vectors || {};
-    const result: any = { primary_vector: raw.primary_vector ?? '', strategic_verdict: raw.verdict ?? '' };
+    const result: any = {
+        primary_vector: raw.primary_vector ?? '',
+        strategic_verdict: raw.verdict ?? raw.strategic_verdict ?? '',
+    };
     for (const [k, v] of Object.entries(vectors) as [string, any][]) {
-        result[k] = { score: v?.score ?? 50, rationale: v?.move ?? '', killer_move: v?.move ?? '' };
+        result[k] = { score: v?.score ?? 50, rationale: v?.move ?? v?.rationale ?? '', killer_move: v?.move ?? v?.killer_move ?? '' };
     }
     return result;
 }
 
-// Old: { resource_evaluated, valuable: { score, evidence }, rare, inimitable, organised, verdict, verdict_rationale }
-// New: { resource, scores: { valuable, rare, inimitable, organised }, verdict, rationale }
 function normVrio(raw: any): any {
     if (!raw) return null;
-    if (raw.resource_evaluated !== undefined || raw.valuable?.evidence !== undefined) return raw; // old schema
+    // Old schema: valuable is an object with score + evidence
+    if (raw.valuable && typeof raw.valuable === 'object' && 'score' in raw.valuable) return raw;
+    // New compact schema: scores nested under scores object
     const s = raw.scores || {};
     return {
-        resource_evaluated: raw.resource ?? '',
-        valuable:   { score: s.valuable   ?? 50, evidence: '' },
-        rare:       { score: s.rare       ?? 50, evidence: '' },
-        inimitable: { score: s.inimitable ?? 50, evidence: '' },
-        organised:  { score: s.organised  ?? 50, evidence: '' },
+        resource_evaluated: raw.resource ?? raw.resource_evaluated ?? '',
+        valuable:   { score: typeof s.valuable   === 'number' ? s.valuable   : 50, evidence: raw.rationale ?? '' },
+        rare:       { score: typeof s.rare       === 'number' ? s.rare       : 50, evidence: '' },
+        inimitable: { score: typeof s.inimitable === 'number' ? s.inimitable : 50, evidence: '' },
+        organised:  { score: typeof s.organised  === 'number' ? s.organised  : 50, evidence: '' },
         verdict: raw.verdict ?? 'No Advantage',
-        verdict_rationale: raw.rationale ?? '',
+        verdict_rationale: raw.rationale ?? raw.verdict_rationale ?? '',
     };
 }
 
