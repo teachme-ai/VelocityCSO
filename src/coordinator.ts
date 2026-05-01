@@ -442,7 +442,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         const [marketResult, innovationResult, innovationFrameworks] = await Promise.all([
             this.runSpecialist(specialists.find(s => s.name === 'market_analyst')!, businessContext, sessionId, cost),
             this.runSpecialistDirect('innovation_analyst', businessContext, sessionId, undefined, cost),
-            this.runSpecialistDirect('innovation_frameworks', businessContext, sessionId, 2048, cost),
+            this.runSpecialistDirect('innovation_frameworks', businessContext, sessionId, 4096, cost),
         ]);
         phaseA.end({ agents: ['market_analyst', 'innovation_analyst', 'innovation_frameworks'] });
 
@@ -694,9 +694,9 @@ CRITICAL: Return ONLY the roadmap markdown. No preamble, no other sections.`.tri
         emitHeartbeat(sessionId, '◆ CSO: generating posture-aligned 90-day roadmap...');
         let roadmap = '';
         try {
-            roadmap = await callGemini('gemini-2.5-pro', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap that strictly aligns with the recommended strategic posture provided.', roadmapPrompt, 2048).catch(async (e: any) => {
+            roadmap = await callGemini('gemini-2.5-pro', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap that strictly aligns with the recommended strategic posture provided.', roadmapPrompt, 4096).catch(async (e: any) => {
                 log({ severity: 'WARNING', message: 'CSO roadmap call failed, retrying with flash', session_id: sessionId, error: e.message });
-                return callGemini('gemini-2.5-flash', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap that strictly aligns with the recommended strategic posture provided.', roadmapPrompt, 2048);
+                return callGemini('gemini-2.5-flash', 'You are the Chief Strategy Officer. Generate a precise 90-day strategic roadmap that strictly aligns with the recommended strategic posture provided.', roadmapPrompt, 4096);
             });
         } catch (e: any) {
             log({ severity: 'ERROR', message: 'CSO roadmap call failed', session_id: sessionId, error: e.message || String(e) });
