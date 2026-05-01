@@ -9,10 +9,20 @@ interface ExecutiveSummaryProps {
     richDimensions?: Record<string, RichDimensionData>;
 }
 
+// Dimensions that are NOT moat-eligible (risk-absence or operational, not strategic strengths)
+const NON_MOAT_DIMS = new Set([
+    'Customer Concentration Risk',
+    'Risk Tolerance',
+    'ESG Posture',
+    'Scalability',
+    'ROI Projection',
+    'Capital Efficiency',
+]);
+
 export const ExecutiveSummaryCard = ({ orgName, moatRationale, dimensions, richDimensions }: ExecutiveSummaryProps) => {
-    // Get top 3 dimensions
+    // Get top 3 moat-eligible dimensions only
     const developingMoats = Object.entries(dimensions)
-        .filter(([, score]) => score !== null)
+        .filter(([name, score]) => score !== null && !NON_MOAT_DIMS.has(name))
         .sort((a, b) => (b[1] as number) - (a[1] as number))
         .slice(0, 3)
         .map(([name, score]) => ({ name, score: score as number }));

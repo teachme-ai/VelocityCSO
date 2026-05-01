@@ -789,10 +789,14 @@ Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": 
         // FIX 3.2: Compute confidence triad
         const totalMissingSignals = specialistMetadata.flatMap(m => m.missing_signals).length;
         const validConfidences = specialistMetadata.map(m => m.confidence_score).filter((c): c is number => c !== null && c > 0);
-        const evidenceConfidence = Math.max(20, Math.min(95, 90 - (totalMissingSignals * 5)));
-        const analyticalConfidence = validConfidences.length > 0
+        // Evidence confidence: penalise missing signals but floor scales with analytical confidence
+        // Rich inputs (high analytical confidence) should not be floored at 20%
+        const analyticalBase = validConfidences.length > 0
             ? Math.round(validConfidences.reduce((a, b) => a + b, 0) / validConfidences.length)
             : 40;
+        const evidenceFloor = Math.max(20, Math.round(analyticalBase * 0.4)); // floor = 40% of analytical
+        const evidenceConfidence = Math.max(evidenceFloor, Math.min(95, 90 - (totalMissingSignals * 3)));
+        const analyticalConfidence = analyticalBase;
         const hasCriticalGap = totalMissingSignals > 5;
         const decisionConfidence = hasCriticalGap
             ? Math.min(55, Math.min(evidenceConfidence, analyticalConfidence))
