@@ -919,6 +919,8 @@ Write 2-3 sentences identifying the strongest genuine moat, or stating that the 
                 const systemInstruction = specialistInstructions[agentName] || '';
                 let rawOutput = '';
                 try {
+                    // Brief backoff before retry to avoid rate limit cascade
+                    await new Promise(r => setTimeout(r, 2000));
                     rawOutput = await callGemini('gemini-2.5-flash', systemInstruction, retryUserPrompt);
                 } catch (e) {
                     log({ severity: 'ERROR', message: `Retry failed: ${agentName}`, agent_id: agentName, session_id: sessionId, error: String(e) });
