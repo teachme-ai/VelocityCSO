@@ -284,9 +284,23 @@ export function computeForkProbabilities(
         const marketMultiplier = normalize((tamScore + trendScore) / 2);
         const defensibilityMultiplier = normalize(defensibilityScore);
 
-        const adjusted = Math.min(0.92, Math.max(0.05,
-            base * executionMultiplier * marketMultiplier * defensibilityMultiplier
-        ));
+        // Convert base probability to odds
+        const baseOdds = base / (1 - base);
+        
+        // Update odds with combined evidence (Bayes Factor)
+        const combinedEvidence = executionMultiplier * marketMultiplier * defensibilityMultiplier;
+        const adjustedOdds = baseOdds * combinedEvidence;
+        
+        // Convert back to probability and soft cap at 95%
+        let adjusted = adjustedOdds / (1 + adjustedOdds);
+        adjusted = Math.min(0.95, Math.max(0.05, adjusted));
+
+        // Debug logging to verify calibration
+        console.log(`[SIM 3.2] Fork: ${fork.forkName}`);
+        console.log(`  - Base: ${(base * 100).toFixed(1)}% (Odds: ${baseOdds.toFixed(2)})`);
+        console.log(`  - Evidence: x${combinedEvidence.toFixed(2)} (Exec: ${executionMultiplier.toFixed(2)}, Mkt: ${marketMultiplier.toFixed(2)}, Def: ${defensibilityMultiplier.toFixed(2)})`);
+        console.log(`  - Adjusted Odds: ${adjustedOdds.toFixed(2)}`);
+        console.log(`  - Final Probability: ${(adjusted * 100).toFixed(1)}%`);
 
         // Identify constraints (dimensions < 45 that are required for this fork)
         const keyConstraints = fork.requiredDimensions
@@ -457,14 +471,17 @@ export function computeMoatDecay(input: MoatDecayInput): MoatDecayResult {
 
 function computeDecayCurve(startStrength: number, replicationMonths: number, horizon: number): number[] {
     const curve: number[] = [];
+    const parityThreshold = 50;
+    const residualFloor = 30;
+    
     for (let m = 0; m <= horizon; m++) {
         if (m >= replicationMonths) {
-            // After parity: asymptote toward 30 (first-mover residual)
-            const postParityDecay = Math.max(30, startStrength * Math.exp(-0.1 * (m - replicationMonths)));
+            // After parity: asymptote from 50 down toward 30
+            const postParityDecay = Math.max(residualFloor, parityThreshold * Math.exp(-0.1 * (m - replicationMonths)));
             curve.push(Math.round(postParityDecay));
         } else {
-            // Before parity: linear decay
-            const strength = startStrength - (startStrength * (m / replicationMonths));
+            // Before parity: linear decay from startStrength down to 50
+            const strength = startStrength - ((startStrength - parityThreshold) * (m / replicationMonths));
             curve.push(Math.round(strength));
         }
     }
@@ -486,7 +503,8 @@ async function extractReplicationTime(clarifierQ2Answer: string): Promise<number
     Text: "${clarifierQ2Answer.slice(0, 500)}"`;
     
     const result = await callGemini('gemini-2.5-flash', '', prompt);
-    const months = parseInt(result.trim());
+    const match = result.match(/\d+/);
+    const months = match ? parseInt(match[0]) : 0;
     return isNaN(months) ? 0 : months;
 }
 ```
@@ -556,21 +574,27 @@ P11-25 Stress Tests (5 scenarios × ~3 pages each, wall-to-wall text)
 P26  Sources Appendix (blank page)
 ```
 
-**Target (aim for 24-28 clean pages):**
+**Target (aim for 24-28 clean pages, structured as a Predictive World Model):**
 ```
+ACT I: DIAGNOSIS (Where are we today?)
 P1   Executive Decision Page (new — clear strategic choice + top 3 risks)
 P2   Table of Contents (accurate — no phantom sections)
 P3   Strategic Diagnostic Matrix (with score bars, category dividers, colour bands)
-P4-5 Executive Synthesis (with Strategic Choice section at end of P5)
-P6   Strategic Recommendations (HIGH-PRIORITY / MAINTAIN & EXTEND)
-P7   Porter's Five Forces (full analysis — currently missing from PDF body)
-P8   Ansoff Growth Matrix (full analysis — currently missing from PDF body)
-P9   VRIO + Moat Durability Projection (SIM 3.3)
-P10  Blue Ocean Strategy Canvas + ERRC Grid (fix chart render failure)
-P11  Wardley Strategic Map (fix label truncation)
-P12  Financial Simulations (SIM 3.1 Runway + SIM 3.2 Fork Probabilities + Monte Carlo fixed)
-P13-22 Stress Tests (5 scenarios × 2 pages each — tighter layout with visual hierarchy)
-P23-24 Sources Appendix (populated — user facts / specialist sources / missing signals)
+P4-5 Executive Synthesis
+P6   Porter's Five Forces (full analysis — currently missing from PDF body)
+P7   Ansoff Growth Matrix (full analysis — currently missing from PDF body)
+P8   Blue Ocean Strategy Canvas + ERRC Grid (fix chart render failure)
+
+ACT II: STRATEGIC PROJECTIONS (36-Month Horizon)
+P9   Financial Simulations (SIM 3.1 Runway + Monte Carlo fixed)
+P10  Strategic Fork Probabilities (SIM 3.2 Bayesian Model)
+P11  VRIO + Moat Durability Projection (SIM 3.3 Decay Curve)
+
+ACT III: EXECUTION (What do we do on Monday?)
+P12  Strategic Recommendations (HIGH-PRIORITY / MAINTAIN & EXTEND)
+P13  Wardley Strategic Map (fix label truncation)
+P14-23 Stress Tests (5 scenarios × 2 pages each — tighter layout with visual hierarchy)
+P24-25 Sources Appendix (populated — user facts / specialist sources / missing signals)
 ```
 
 ---
