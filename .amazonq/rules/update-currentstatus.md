@@ -3,6 +3,16 @@
 ## When to apply
 Apply this rule whenever you commit code to the repository — after every `git commit` or `git push`.
 
+## CRITICAL: How to apply
+Do NOT create a separate chore commit for currentstatus.md.
+Instead, update currentstatus.md FIRST, then include it in the SAME git commit as the code changes.
+The workflow is:
+1. Make code changes
+2. Update currentstatus.md
+3. `git add <changed files> currentstatus.md`
+4. `git commit -m "..."`
+5. `git push`
+
 ## What to do
 After every commit, overwrite `/Users/khalidirfan/projects/Business Agent /currentstatus.md` with an updated version that includes:
 
