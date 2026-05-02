@@ -9,7 +9,17 @@
 
 ## Recent Commits
 
-### `0e9c216` — fix: Pro model retry backoff, sim panels on web, Strategic Choice strip bug
+### `d2c1122` — chore: remove all test-case labels and hardcoded scenario references
+**Why:** Build-sheet assertion IDs (S3-G, FIX 1.x, FIX 2.x), scenario-specific examples (EMIR, CA-network), and test-run comments were embedded in production code and log messages.
+**What changed:**
+- `src/coordinator.ts` — `[S3-G]` → `[ROI_FLOOR]`; all `[FIX x.x]` log labels → semantic labels (`[METADATA]`, `[MOAT_SELECTION]`, `[POSTURE_EXTRACT]`, `[COHERENCE]`, `[CONFIDENCE]`); moat prompt examples replaced with generic ones; "not just Halcyon" comment removed
+- `src/dimensionRegistry.ts` — FIX 1.3/1.4 removed from JSDoc
+- `src/agents/interrogator.ts` — `[FIX 2.3]` → `[INTERROGATOR]` in all log messages
+- `src/services/monteCarloService.ts` — FIX 1.7 labels removed
+- `src/index.ts` — FIX 3.3 comment removed
+- `frontend/src/components/ExecutiveSummaryCard.tsx` — inline registry comments removed; `NON_MOAT_DIMS` expanded to match full registry
+- `frontend/src/components/dashboard/KpiRow.tsx` — FIX 2.4/1.2+3.2 comments removed; `LOW_MATERIALITY` and `STRATEGIC_RISK_PRIORITY` aligned to registry
+
 **Why:** Gemini 2.5 Pro was falling back to Flash on first transient error; sim data was computed but never sent to frontend; Strategic Choice card was being stripped before extraction could read it.
 **What changed:**
 - `src/services/geminiClient.ts` — Pro calls retry 3x with 2s/5s/10s exponential backoff before throwing; Flash fallback only fires after all retries exhausted
