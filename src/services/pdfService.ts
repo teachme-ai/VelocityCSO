@@ -993,6 +993,121 @@ function _buildPDF(
         // Unit Economics — removed per product decision
     }
 
+    // ── SIM 3.2: Strategic Fork Probabilities ─────────────────────────────────
+    const forkProbs = (memory as any).forkProbabilities as any[] | null;
+    if (forkProbs && forkProbs.length >= 2) {
+        y = addPage(doc, orgName);
+        y = sectionTitle(doc, 'Strategic Fork Probability Analysis', y);
+
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text('Bayesian probability model — base rates from strategy research updated by your dimension scores.', 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 14;
+
+        const barMaxW = doc.page.width - 160;
+        for (const fork of forkProbs) {
+            if (y > pageBottom - 60) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+
+            const pct = Math.min(100, Math.max(0, fork.adjustedProbability ?? 0));
+            const filled = Math.round((pct / 100) * barMaxW);
+            const barColor = pct >= 60 ? GREEN : pct >= 35 ? BLUE : RED;
+
+            doc.rect(40, y, doc.page.width - 80, 22).fill('#F8FAFC');
+            doc.rect(40, y, 3, 22).fill(barColor);
+            doc.fontSize(8.5).fillColor(NAVY).font('Helvetica-Bold')
+                .text(sanitizeText(fork.forkName || ''), 50, y + 7, { width: barMaxW - 60 });
+            doc.fontSize(8.5).fillColor(barColor).font('Helvetica-Bold')
+                .text(`${pct}%`, 0, y + 7, { align: 'right', width: doc.page.width - 48 });
+            y += 26;
+
+            // Progress bar
+            doc.rect(50, y, barMaxW, 8).fill('#E5E7EB');
+            doc.rect(50, y, filled, 8).fill(barColor);
+            y += 14;
+
+            // Base rate note
+            doc.fontSize(7).fillColor(GRAY).font('Helvetica')
+                .text(`Base rate: ${fork.baseProbability ?? '?'}%  ·  Confidence: ${fork.confidenceInEstimate ?? '?'}%`, 50, y);
+            y = doc.y + 4;
+
+            if (fork.keyConstraints?.length > 0) {
+                doc.fontSize(7).fillColor(RED).font('Helvetica')
+                    .text(`Constraints: ${fork.keyConstraints.join(', ')}`, 50, y, { width: barMaxW });
+                y = doc.y + 3;
+            }
+            if (fork.keyEnablers?.length > 0) {
+                doc.fontSize(7).fillColor(GREEN).font('Helvetica')
+                    .text(`Enablers: ${fork.keyEnablers.join(', ')}`, 50, y, { width: barMaxW });
+                y = doc.y + 3;
+            }
+            y += 8;
+        }
+
+        doc.fontSize(7.5).fillColor(GRAY).font('Helvetica-Oblique')
+            .text('Note: Probabilities reflect success likelihood given current dimension scores, not market timing or external conditions.', 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 8;
+        drawFooter(doc, page++);
+    }
+
+    // ── SIM 3.3: Moat Decay Curve ─────────────────────────────────────────────
+    const moatDecay = (memory as any).moatDecayResult as any | null;
+    if (moatDecay) {
+        y = addPage(doc, orgName);
+        y = sectionTitle(doc, 'Moat Durability Projection (36-Month)', y);
+
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text('Forward-looking model showing how moat strength evolves as competitors attempt replication. Parity threshold = 50.', 40, y, { width: doc.page.width - 80 });
+        y = doc.y + 14;
+
+        // Key metrics table
+        const cols = [
+            { label: 'Baseline Parity', val: `${moatDecay.baseline_months_to_parity}m`, color: BLUE },
+            { label: 'Accelerated Parity', val: `${moatDecay.accelerated_months_to_parity}m`, color: RED },
+            { label: 'Strength @ 12m', val: `${moatDecay.strength_at_12m}/100`, color: moatDecay.strength_at_12m >= 65 ? GREEN : ORANGE },
+            { label: 'Strength @ 24m', val: `${moatDecay.strength_at_24m}/100`, color: moatDecay.strength_at_24m >= 50 ? BLUE : RED },
+        ];
+        const colW = (doc.page.width - 80) / cols.length;
+        for (let ci = 0; ci < cols.length; ci++) {
+            const cx = 40 + ci * colW;
+            doc.rect(cx, y, colW - 4, 44).fill('#F8FAFC');
+            doc.fontSize(7).fillColor(GRAY).font('Helvetica').text(cols[ci].label, cx + 6, y + 6, { width: colW - 12 });
+            doc.fontSize(16).fillColor(cols[ci].color).font('Helvetica-Bold').text(cols[ci].val, cx + 6, y + 16, { width: colW - 12 });
+        }
+        y += 56;
+
+        // Inline decay curve (ASCII-style bar chart)
+        if (y > pageBottom - 80) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+        doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text('Decay Trajectory', 40, y); y += 14;
+        const baseline = moatDecay.decay_curve_baseline as number[];
+        const accelerated = moatDecay.decay_curve_accelerated as number[];
+        const checkpoints = [0, 6, 12, 18, 24, 30, 36];
+        const cpW = (doc.page.width - 80) / checkpoints.length;
+        for (let ci = 0; ci < checkpoints.length; ci++) {
+            const m = checkpoints[ci];
+            const cx = 40 + ci * cpW;
+            doc.fontSize(7).fillColor(GRAY).font('Helvetica').text(`M${m}`, cx + 4, y, { width: cpW - 4 });
+            doc.fontSize(8).fillColor(BLUE).font('Helvetica-Bold').text(`${baseline[m] ?? '-'}`, cx + 4, y + 10, { width: cpW - 4 });
+            doc.fontSize(7).fillColor(RED).font('Helvetica').text(`${accelerated[m] ?? '-'}`, cx + 4, y + 20, { width: cpW - 4 });
+        }
+        doc.fontSize(7).fillColor(BLUE).font('Helvetica').text('Blue = baseline  ', 40, y + 32, { continued: true });
+        doc.fillColor(RED).text('Red = accelerated (attack vector fires)');
+        y = doc.y + 14;
+
+        // Intervention points
+        const interventions = moatDecay.intervention_points as any[];
+        if (interventions?.length > 0) {
+            if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+            doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text('Intervention Points', 40, y); y += 12;
+            for (const pt of interventions) {
+                const urgencyColor = pt.urgency === 'now' ? RED : pt.urgency === 'soon' ? ORANGE : BLUE;
+                doc.fontSize(7.5).fillColor(urgencyColor).font('Helvetica-Bold')
+                    .text(`Month ${pt.month} [${(pt.urgency ?? '').toUpperCase()}]: `, 40, y, { continued: true });
+                doc.font('Helvetica').fillColor(NAVY).text(sanitizeText(pt.action ?? ''), { width: doc.page.width - 90 });
+                y = doc.y + 4;
+            }
+        }
+        drawFooter(doc, page++);
+    }
+
     // ── STRESS TEST PAGES ──────────────────────────────────────────────────────
     for (const scenarioId of ['RECESSION', 'PRICE_WAR', 'SCALE_UP', 'TALENT', 'REGULATORY']) {
         const result = stressMap[scenarioId];

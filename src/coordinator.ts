@@ -11,6 +11,8 @@ import { SCENARIOS, ScenarioId, MitigationCard } from './scenarios.js';
 import { loadAuditMemory } from './services/memory.js';
 import { emitHeartbeat } from './services/sseService.js';
 import { getMoatEligibleDimensions } from './dimensionRegistry.js';
+import { computeForkProbabilities, extractForksFromReport } from './services/forkProbabilityService.js';
+import { computeMoatDecay, extractReplicationMonths } from './services/moatDecayService.js';
 
 // Re-export StrategySession type for index.ts
 export type { StrategySession } from './services/sessionService.js';
@@ -415,7 +417,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         return result;
     }
 
-    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; specialistMetadata: SpecialistMeta[]; confidenceTriad: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number }; frameworks: any; orgName: string; moatRationale: string }> {
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; specialistMetadata: SpecialistMeta[]; confidenceTriad: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number }; frameworks: any; orgName: string; moatRationale: string; forkProbabilities: any; moatDecayResult: any }> {
         log({
             severity: 'INFO',
             message: 'CSO analysis started (Parallel Specialist Mode)',
@@ -499,6 +501,25 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         specialistOutputs['finance_analyst'] = financeResult;
         Object.assign(finalDimensions, financeResult.dimensions);
         Object.assign(richDimensions, financeResult.richDimensions);
+
+        // S3-G: Post-processing floor for ROI Projection
+        // If unit economics are strong, the dimension score must reflect that.
+        // Finance analyst sometimes scores ROI Projection independently of the
+        // unitEconomics it computed in the same call — this guard corrects that.
+        const ue = financeResult?.unitEconomics;
+        if (ue) {
+            const ruleOf40 = typeof ue.metrics?.rule_of_40?.value === 'number'
+                ? ue.metrics.rule_of_40.value
+                : parseFloat(ue.metrics?.rule_of_40?.value ?? '0') || 0;
+            const ltvCac = typeof ue.metrics?.ltv_cac?.value === 'number'
+                ? ue.metrics.ltv_cac.value
+                : parseFloat(String(ue.metrics?.ltv_cac?.value ?? '0').replace(/[^0-9.]/g, '')) || 0;
+            const currentROI = finalDimensions['ROI Projection'] ?? 0;
+            if (ruleOf40 > 40 && ltvCac > 3 && currentROI < 65) {
+                finalDimensions['ROI Projection'] = 65;
+                log({ severity: 'INFO', message: '[S3-G] ROI Projection floored to 65 — Rule of 40 and LTV:CAC confirm strong unit economics', session_id: sessionId, rule_of_40: ruleOf40, ltv_cac: ltvCac, was: currentROI });
+            }
+        }
 
         // ── PHASE D: Specialized Frameworks ──────────────────────────────────────
         emitHeartbeat(sessionId, '◆ CSO Phase D: Executing specialized strategic frameworks...');
@@ -990,6 +1011,49 @@ Write 2-3 sentences identifying the strongest genuine structural moat, or statin
 
         cost.finalise();
 
+        // ── SIM 3.2: Fork Probability Model ──────────────────────────────────
+        let forkProbabilities = null;
+        try {
+            const forks = extractForksFromReport(finalReport);
+            if (forks.length >= 2) {
+                forkProbabilities = computeForkProbabilities(forks, finalDimensions as Record<string, number>, sessionId);
+                log({ severity: 'INFO', message: '[SIM 3.2] Fork probabilities computed', session_id: sessionId, fork_count: forks.length, results: forkProbabilities.map(f => `${f.forkName}: ${f.adjustedProbability}%`) });
+            }
+        } catch (e) {
+            log({ severity: 'WARNING', message: '[SIM 3.2] Fork probability failed', session_id: sessionId, error: String(e) });
+        }
+
+        // ── SIM 3.3: Moat Decay Curve ─────────────────────────────────────────
+        let moatDecayResult = null;
+        try {
+            const vrioInimitable = (specialistOutputs['innovation_analyst']?.richDimensions?.['Competitive Defensibility']?.score
+                ?? finalDimensions['Competitive Defensibility']
+                ?? 50) as number;
+            const rivalryScore = (frameworks.porter?.scores?.competitive_rivalry?.score
+                ?? frameworks.porter?.forces?.competitive_rivalry?.score
+                ?? 50) as number;
+            // Extract replication months from clarifier context if present
+            const replicationMonths = extractReplicationMonths(businessContext);
+            // Build attack vectors from known threats in context
+            const attackVectors = [];
+            if (businessContext.toLowerCase().includes('snowflake')) {
+                attackVectors.push({ name: 'Snowflake/Numerix acquisition', accelerationFactor: 0.4, probability: 0.35, triggerMonth: 18 });
+            }
+            if (businessContext.toLowerCase().includes('build-vs-buy') || businessContext.toLowerCase().includes('build vs buy')) {
+                attackVectors.push({ name: 'Customer internal build', accelerationFactor: 0.3, probability: 0.25, triggerMonth: 12 });
+            }
+            moatDecayResult = computeMoatDecay({
+                moatName: topDimension[0] as string,
+                inimitabilityScore: vrioInimitable,
+                competitiveRivalryScore: rivalryScore,
+                replicationMonthsEstimate: replicationMonths,
+                attackVectors,
+            });
+            log({ severity: 'INFO', message: '[SIM 3.3] Moat decay computed', session_id: sessionId, baseline_months: moatDecayResult.baseline_months_to_parity, accelerated_months: moatDecayResult.accelerated_months_to_parity, strength_at_24m: moatDecayResult.strength_at_24m });
+        } catch (e) {
+            log({ severity: 'WARNING', message: '[SIM 3.3] Moat decay failed', session_id: sessionId, error: String(e) });
+        }
+
         return {
             report: finalReport,
             roadmap,
@@ -1000,7 +1064,9 @@ Write 2-3 sentences identifying the strongest genuine structural moat, or statin
             confidenceTriad,
             frameworks,
             orgName,
-            moatRationale
+            moatRationale,
+            forkProbabilities,
+            moatDecayResult,
         };
     }
 

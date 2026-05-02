@@ -22,6 +22,8 @@ export interface AuditMemory {
     orgScale?: string | null;
     urlSource?: string | null;
     documentFilename?: string | null;
+    forkProbabilities?: any[] | null;
+    moatDecayResult?: any | null;
     roadmap?: string;
     dimensionScores: Record<string, number | null>;
     richDimensions: Record<string, any>;
@@ -123,6 +125,8 @@ export async function loadAuditMemory(reportId: string): Promise<AuditMemory | n
             orgScale: data.org_scale || null,
             urlSource: data.url_source || null,
             documentFilename: data.document_filename || null,
+            forkProbabilities: data.fork_probabilities || null,
+            moatDecayResult: data.moat_decay_result || null,
             createdAt: data.created_at?.toMillis() ?? Date.now(),
         };
     } catch (err: any) {
