@@ -1,12 +1,20 @@
 # VelocityCSO — Current Status
 **Last updated:** 2026-06-01
-**Last commit:** `pending`
+**Last commit:** `efe11ba`
 **Branch:** main
 **Deployment:** Cloud Run — `business-strategy-api`, region `us-central1`
 
 ---
 
 ## Recent Commits (newest first)
+
+### `efe11ba` — ci: skip build on doc-only commits (Option B)
+**Why:** Every `currentstatus.md` update was triggering a full Cloud Run deploy cycle unnecessarily.
+**What changed:**
+- `.github/workflows/deploy.yml` — `paths-ignore` added for `currentstatus.md`, `.amazonq/**`, `plans/**`, `**.md`, `.claude/**`
+- `currentstatus.md` — header updated, S3-G confirmed fixed in both tables
+
+---
 
 ### `16c0fb3` — feat(ui): redesign tabs as pill grid (Option C)
 **Why:** Horizontal tab bar with 5 long labels overflows on mobile and is hard to tap. No visual hierarchy or context for what each tab contains.
