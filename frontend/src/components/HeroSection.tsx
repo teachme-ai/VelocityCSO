@@ -76,6 +76,27 @@ type ReportData = {
         ansoff?: AnsoffMatrixData;
         vrio?: VrioAnalysisData;
     };
+    runwayResult?: {
+        p10_months: number; p50_months: number; p90_months: number;
+        probability_18m: number; probability_24m: number; probability_36m: number;
+        estimated?: boolean;
+    } | null;
+    moatDecayResult?: {
+        moatName: string;
+        baseline_months_to_parity: number;
+        accelerated_months_to_parity: number;
+        strength_at_12m: number;
+        strength_at_24m: number;
+        decay_curve: number[];
+        accelerated_curve: number[];
+    } | null;
+    forkProbabilities?: Array<{
+        forkName: string;
+        baseProbability: number;
+        adjustedProbability: number;
+        constraints: string[];
+        enablers: string[];
+    }> | null;
 };
 
 type ClarificationState = {
@@ -206,7 +227,8 @@ function sanitizeReport(text: string): string {
         .replace(/```markdown/g, '')
         .replace(/```/g, '')
         .replace(/#{1,4}\s*90.Day Strategic Roadmap[\s\S]*$/im, '')
-        .replace(/#{1,4}\s*Strategic Choice[\s\S]*?(?=#{1,4}\s|$)/im, '') // strip — rendered separately
+        // Strategic Choice is extracted separately by extractStrategicChoice() — do NOT strip here
+        // .replace(/#{1,4}\s*Strategic Choice[\s\S]*?(?=#{1,4}\s|$)/im, '')
         .replace(/#{1,4}\s*Dimension Scores[\s\S]*$/im, '')
         .replace(/Dimension Scores:?[\s\S]*$/im, '')
         .trim();
@@ -459,6 +481,9 @@ ${context}`.trim();
                             frameworks: event.frameworks as Record<string, unknown>,
                             specialistMetadata: event.specialistMetadata as SpecialistMeta[] || [],
                             confidenceTriad: event.confidenceTriad as ReportData["confidenceTriad"],
+                            runwayResult: (event.runwayResult as ReportData['runwayResult']) ?? null,
+                            moatDecayResult: (event.moatDecayResult as ReportData['moatDecayResult']) ?? null,
+                            forkProbabilities: (event.forkProbabilities as ReportData['forkProbabilities']) ?? null,
                         };
                         if (reportId) {
                             // setLastReportId(reportId);
@@ -580,7 +605,10 @@ ${context}`.trim();
                         richDimensions: event.richDimensions as Record<string, RichDimensionData>,
                         frameworks: event.frameworks as ReportData['frameworks'],
                         specialistMetadata: event.specialistMetadata as SpecialistMeta[] || [],
-                            confidenceTriad: event.confidenceTriad as ReportData["confidenceTriad"],
+                        confidenceTriad: event.confidenceTriad as ReportData["confidenceTriad"],
+                        runwayResult: (event.runwayResult as ReportData['runwayResult']) ?? null,
+                        moatDecayResult: (event.moatDecayResult as ReportData['moatDecayResult']) ?? null,
+                        forkProbabilities: (event.forkProbabilities as ReportData['forkProbabilities']) ?? null,
                     });
                     if (reportId) {
                         setCurrentReportId(reportId);
@@ -1411,8 +1439,120 @@ ${context}`.trim();
                                 <motion.div
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="max-w-4xl mx-auto w-full"
+                                    className="max-w-4xl mx-auto w-full space-y-8"
                                 >
+                                    {/* SIM 3.1 — Runway */}
+                                    {result.runwayResult ? (
+                                        <div className="bg-zinc-900/60 border border-emerald-500/20 rounded-2xl p-8">
+                                            <div className="flex items-center gap-3 mb-6">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">SIM 3.1 — Financial Runway</h3>
+                                                {result.runwayResult.estimated && <span className="text-[10px] text-zinc-500 border border-zinc-700 rounded px-2 py-0.5">Estimated from context</span>}
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-4 mb-6">
+                                                {[
+                                                    { label: 'P10 Pessimistic', value: result.runwayResult.p10_months, color: 'text-rose-400' },
+                                                    { label: 'P50 Base Case', value: result.runwayResult.p50_months, color: 'text-amber-400' },
+                                                    { label: 'P90 Optimistic', value: result.runwayResult.p90_months, color: 'text-emerald-400' },
+                                                ].map(({ label, value, color }) => (
+                                                    <div key={label} className="bg-white/[0.03] border border-white/5 rounded-xl p-4 text-center">
+                                                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">{label}</p>
+                                                        <p className={`text-3xl font-bold ${color}`}>{value >= 36 ? '36+' : value}<span className="text-sm font-normal text-zinc-500 ml-1">mo</span></p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                {[
+                                                    { label: 'P(18-month runway)', value: result.runwayResult.probability_18m },
+                                                    { label: 'P(24-month runway)', value: result.runwayResult.probability_24m },
+                                                    { label: 'P(36-month runway)', value: result.runwayResult.probability_36m },
+                                                ].map(({ label, value }) => (
+                                                    <div key={label} className="bg-white/[0.02] rounded-lg p-3">
+                                                        <p className="text-[10px] text-zinc-500 mb-1">{label}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                                                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${value * 100}%` }} />
+                                                            </div>
+                                                            <span className="text-xs font-bold text-white">{Math.round(value * 100)}%</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <PlaceholderCard icon={ShieldAlert} title="Runway Simulation Unavailable" description="Financial inputs (cash, burn rate) could not be extracted from context. Provide explicit financial figures to enable this simulation." />
+                                    )}
+
+                                    {/* SIM 3.2 — Fork Probabilities */}
+                                    {result.forkProbabilities && result.forkProbabilities.length > 0 ? (
+                                        <div className="bg-zinc-900/60 border border-violet-500/20 rounded-2xl p-8">
+                                            <div className="flex items-center gap-3 mb-6">
+                                                <div className="w-2 h-2 rounded-full bg-violet-500" />
+                                                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-violet-400">SIM 3.2 — Fork Probability</h3>
+                                            </div>
+                                            <div className="space-y-4">
+                                                {result.forkProbabilities.map((fork) => (
+                                                    <div key={fork.forkName} className="bg-white/[0.03] border border-white/5 rounded-xl p-4">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <p className="text-sm font-bold text-white">{fork.forkName}</p>
+                                                            <span className="text-lg font-bold text-violet-300">{fork.adjustedProbability}%</span>
+                                                        </div>
+                                                        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mb-3">
+                                                            <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${fork.adjustedProbability}%` }} />
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-3 text-xs">
+                                                            {fork.enablers.length > 0 && (
+                                                                <div>
+                                                                    <p className="text-emerald-500 font-semibold mb-1">Enablers</p>
+                                                                    {fork.enablers.map((e, i) => <p key={i} className="text-zinc-400">+ {e}</p>)}
+                                                                </div>
+                                                            )}
+                                                            {fork.constraints.length > 0 && (
+                                                                <div>
+                                                                    <p className="text-rose-500 font-semibold mb-1">Constraints</p>
+                                                                    {fork.constraints.map((c, i) => <p key={i} className="text-zinc-400">− {c}</p>)}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <PlaceholderCard icon={ShieldAlert} title="Fork Probability Unavailable" description="No strategic forks (a)/(b)/(c) detected in synthesis output. Ensure the brief includes explicit strategic options." />
+                                    )}
+
+                                    {/* SIM 3.3 — Moat Decay */}
+                                    {result.moatDecayResult ? (
+                                        <div className="bg-zinc-900/60 border border-amber-500/20 rounded-2xl p-8">
+                                            <div className="flex items-center gap-3 mb-6">
+                                                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                                                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">SIM 3.3 — Moat Decay ({result.moatDecayResult.moatName})</h3>
+                                            </div>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                                {[
+                                                    { label: 'Baseline Parity', value: `${result.moatDecayResult.baseline_months_to_parity}mo`, color: 'text-blue-400' },
+                                                    { label: 'Accelerated Parity', value: `${result.moatDecayResult.accelerated_months_to_parity}mo`, color: 'text-rose-400' },
+                                                    { label: 'Strength @ 12m', value: `${result.moatDecayResult.strength_at_12m}/100`, color: 'text-amber-400' },
+                                                    { label: 'Strength @ 24m', value: `${result.moatDecayResult.strength_at_24m}/100`, color: 'text-amber-300' },
+                                                ].map(({ label, value, color }) => (
+                                                    <div key={label} className="bg-white/[0.03] border border-white/5 rounded-xl p-4 text-center">
+                                                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">{label}</p>
+                                                        <p className={`text-xl font-bold ${color}`}>{value}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="flex items-end gap-1 h-16">
+                                                {result.moatDecayResult.decay_curve.map((v, i) => (
+                                                    <div key={i} className="flex-1 bg-blue-500/40 rounded-sm" style={{ height: `${(v / 100) * 100}%` }} title={`M${i * 6}: ${v}`} />
+                                                ))}
+                                            </div>
+                                            <p className="text-[10px] text-zinc-600 mt-2">Baseline decay curve — M0 to M36 (parity threshold: 50)</p>
+                                        </div>
+                                    ) : (
+                                        <PlaceholderCard icon={ShieldAlert} title="Moat Decay Unavailable" description="Moat decay simulation requires a scored competitive defensibility dimension and replication timeline data." />
+                                    )}
+
                                     <StressTestPanel
                                         reportId={currentReportId || ''}
                                         onStressResult={handleStressResult}

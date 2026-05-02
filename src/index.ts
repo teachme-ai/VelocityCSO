@@ -507,7 +507,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
 
         logAuditCost(sessionId, { discovery: discoveryCost.usd, synthesis: csoCost.usd });
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale, specialistMetadata, confidenceTriad });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale, specialistMetadata, confidenceTriad, forkProbabilities: forkProbabilities || null, moatDecayResult: moatDecayResult || null, runwayResult: runwayResult || null });
         if (roadmap) sseWrite(res, { type: 'ROADMAP_COMPLETE', roadmap });
         res.end();
 
@@ -698,7 +698,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             tlog({ severity: 'WARNING', message: 'Dimensions still empty at emit time', session_id: sessionId });
         }
 
-        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale, specialistMetadata, confidenceTriad });
+        sseWrite(res, { type: 'REPORT_COMPLETE', id: docId, token: docId.slice(-8), report, dimensions, richDimensions, frameworks, orgName, moatRationale, specialistMetadata, confidenceTriad, forkProbabilities: forkProbabilities || null, moatDecayResult: moatDecayResult || null, runwayResult: runwayResult || null });
         if (roadmap) sseWrite(res, { type: 'ROADMAP_COMPLETE', roadmap });
         res.end();
 
