@@ -1,12 +1,24 @@
 # VelocityCSO — Current Status
 **Last updated:** 2026-06-01
-**Last commit:** `82e4d32`
+**Last commit:** `8a71b14`
 **Branch:** main
 **Deployment:** Cloud Run — `business-strategy-api`, region `us-central1`
 
 ---
 
 ## Recent Commits (newest first)
+
+### `8a71b14` — feat(sim): S3-G floor + SIM 3.2 fork probability + SIM 3.3 moat decay
+**Why:** ROI Projection scored 28 for a Rule of 40 = 60 company. SIM 3.2 had broken multiplier math (could exceed 100%). SIM 3.3 had a discontinuity bug where moat strength teleported back to startStrength at parity month.
+**What changed:**
+- `src/coordinator.ts` — ROI Projection floor guard; imports and calls forkProbabilityService + moatDecayService after synthesis
+- `src/services/forkProbabilityService.ts` — NEW: Bayesian odds ratio math, structured log telemetry, fork extraction from synthesis
+- `src/services/moatDecayService.ts` — NEW: fixed computeDecayCurve (linear to 50, exponential to 30), regex-safe replication months, auto attack vector detection
+- `src/services/memory.ts` — AuditMemory has forkProbabilities, moatDecayResult
+- `src/services/pdfService.ts` — SIM 3.2 bar chart page, SIM 3.3 decay table + intervention points page
+- `src/index.ts` — both fields destructured, saved to Firestore, passed to saveAuditMemory
+
+---
 
 ### `82e4d32` — chore: add currentstatus.md + Amazon Q rule
 **Why:** No single source of truth existed for what had been built, what was broken, and what was pending. Manual tracking across conversation summaries was error-prone.
@@ -71,7 +83,7 @@
 
 | ID | Description | Severity | Status |
 |---|---|---|---|
-| S3-G | ROI Projection scores 28 for Rule of 40 = 60 company | P1 | Open — post-processing floor needed |
+| S3-G | ROI Projection scores 28 for Rule of 40 = 60 company | P1 | ✅ Fixed `8a71b14` |
 | S3-C | Strategic Choice card not verified across runs (HTML saved on wrong tab) | P1 | Open — needs Synthesis tab save |
 | S3-I | VRIO verdict "Sustained Competitive Advantage" without Snowflake/EU AI Act threat qualification | P2 | Open |
 
@@ -133,8 +145,8 @@
 | Sim | Description | Status |
 |---|---|---|
 | SIM 3.1 | Runway simulation | ❌ Pending |
-| SIM 3.2 | Fork probability model | ❌ Pending |
-| SIM 3.3 | Moat decay curve | ❌ Pending |
+| SIM 3.2 | Fork probability model (Bayesian odds) | ✅ Done `8a71b14` |
+| SIM 3.3 | Moat decay curve (fixed discontinuity) | ✅ Done `8a71b14` |
 
 ### Other Pending
 | Item | Status |
