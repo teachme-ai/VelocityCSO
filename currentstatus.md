@@ -1,6 +1,6 @@
 # VelocityCSO — Current Status
 **Last updated:** 2026-06-01
-**Last commit:** `bbe56fc`
+**Last commit:** `pending`
 **Branch:** main
 **Deployment:** Cloud Run — `business-strategy-api`, region `us-central1`
 
@@ -184,7 +184,7 @@
 ### Other Pending
 | Item | Status |
 |---|---|
-| S3-G ROI Projection floor fix | ❌ Pending |
+| S3-G ROI Projection floor fix | ✅ Done `8a71b14` |
 | Promptfoo test harness | ❌ Pending |
 | S4 Anthropic verification run | ❌ Not yet run |
 
