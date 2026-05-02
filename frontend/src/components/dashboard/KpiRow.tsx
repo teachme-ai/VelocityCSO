@@ -5,18 +5,35 @@ import { Activity, Star, AlertTriangle, ShieldCheck } from 'lucide-react';
 import type { RichDimensionData } from '../DiagnosticScorecard';
 
 // Dimensions that represent risk absence — high score = low risk, not a strength
-// Mirrors dimensionRegistry.ts isRiskDimension + low moatEligible
 const RISK_DIMENSIONS = new Set([
     'Customer Concentration Risk',
     'Risk Tolerance',
 ]);
 
-// Dimensions that are operationally important but not strategic moats
+// Dimensions that are operationally important but structurally low for many
+// business types — not strategically material risks on the dashboard
 const LOW_MATERIALITY = new Set([
     'ESG Posture',
     'Scalability',
     'ROI Projection',
     'Capital Efficiency',
+    'Network Effects Strength',
+    'Market Entry Speed',
+    'Target Precision',
+    'CAC/LTV Ratio',
+]);
+
+// Dimensions that ARE genuinely material strategic risks when they score low
+// These get priority in the Most Material Risk card
+const STRATEGIC_RISK_PRIORITY = new Set([
+    'Competitive Defensibility',
+    'Regulatory Readiness',
+    'Data Asset Quality',
+    'Flywheel Potential',
+    'Trend Adoption',
+    'Pricing Power',
+    'Execution Speed',
+    'TAM Viability',
 ]);
 
 interface SpecialistMeta {
@@ -52,12 +69,20 @@ export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions, spec
         .filter(([k]) => !RISK_DIMENSIONS.has(k))
         .sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
 
-    // FIX 2.4: Most material risk — prefer strategic dimensions with low scores
-    // Priority: non-risk-absence dimensions scoring < 50, excluding low-materiality ones first
+    // FIX 2.4: Most material risk — priority order:
+    // 1. STRATEGIC_RISK_PRIORITY dimensions scoring < 50 (genuinely material)
+    // 2. Any non-risk-absence, non-low-materiality dimension scoring < 50
+    // 3. Fallback to lowest scoring non-risk-absence dimension
     const weakDims = availableEntries.filter(([, v]) => v < 50);
-    const strategicWeak = weakDims.filter(([k]) => !RISK_DIMENSIONS.has(k) && !LOW_MATERIALITY.has(k));
-    const keyRisk = strategicWeak.sort((a, b) => a[1] - b[1])[0]
-        || weakDims.sort((a, b) => a[1] - b[1])[0]
+    const priorityWeak = weakDims
+        .filter(([k]) => STRATEGIC_RISK_PRIORITY.has(k))
+        .sort((a, b) => a[1] - b[1]);
+    const strategicWeak = weakDims
+        .filter(([k]) => !RISK_DIMENSIONS.has(k) && !LOW_MATERIALITY.has(k))
+        .sort((a, b) => a[1] - b[1]);
+    const keyRisk = priorityWeak[0]
+        || strategicWeak[0]
+        || weakDims.filter(([k]) => !RISK_DIMENSIONS.has(k)).sort((a, b) => a[1] - b[1])[0]
         || [...availableEntries].sort((a, b) => a[1] - b[1])[0]
         || ['N/A', 0];
 

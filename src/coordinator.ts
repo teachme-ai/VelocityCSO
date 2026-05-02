@@ -858,12 +858,14 @@ Business context (first 2000 chars — includes all clarifier answers):
 ${businessContext.slice(0, 2000)}
 
 Rules:
-1. A moat must represent an ACTIVE competitive advantage, not merely the absence of a weakness.
-2. If the business is pre-revenue or pre-launch, acknowledge that moats are aspirational, not established.
-3. Do not claim 'sustained competitive advantage' unless evidence of 2+ year inimitability is present in the context.
-4. Reference specific evidence from the business context, not generic strategy language.
+1. A moat must represent an ACTIVE structural competitive advantage — a specific capability, asset, certification, or network effect that competitors cannot easily replicate.
+2. NEVER name these as moats: Team / Founder Strength, Target Precision, Execution Speed, CAC/LTV Ratio, Market Entry Speed, ESG Posture, Scalability, ROI Projection, Capital Efficiency, Risk Tolerance, Customer Concentration Risk. These are operational metrics, not structural moats.
+3. Valid moat types: proprietary data corpus, regulatory certification, network effects, switching costs, patented technology, exclusive partnerships, platform lock-in.
+4. If the business is pre-revenue or pre-launch, acknowledge that moats are aspirational, not established.
+5. Do not claim 'sustained competitive advantage' unless evidence of 2+ year inimitability is present in the context.
+6. Reference specific evidence from the business context — name the actual asset (e.g. "EMIR pre-certification", "6-year calibration corpus", "CA workflow integration").
 
-Write 2-3 sentences identifying the strongest genuine moat, or stating that the business has not yet established a defensible moat.`;
+Write 2-3 sentences identifying the strongest genuine structural moat, or stating that the business has not yet established a defensible moat.`;
 
         emitHeartbeat(sessionId, `◆ CSO: Evaluating strategic moat candidates (${topDimension[0]})...`);
         const moatStartTime = Date.now();
