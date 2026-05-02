@@ -1,12 +1,20 @@
 # VelocityCSO — Current Status
 **Last updated:** 2026-06-01
-**Last commit:** `c97015c`
+**Last commit:** `82e4d32`
 **Branch:** main
 **Deployment:** Cloud Run — `business-strategy-api`, region `us-central1`
 
 ---
 
 ## Recent Commits (newest first)
+
+### `82e4d32` — chore: add currentstatus.md + Amazon Q rule
+**Why:** No single source of truth existed for what had been built, what was broken, and what was pending. Manual tracking across conversation summaries was error-prone.
+**What changed:**
+- `currentstatus.md` — created; tracks every commit, build sheet status, active bugs, verification results, architecture notes
+- `.amazonq/rules/update-currentstatus.md` — Amazon Q rule that triggers a currentstatus.md overwrite after every `git commit` or `git push`
+
+---
 
 ### `c97015c` — fix(S3-A+S3-F): moat regression + materiality risk selection
 **Why:** S3 Halcyon Run 3 showed Team/Founder Strength (95) winning the moat card instead of EMIR certification. ESG Posture (40) and Network Effects (20) kept winning the Most Material Risk card instead of strategically relevant risks.
