@@ -1,12 +1,19 @@
 # VelocityCSO — Current Status
 **Last updated:** 2026-06-01
-**Last commit:** `592dfa6`
+**Last commit:** `16c0fb3`
 **Branch:** main
 **Deployment:** Cloud Run — `business-strategy-api`, region `us-central1`
 
 ---
 
 ## Recent Commits (newest first)
+
+### `16c0fb3` — feat(ui): redesign tabs as pill grid (Option C)
+**Why:** Horizontal tab bar with 5 long labels overflows on mobile and is hard to tap. No visual hierarchy or context for what each tab contains.
+**What changed:**
+- `frontend/src/components/dashboard/ReportTabs.tsx` — 2-col mobile / 3-col tablet / 5-col desktop pill grid; each pill has icon + label + description; active state has violet border, glow, animated dot; labels shortened (Scorecard, Frameworks, Synthesis, Stress Test)
+
+---
 
 ### `592dfa6` — fix(logging): comprehensive observability for all today's implementations
 **Why:** Silent failures across all new simulation code — skip paths, degenerate inputs, missing data, and PDF render decisions were all invisible in logs.
