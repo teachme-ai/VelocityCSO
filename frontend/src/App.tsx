@@ -3,6 +3,7 @@ import { HeroSection } from './components/HeroSection';
 import { DimensionOrbit } from './components/DimensionOrbit';
 import { PricingSection } from './components/PricingSection';
 import { Header } from './components/Header';
+import { Analytics } from '@vercel/analytics/react';
 
 function Footer() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
         </div>
       </div>
       <Footer />
+      <Analytics />
     </div>
   );
 }
