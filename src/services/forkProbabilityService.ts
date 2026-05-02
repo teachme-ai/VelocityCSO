@@ -70,7 +70,7 @@ export function computeForkProbabilities(
         let adjusted       = adjustedOdds / (1 + adjustedOdds);
         adjusted           = Math.min(0.95, Math.max(0.05, adjusted));
 
-        // Debug logging — critical for calibration on first Halcyon run
+        // Structured telemetry for calibration across all audit runs
         log({
             severity: 'INFO',
             message: `[SIM 3.2] Fork: ${fork.forkName}`,

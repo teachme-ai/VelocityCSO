@@ -1078,16 +1078,12 @@ Write 2-3 sentences identifying the strongest genuine structural moat, or statin
             const rivalryScore = (frameworks.porter?.scores?.competitive_rivalry?.score
                 ?? frameworks.porter?.forces?.competitive_rivalry?.score
                 ?? 50) as number;
-            // Extract replication months from clarifier context if present
+            // Replication months: derived from VRIO inimitable score via estimateReplicationTime.
+            // Pass 0 to let computeMoatDecay derive it from scores — avoids parsing raw prose.
             const replicationMonths = extractReplicationMonths(businessContext);
-            // Build attack vectors from known threats in context
-            const attackVectors = [];
-            if (businessContext.toLowerCase().includes('snowflake')) {
-                attackVectors.push({ name: 'Snowflake/Numerix acquisition', accelerationFactor: 0.4, probability: 0.35, triggerMonth: 18 });
-            }
-            if (businessContext.toLowerCase().includes('build-vs-buy') || businessContext.toLowerCase().includes('build vs buy')) {
-                attackVectors.push({ name: 'Customer internal build', accelerationFactor: 0.3, probability: 0.25, triggerMonth: 12 });
-            }
+            // Attack vectors: extracted generically from synthesis + Wardley output.
+            // No hardcoded competitor names — works for any audit input.
+            const attackVectors = extractAttackVectorsFromReport(finalReport, frameworks);
             moatDecayResult = computeMoatDecay({
                 moatName: topDimension[0] as string,
                 inimitabilityScore: vrioInimitable,
@@ -1117,12 +1113,51 @@ Write 2-3 sentences identifying the strongest genuine structural moat, or statin
         };
     }
 
-    /**
-     * Runs a fast stress-test recalculation on an existing completed report.
-     * Discovery is bypassed — uses cached Firestore grounded context.
-     * Uses gemini-2.0-flash for speed and minimal cost.
-     */
-    async triggerStressTest(reportId: string, scenarioId: ScenarioId, sessionId: string): Promise<{ scenarioId: string; scenarioLabel: string; originalScores: Record<string, number | null>; stressedScores: Record<string, number>; riskDeltas: Record<string, number>; mitigationCards: MitigationCard[] }> {
+}
+
+// ─── Generic attack vector extraction ───────────────────────────────────────
+// Reads threat signals from Wardley warnings and synthesis report.
+// Returns generic AttackVector objects — no hardcoded competitor or product names.
+// Works for any audit input, not just Halcyon.
+function extractAttackVectorsFromReport(
+    report: string,
+    frameworks: any
+): Array<{ name: string; accelerationFactor: number; probability: number; triggerMonth: number | null }> {
+    const vectors: Array<{ name: string; accelerationFactor: number; probability: number; triggerMonth: number | null }> = [];
+
+    const wardleyWarnings: string[] = [];
+    if (frameworks?.wardley?.strategic_warnings) {
+        const w = frameworks.wardley.strategic_warnings;
+        if (Array.isArray(w)) wardleyWarnings.push(...w.map(String));
+        else if (typeof w === 'string') wardleyWarnings.push(w);
+    }
+
+    // Generic threat patterns — acceleration factors from threat severity, not named competitors
+    const threatPatterns: Array<{ pattern: RegExp; accelerationFactor: number; probability: number; label: string }> = [
+        { pattern: /acqui(?:re|sition|red)/i,                                          accelerationFactor: 0.40, probability: 0.30, label: 'Strategic acquisition threat' },
+        { pattern: /build.{0,15}(?:vs|versus|or).{0,15}buy|internal.{0,20}build/i,    accelerationFactor: 0.30, probability: 0.25, label: 'Customer internal build' },
+        { pattern: /open.?source|commoditi[sz]/i,                                      accelerationFactor: 0.35, probability: 0.35, label: 'Open-source commoditisation' },
+        { pattern: /regulat(?:ory|ion).{0,30}change|compliance.{0,20}reset/i,         accelerationFactor: 0.25, probability: 0.20, label: 'Regulatory moat reset' },
+        { pattern: /well.funded.{0,30}competi|new entrant.{0,30}fund/i,               accelerationFactor: 0.30, probability: 0.25, label: 'Well-funded new entrant' },
+    ];
+
+    const searchText = [...wardleyWarnings, report.slice(0, 3000)].join(' ');
+
+    for (const { pattern, accelerationFactor, probability, label } of threatPatterns) {
+        if (pattern.test(searchText) && vectors.length < 3) {
+            vectors.push({ name: label, accelerationFactor, probability, triggerMonth: null });
+        }
+    }
+
+    log({
+        severity: 'INFO',
+        message: '[SIM 3.3] Attack vectors extracted from report',
+        vectors_found: vectors.length,
+        vector_names: vectors.map(v => v.name),
+    });
+
+    return vectors;
+}reportId: string, scenarioId: ScenarioId, sessionId: string): Promise<{ scenarioId: string; scenarioLabel: string; originalScores: Record<string, number | null>; stressedScores: Record<string, number>; riskDeltas: Record<string, number>; mitigationCards: MitigationCard[] }> {
         const scenario = SCENARIOS[scenarioId];
 
         log({

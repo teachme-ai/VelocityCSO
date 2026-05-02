@@ -1,122 +1,65 @@
 # VelocityCSO — Current Status
-**Last updated:** 2026-06-01
-**Last commit:** `efe11ba`
+
+**Last updated:** 2026-05-02
+**Last commit:** `0e9c216`
 **Branch:** main
-**Deployment:** Cloud Run — `business-strategy-api`, region `us-central1`
+**Deployment:** GitHub Actions → Cloud Run (`velocitycso`, `business-strategy-api`, `us-central1`)
 
 ---
 
-## Recent Commits (newest first)
+## Recent Commits
 
-### `efe11ba` — ci: skip build on doc-only commits (Option B)
-**Why:** Every `currentstatus.md` update was triggering a full Cloud Run deploy cycle unnecessarily.
+### `0e9c216` — fix: Pro model retry backoff, sim panels on web, Strategic Choice strip bug
+**Why:** Gemini 2.5 Pro was falling back to Flash on first transient error; sim data was computed but never sent to frontend; Strategic Choice card was being stripped before extraction could read it.
+**What changed:**
+- `src/services/geminiClient.ts` — Pro calls retry 3x with 2s/5s/10s exponential backoff before throwing; Flash fallback only fires after all retries exhausted
+- `src/index.ts` — `forkProbabilities`, `moatDecayResult`, `runwayResult` added to both `REPORT_COMPLETE` SSE events (were saved to Firestore but never sent to frontend)
+- `frontend/src/components/HeroSection.tsx` — `ReportData` type extended with sim fields; both `REPORT_COMPLETE` handlers read sim data; `sanitizeReport` no longer strips Strategic Choice block; Stress tab renders SIM 3.1/3.2/3.3 panels above StressTestPanel
+
+### `efe11ba` — ci: paths-ignore for doc-only commits
+**Why:** Doc-only commits were triggering full Cloud Run deploys unnecessarily.
 **What changed:**
 - `.github/workflows/deploy.yml` — `paths-ignore` added for `currentstatus.md`, `.amazonq/**`, `plans/**`, `**.md`, `.claude/**`
-- `currentstatus.md` — header updated, S3-G confirmed fixed in both tables
 
----
-
-### `16c0fb3` — feat(ui): redesign tabs as pill grid (Option C)
-**Why:** Horizontal tab bar with 5 long labels overflows on mobile and is hard to tap. No visual hierarchy or context for what each tab contains.
-**What changed:**
-- `frontend/src/components/dashboard/ReportTabs.tsx` — 2-col mobile / 3-col tablet / 5-col desktop pill grid; each pill has icon + label + description; active state has violet border, glow, animated dot; labels shortened (Scorecard, Frameworks, Synthesis, Stress Test)
-
----
-
-### `592dfa6` — fix(logging): comprehensive observability for all today's implementations
-**Why:** Silent failures across all new simulation code — skip paths, degenerate inputs, missing data, and PDF render decisions were all invisible in logs.
-**What changed:**
-- `src/index.ts` — audit request logs sector/scale/url/doc/stress_test; clarify logs turn number and question answered
-- `src/coordinator.ts` — S3-G logs fire/no-fire/absent cases; SIM 3.1 logs skip reason; SIM 3.2 logs zero-forks case
-- `src/services/moatDecayService.ts` — logs all inputs on every call with input source
-- `src/services/monteCarloService.ts` — degenerate result detection (P50=0 warning)
-- `src/services/pdfService.ts` — all three SIM sections log render start or skip reason
-
----
-
-### `ebd8cdc` — feat(sim): SIM 3.1 runway simulation + Python sidecar charts
-**Why:** SIM 3.1 was the last unimplemented simulation. Python sidecar charts for SIM 3.1 and 3.3 were missing — PDF had text-only fallback.
-**What changed:**
-- `src/services/monteCarloService.ts` — `runRunwaySimulation()` added with triangular distributions, 10K iterations, P10/P50/P90, milestone probabilities, trajectory paths
-- `src/specialists.ts` — finance analyst now extracts `runwayInputs` schema
-- `src/coordinator.ts` — calls runway simulation after Phase C; included in return
-- `src/services/memory.ts` — `runwayResult` field added
-- `src/services/pdfService.ts` — SIM 3.1 page with metrics table, probability bars, interpretation
-- `src/index.ts` — `runwayResult` saved to Firestore
-- `charts-service/charts/runway.py` — NEW: dual-panel chart (trajectories + histogram)
-- `charts-service/charts/moat_decay.py` — NEW: moat strength decay with intervention markers
-- `charts-service/main.py` — both renderers registered
-
----
-
-### `8a71b14` — feat(sim): S3-G floor + SIM 3.2 fork probability + SIM 3.3 moat decay
-**Why:** ROI Projection scored 28 for a Rule of 40 = 60 company. SIM 3.2 had broken multiplier math (could exceed 100%). SIM 3.3 had a discontinuity bug where moat strength teleported back to startStrength at parity month.
-**What changed:**
-- `src/coordinator.ts` — ROI Projection floor guard; imports and calls forkProbabilityService + moatDecayService after synthesis
-- `src/services/forkProbabilityService.ts` — NEW: Bayesian odds ratio math, structured log telemetry, fork extraction from synthesis
-- `src/services/moatDecayService.ts` — NEW: fixed computeDecayCurve (linear to 50, exponential to 30), regex-safe replication months, auto attack vector detection
-- `src/services/memory.ts` — AuditMemory has forkProbabilities, moatDecayResult
-- `src/services/pdfService.ts` — SIM 3.2 bar chart page, SIM 3.3 decay table + intervention points page
-- `src/index.ts` — both fields destructured, saved to Firestore, passed to saveAuditMemory
-
----
-
-### `82e4d32` — chore: add currentstatus.md + Amazon Q rule
-**Why:** No single source of truth existed for what had been built, what was broken, and what was pending. Manual tracking across conversation summaries was error-prone.
-**What changed:**
-- `currentstatus.md` — created; tracks every commit, build sheet status, active bugs, verification results, architecture notes
-- `.amazonq/rules/update-currentstatus.md` — Amazon Q rule that triggers a currentstatus.md overwrite after every `git commit` or `git push`
-
----
-
-### `c97015c` — fix(S3-A+S3-F): moat regression + materiality risk selection
-**Why:** S3 Halcyon Run 3 showed Team/Founder Strength (95) winning the moat card instead of EMIR certification. ESG Posture (40) and Network Effects (20) kept winning the Most Material Risk card instead of strategically relevant risks.
+### `c97015c` — fix: S3-A moat regression + S3-F materiality risk
+**Why:** Operational dimensions (Team/Founder, Target Precision, etc.) were being selected as moats; ESG Posture was appearing as Key Risk instead of strategic risks.
 **What changed:**
 - `src/dimensionRegistry.ts` — Team/Founder, Target Precision, Execution Speed, CAC/LTV, Market Entry Speed marked `moatEligible: false`
-- `src/coordinator.ts` — moat prompt now has explicit NEVER list of 10 operational dimensions; valid moat types enumerated
-- `frontend/src/components/dashboard/KpiRow.tsx` — `STRATEGIC_RISK_PRIORITY` set added; LOW_MATERIALITY expanded; risk card now picks from priority dims first
+- `src/coordinator.ts` — Moat prompt has explicit NEVER list of 10 operational dimensions
+- `frontend/src/components/dashboard/KpiRow.tsx` — `STRATEGIC_RISK_PRIORITY` set added; `LOW_MATERIALITY` expanded
 
----
-
-### `3e3f7a4` — feat: capture and persist all audit inputs + clarifier Q&A in PDF
-**Why:** Audit inputs (sector, scale, URL, document) were being lost or bolted onto the context string. Clarifier Q&A questions and answers were never stored — only the merged context blob survived to the PDF.
+### `3e3f7a4` — feat: all audit inputs captured + Strategic Dialogue appendix
+**Why:** Sector, org_scale, url_source, document_filename were not being persisted; clarifier Q&A was not appearing in PDF appendix.
 **What changed:**
-- `frontend/src/components/HeroSection.tsx` — sends sector, org_scale, url_source, document_filename as discrete fields; no longer appends `[SECTOR:]` tags to context
-- `src/services/sessionService.ts` — `ClarifierTurn` interface added; `StrategySession` has `clarifierExchange[]`, `sector`, `orgScale`, `urlSource`, `documentFilename`; `incrementTurn()` accepts new turn
-- `src/services/memory.ts` — `AuditMemory` has `clarifierExchange`, `sector`, `orgScale`, `urlSource`, `documentFilename`; `loadAuditMemory` restores all fields
-- `src/index.ts` — receives all new fields; saves to Firestore; sector/scale injected into `taggedContext` for specialists; both saveSession calls updated
-- `src/services/pdfService.ts` — Sources Appendix now has 7 sections: Audit Inputs, Original Brief, Strategic Dialogue (Q&A), Data Sources, Missing Signals, Confidence Limitations, Discovery Intelligence
+- `frontend/src/components/HeroSection.tsx` — sends all discrete fields
+- `src/index.ts` — saves all fields to Firestore and AuditMemory
+- `src/services/sessionService.ts` — `ClarifierTurn` interface; every Q&A pair stored
+- `src/services/pdfService.ts` — Sources Appendix has 7 sections including Strategic Dialogue
 
----
-
-### `9552f85` — fix: normPorter/normAnsoff/normVrio schema detection
-**Why:** Porter, Ansoff, VRIO frameworks were not rendering in the Strategic Frameworks tab. The schema normalisers were incorrectly detecting old vs new compact schema.
+### `9552f85` — fix: Porter/Ansoff/VRIO schema normalisation
+**Why:** All three frameworks were rendering blank in Strategic Frameworks tab.
 **What changed:**
-- `frontend/src/components/HeroSection.tsx` — `normPorter` checks `raw.scores && typeof raw.scores === 'object'`; `normAnsoff` checks `raw.market_penetration?.score`; `normVrio` checks `raw.valuable?.score`
+- `frontend/src/components/HeroSection.tsx` — `normPorter`/`normAnsoff`/`normVrio` fixed for new compact schema
 
----
-
-### `b01693a` — feat: Strategic Choice as dedicated card, Stress Simulator own tab
-**Why:** Strategic Choice section was buried in prose and getting truncated by the 4096 token limit. Stress Test panel was lost at the bottom of the synthesis tab.
+### `b01693a` — feat: Strategic Choice card + Stress Simulator tab
+**Why:** Strategic Choice was buried in prose; simulations had no dedicated UI home.
 **What changed:**
-- `src/coordinator.ts` — Strategic Choice moved to position 2 in synthesis prompt (before Scenario Analysis)
-- `frontend/src/components/HeroSection.tsx` — `extractStrategicChoice()` parses 6-field block; renders as styled grid card; `sanitizeReport` strips it from prose
-- `frontend/src/components/dashboard/ReportTabs.tsx` — new `stress` tab added; StressTestPanel moved there
+- `src/coordinator.ts` — Strategic Choice moved to position 2 in synthesis prompt
+- `frontend/src/components/HeroSection.tsx` — `extractStrategicChoice()` renders as styled grid card; Stress Simulator moved to its own tab
 
----
-
-### `6309ee9` — fix: 2s backoff before agent retry
-**Why:** Finance analyst hit rate limit during critic-triggered retry (S3 Halcyon), causing fallback scores (all 50) for multiple dimensions.
+### `8a71b14` — feat: SIM 3.2 fork probability + SIM 3.3 moat decay + S3-G ROI floor
+**Why:** No probabilistic fork analysis; no moat decay modelling; ROI Projection was scoring low despite strong unit economics.
 **What changed:**
-- `src/coordinator.ts` — `await new Promise(r => setTimeout(r, 2000))` before retry in failed agent loop
+- `src/services/forkProbabilityService.ts` — NEW. Bayesian odds ratio math
+- `src/services/moatDecayService.ts` — NEW. Fixed linear→exponential decay curve
+- `src/coordinator.ts` — S3-G ROI floor guard; all three sims called after synthesis
 
----
-
-### `b1c8b4c` — fix: Build 3.0 Week 1 PDF fixes
-**Why:** Multiple PDF rendering issues identified from live audit PDFs.
+### `ebd8cdc` — feat: SIM 3.1 runway simulation
+**Why:** No financial runway modelling in the product.
 **What changed:**
-- `src/services/pdfService.ts` — Fix 3.A org name (no more "The Venture"); Fix 3.D remove redundant dimension scores page; Fix 3.H unicode glyphs (v, -); Fix 3.I Sources Appendix always renders 4 sections; Fix 3.J page overflow guard tightened to 20px
-- `charts-service/charts/wardley.py` — Fix 3.G label truncation: `textwrap.wrap(18)` instead of `name[:22]`
+- `src/services/monteCarloService.ts` — `runRunwaySimulation()` with 10K iterations, triangular distributions, P10/P50/P90
+- `src/specialists.ts` — finance analyst extracts `runwayInputs` schema
+- `src/services/pdfService.ts` — runway page added
 
 ---
 
@@ -124,77 +67,39 @@
 
 | ID | Description | Severity | Status |
 |---|---|---|---|
-| S3-G | ROI Projection scores 28 for Rule of 40 = 60 company | P1 | ✅ Fixed `8a71b14` |
-| S3-C | Strategic Choice card not verified across runs (HTML saved on wrong tab) | P1 | Open — needs Synthesis tab save |
-| S3-I | VRIO verdict "Sustained Competitive Advantage" without Snowflake/EU AI Act threat qualification | P2 | Open |
+| B1 | VRIO verdict shows "Sustained Competitive Advantage" — no threat qualification for Snowflake/EU AI Act | P1 | Open |
+| B2 | SIM 3.3 decay curve flat for high-strength moats — parity at 2018 months (should be ~24-30m for Halcyon) | P1 | Open |
+| B3 | "2018m" display bug in PDF moat decay table — missing space before unit | P2 | Open |
+| B4 | Q1 missing from Strategic Dialogue appendix — turn counter stores Q1 as turn 3, not captured in clarifierExchange | P1 | Open |
+| B5 | SIM 3.2 fork extraction fails on Flash-generated synthesis — `extractForksFromReport` regex only matches `(a)/(b)/(c)` labels | P1 | Open |
+| B6 | "Monte Carlo" orphan label on PDF page 11 — section header emitted without adjacent chart | P2 | Open |
 
 ---
 
 ## Build Status
 
-### Build 1.0 — Phase 1 (Trust Repair)
-| Fix | Description | Status |
-|---|---|---|
-| 1.1 | Preserve specialist metadata in robustParse | ✅ Done |
-| 1.2 | Fix Analysis Confidence (was 0%) | ✅ Done |
-| 1.3 | Dimension registry with moatEligible flags | ✅ Done |
-| 1.4 | Moat selection uses getMoatEligibleDimensions() | ✅ Done |
-| 1.5 | Verdict prompt rewrite (evaluate not justify) | ✅ Done |
-| 1.6 | Post-synthesis coherence check | ✅ Done |
-| 1.7 | Monte Carlo variance computed dynamically | ✅ Done |
-| 1.8 | "15-dimension" copy fix | ✅ Done |
-
-### Build 1.0 — Phase 2 (Decision Engine)
-| Fix | Description | Status |
-|---|---|---|
-| 2.1 | Roadmap runs after synthesis (posture-aligned) | ✅ Done |
-| 2.2 | Strategic Choice section in synthesis | ✅ Done |
-| 2.3 | Adaptive LLM-generated clarifier questions | ✅ Done |
-| 2.4 | Materiality-based risk selection on dashboard | ✅ Done (`c97015c`) |
-
-### Build 1.0 — Phase 3 (Evidence & Confidence)
-| Fix | Description | Status |
-|---|---|---|
-| 3.1 | Sources Appendix in PDF | ✅ Done |
-| 3.2 | Confidence triad (evidence/analytical/decision) | ✅ Done |
-| 3.3 | Stress test scenario gating by venture type | ✅ Done |
-
-### Build 1.0 — Phase 4 (Quick Wins)
-| Fix | Description | Status |
-|---|---|---|
-| 4.1 | Suppress x-powered-by header | ✅ Done |
-| 4.2 | Custom API domain api.velocitycso.com | ❌ Pending |
-| 4.3 | OG meta tags | ✅ Done |
-| 4.4 | robots.txt / sitemap.xml | ❌ Pending |
-| 4.5 | Auth middleware | ❌ Deferred (product decision) |
-
-### Build 3.0 — Week 1 PDF Fixes
-| Fix | Description | Status |
-|---|---|---|
-| 3.A | Cover page org name | ✅ Done |
-| 3.B | Cover page Executive Decision layout | ❌ Pending |
-| 3.C | Diagnostic Matrix score bars | ❌ Pending |
-| 3.D | Remove redundant dimension scores page | ✅ Done |
-| 3.E | Porter / Ansoff / VRIO in PDF body | ✅ Done |
-| 3.F | Blue Ocean chart graceful fallback | ✅ Done |
-| 3.G | Wardley label truncation | ✅ Done |
-| 3.H | Stress test unicode glyphs | ✅ Done |
-| 3.I | Sources Appendix always renders | ✅ Done |
-| 3.J | Page overflow text corruption guard | ✅ Done |
-
-### Build 3.0 — Simulations
-| Sim | Description | Status |
-|---|---|---|
-| SIM 3.1 | Runway simulation | ✅ Done `ebd8cdc` |
-| SIM 3.2 | Fork probability model (Bayesian odds) | ✅ Done `8a71b14` |
-| SIM 3.3 | Moat decay curve (fixed discontinuity) | ✅ Done `8a71b14` |
-
-### Other Pending
 | Item | Status |
 |---|---|
-| S3-G ROI Projection floor fix | ✅ Done `8a71b14` |
-| Promptfoo test harness | ❌ Pending |
-| S4 Anthropic verification run | ❌ Not yet run |
+| S3-A: EMIR/exotic engine as moat | ✅ Done |
+| S3-B: $72M ARR stated correctly | ✅ Done |
+| S3-C: Strategic Choice card present | ✅ Done |
+| S3-D: Ansoff vs Synthesis coherence | ✅ Done |
+| S3-F: Key Risk is Geneva/EU AI Act/Snowflake | ✅ Done |
+| S3-G: ROI Projection ≥ 65 | ✅ Done |
+| S3-H: Zero score drift | ✅ Done |
+| S3-I: VRIO "Conditional" not "Sustained" | ❌ Pending (B1) |
+| S3-J: Roadmap aligns to fork (a) | ✅ Done |
+| S3-K: Monte Carlo sensible | ✅ Done |
+| S3-L: TCO pricing analysis present | ✅ Done |
+| S3-M: Numerix named as Snowflake vector | ✅ Done |
+| S3-N: ION/Allegro not framed as exotic threat | ✅ Done |
+| SIM 3.1 in PDF | ✅ Done |
+| SIM 3.2 in PDF | ❌ Pending (B5) |
+| SIM 3.3 in PDF | ✅ Done (decay curve flat — B2) |
+| SIM 3.1/3.2/3.3 on web report | ✅ Done (this commit) |
+| Strategic Choice card on web | ✅ Done (this commit) |
+| Pro model retry backoff | ✅ Done (this commit) |
+| Strategic Dialogue Q1+Q2 in appendix | ❌ Pending (B4) |
 
 ---
 
@@ -202,16 +107,20 @@
 
 | Scenario | Last Run | Passing | Failing |
 |---|---|---|---|
-| S1 Coffee Shop | Early builds | 9/10 | S1-E (stress test gating) |
-| S2 UdyamFlow | Early builds | 7/9 | S2-A partial, S2-C |
-| S3 Halcyon | Run 3 (`Be1A9eWH`) | S3-A✅ S3-B✅ S3-D✅ S3-F✅ | S3-C(unverified) S3-G(ROI 28) S3-I(VRIO unqualified) |
-| S4 Anthropic | Never run | — | — |
+| S1 Coffee Shop | Not run this session | — | — |
+| S2 UdyamFlow | Not run this session | — | — |
+| S3 Halcyon v3 | 2026-05-02 (Run 4) | S3-A,B,C,D,F,G,H,J,K,L,M,N | S3-I |
+| S4 Anthropic | Not run this session | — | — |
 
 ---
 
 ## Architecture Notes
-- **Deployment:** GitHub Actions → Cloud Run. Timeout 3600s.
-- **LLM:** Gemini 2.5 Pro (synthesis/roadmap), Gemini 2.5 Flash (specialists, critic, moat)
-- **Cost per audit:** ~$0.020–0.035, 12 LLM calls, 19K–42K tokens
-- **innovation_frameworks schema:** New compact schema (`porter.forces`, `ansoff.vectors`, `vrio.scores`). Frontend normalisers handle both old and new.
+
+- **Repo:** `teachme-ai/VelocityCSO`
+- **Backend:** Node.js/TypeScript, Cloud Run, Firestore
+- **Frontend:** React/Vite, Vercel
+- **LLM routing:** Gemini 2.5 Pro (synthesis), Gemini 2.5 Flash (specialists), gemini-2.0-flash-001 (discovery/wardley/blue ocean)
+- **Pro retry policy:** 3 attempts, 2s/5s/10s backoff, retryable on 429/500/503/504
+- **Simulations:** SIM 3.1 (runway, 10K iterations), SIM 3.2 (fork probability, Bayesian odds), SIM 3.3 (moat decay, linear→exponential)
 - **Moat-eligible dimensions (9):** Competitive Defensibility, Model Innovation, Flywheel Potential, Network Effects Strength, Data Asset Quality, Pricing Power, Regulatory Readiness, Trend Adoption, TAM Viability
+- **Security:** No credentials in repo — all secrets in GitHub Secrets (`GCP_WIF_SERVICE_ACCOUNT`, `GEMINI_API_KEY`)

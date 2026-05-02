@@ -437,8 +437,8 @@ Analyze the business context and return EXACTLY this structure:
       "inimitable": 0-100,
       "organised": 0-100
     },
-    "verdict": "Sustained Competitive Advantage|Temporary Advantage|Competitive Parity|No Advantage",
-    "rationale": "one sentence explaining the verdict"
+    "verdict": "Sustained Competitive Advantage|Conditional Competitive Advantage|Temporary Advantage|Competitive Parity|No Advantage",
+    "rationale": "one sentence explaining the verdict AND naming the specific threat that conditions it"
   }
 }
 
@@ -447,6 +447,13 @@ Rules:
 - Every text field must be one sentence maximum
 - No arrays, no nested objects beyond the schema above
 - Response MUST begin with { and end with }
+
+VRIO VERDICT RULES — apply in order:
+1. If the context mentions ANY active threat to the evaluated resource (e.g. a named competitor building a substitute, a regulatory change that could erode the advantage, a customer exploring internal build) — verdict MUST be "Conditional Competitive Advantage" regardless of scores. The rationale MUST name the specific threat.
+2. If all 4 scores > 70 AND no active threats mentioned — verdict is "Sustained Competitive Advantage".
+3. If V+R+I > 70 but O < 70 — verdict is "Temporary Advantage".
+4. If V+R > 70 but I < 70 — verdict is "Competitive Parity".
+5. Otherwise — verdict is "No Advantage".
 `;
 
 // Call 2: Dimensions + brief analysis. No frameworks. Target output: ~1,500 tokens.

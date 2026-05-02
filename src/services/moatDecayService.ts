@@ -130,11 +130,41 @@ export function computeMoatDecay(input: MoatDecayInput): MoatDecayResult {
     };
 }
 
-// Extract replication time from clarifier answer text
-// Uses regex instead of parseInt to handle "Around 24" or "24-30 months" safely
+// Extract replication time from clarifier answer text.
+// Looks for explicit replication/copy/replicate language with a month figure.
+// Falls back to 0 (triggers score-based estimation) if no match found.
+// Deliberately avoids matching years (4-digit numbers) to prevent grabbing
+// founding years like "founded 2018" as a replication estimate.
 export function extractReplicationMonths(text: string): number {
     if (!text || text.length < 5) return 0;
-    const match = text.match(/(\d+)/);
-    const months = match ? parseInt(match[1], 10) : 0;
-    return isNaN(months) ? 0 : months;
+
+    // Pattern 1: explicit replication language + number + months
+    // e.g. "24-30 months", "replicate in 18 months", "2 years to replicate"
+    const replicationMatch = text.match(
+        /(?:replicate|copy|imitate|replication|replicat|rebuild|re-build|build.{0,20}from scratch)[^.]{0,60}?(\d{1,3})\s*(?:month|mo\b)/i
+    );
+    if (replicationMatch) {
+        const months = parseInt(replicationMatch[1], 10);
+        if (!isNaN(months) && months > 0 && months <= 120) return months;
+    }
+
+    // Pattern 2: "X months" or "X-Y months" near competitive/moat language
+    const monthsMatch = text.match(
+        /(?:competitor|well.funded|new entrant|rival)[^.]{0,120}?(\d{1,3})(?:\s*[-–]\s*\d{1,3})?\s*month/i
+    );
+    if (monthsMatch) {
+        const months = parseInt(monthsMatch[1], 10);
+        if (!isNaN(months) && months > 0 && months <= 120) return months;
+    }
+
+    // Pattern 3: "X years" near replication language (convert to months)
+    const yearsMatch = text.match(
+        /(?:replicate|copy|imitate|replication|competitor)[^.]{0,60}?(\d{1})\s*(?:year|yr)/i
+    );
+    if (yearsMatch) {
+        const years = parseInt(yearsMatch[1], 10);
+        if (!isNaN(years) && years > 0 && years <= 10) return years * 12;
+    }
+
+    return 0; // triggers score-based estimation in computeMoatDecay
 }
