@@ -1,12 +1,38 @@
 # VelocityCSO — Current Status
 **Last updated:** 2026-06-01
-**Last commit:** `8a71b14`
+**Last commit:** `592dfa6`
 **Branch:** main
 **Deployment:** Cloud Run — `business-strategy-api`, region `us-central1`
 
 ---
 
 ## Recent Commits (newest first)
+
+### `592dfa6` — fix(logging): comprehensive observability for all today's implementations
+**Why:** Silent failures across all new simulation code — skip paths, degenerate inputs, missing data, and PDF render decisions were all invisible in logs.
+**What changed:**
+- `src/index.ts` — audit request logs sector/scale/url/doc/stress_test; clarify logs turn number and question answered
+- `src/coordinator.ts` — S3-G logs fire/no-fire/absent cases; SIM 3.1 logs skip reason; SIM 3.2 logs zero-forks case
+- `src/services/moatDecayService.ts` — logs all inputs on every call with input source
+- `src/services/monteCarloService.ts` — degenerate result detection (P50=0 warning)
+- `src/services/pdfService.ts` — all three SIM sections log render start or skip reason
+
+---
+
+### `ebd8cdc` — feat(sim): SIM 3.1 runway simulation + Python sidecar charts
+**Why:** SIM 3.1 was the last unimplemented simulation. Python sidecar charts for SIM 3.1 and 3.3 were missing — PDF had text-only fallback.
+**What changed:**
+- `src/services/monteCarloService.ts` — `runRunwaySimulation()` added with triangular distributions, 10K iterations, P10/P50/P90, milestone probabilities, trajectory paths
+- `src/specialists.ts` — finance analyst now extracts `runwayInputs` schema
+- `src/coordinator.ts` — calls runway simulation after Phase C; included in return
+- `src/services/memory.ts` — `runwayResult` field added
+- `src/services/pdfService.ts` — SIM 3.1 page with metrics table, probability bars, interpretation
+- `src/index.ts` — `runwayResult` saved to Firestore
+- `charts-service/charts/runway.py` — NEW: dual-panel chart (trajectories + histogram)
+- `charts-service/charts/moat_decay.py` — NEW: moat strength decay with intervention markers
+- `charts-service/main.py` — both renderers registered
+
+---
 
 ### `8a71b14` — feat(sim): S3-G floor + SIM 3.2 fork probability + SIM 3.3 moat decay
 **Why:** ROI Projection scored 28 for a Rule of 40 = 60 company. SIM 3.2 had broken multiplier math (could exceed 100%). SIM 3.3 had a discontinuity bug where moat strength teleported back to startStrength at parity month.
@@ -144,7 +170,7 @@
 ### Build 3.0 — Simulations
 | Sim | Description | Status |
 |---|---|---|
-| SIM 3.1 | Runway simulation | ❌ Pending |
+| SIM 3.1 | Runway simulation | ✅ Done `ebd8cdc` |
 | SIM 3.2 | Fork probability model (Bayesian odds) | ✅ Done `8a71b14` |
 | SIM 3.3 | Moat decay curve (fixed discontinuity) | ✅ Done `8a71b14` |
 
