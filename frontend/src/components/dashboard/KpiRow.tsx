@@ -10,8 +10,7 @@ const RISK_DIMENSIONS = new Set([
     'Risk Tolerance',
 ]);
 
-// Dimensions that are operationally important but structurally low for many
-// business types — not strategically material risks on the dashboard
+// Dimensions that are operationally important but not primary strategic moat signals
 const LOW_MATERIALITY = new Set([
     'ESG Posture',
     'Scalability',
@@ -21,10 +20,11 @@ const LOW_MATERIALITY = new Set([
     'Market Entry Speed',
     'Target Precision',
     'CAC/LTV Ratio',
+    'Team / Founder Strength',
+    'Execution Speed',
 ]);
 
-// Dimensions that ARE genuinely material strategic risks when they score low
-// These get priority in the Most Material Risk card
+// Dimensions that are genuinely material strategic risks when they score low
 const STRATEGIC_RISK_PRIORITY = new Set([
     'Competitive Defensibility',
     'Regulatory Readiness',
@@ -32,8 +32,8 @@ const STRATEGIC_RISK_PRIORITY = new Set([
     'Flywheel Potential',
     'Trend Adoption',
     'Pricing Power',
-    'Execution Speed',
     'TAM Viability',
+    'Model Innovation',
 ]);
 
 interface SpecialistMeta {
@@ -69,8 +69,8 @@ export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions, spec
         .filter(([k]) => !RISK_DIMENSIONS.has(k))
         .sort((a, b) => b[1] - a[1])[0] || ['N/A', 0];
 
-    // FIX 2.4: Most material risk — priority order:
-    // 1. STRATEGIC_RISK_PRIORITY dimensions scoring < 50 (genuinely material)
+    // Most material risk — priority order:
+    // 1. STRATEGIC_RISK_PRIORITY dimensions scoring < 50
     // 2. Any non-risk-absence, non-low-materiality dimension scoring < 50
     // 3. Fallback to lowest scoring non-risk-absence dimension
     const weakDims = availableEntries.filter(([, v]) => v < 50);
@@ -86,7 +86,7 @@ export const KpiRow: React.FC<KpiRowProps> = ({ dimensions, richDimensions, spec
         || [...availableEntries].sort((a, b) => a[1] - b[1])[0]
         || ['N/A', 0];
 
-    // FIX 1.2 + 3.2: Use confidenceTriad.decisionConfidence if available, else fall back to specialistMetadata average
+    // Use confidenceTriad.decisionConfidence if available, else fall back to specialistMetadata average
     let confidence = 0;
     let confidenceLabel = 'Insufficient data';
 

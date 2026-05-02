@@ -1,7 +1,7 @@
 /**
  * Dimension Registry — single source of truth for all 20 strategic dimensions.
  * Defines polarity, moat eligibility, and category for every dimension.
- * FIX 1.3: Prevents risk-absence dimensions from being selected as moat.
+ * Risk-absence dimensions (isRiskDimension: true) are never selected as moat.
  */
 
 export interface DimensionMeta {
@@ -38,7 +38,6 @@ export const DIMENSION_REGISTRY: DimensionMeta[] = [
 
 /**
  * Returns moat-eligible dimensions sorted by score descending.
- * FIX 1.4: Replaces blind .reduce() moat selection.
  */
 export function getMoatEligibleDimensions(scores: Record<string, number | null>): [string, number][] {
     return DIMENSION_REGISTRY

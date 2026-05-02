@@ -12,12 +12,17 @@ interface ExecutiveSummaryProps {
 // Mirrors src/dimensionRegistry.ts — dimensions where high score = absence of risk, not strategic strength
 // These must never appear as "Core Moats"
 const NON_MOAT_DIMS = new Set([
-    'Customer Concentration Risk', // isRiskDimension: true
-    'Risk Tolerance',              // isRiskDimension: true
-    'ESG Posture',                 // moatEligible: false
-    'Scalability',                 // moatEligible: false
-    'ROI Projection',              // moatEligible: false
-    'Capital Efficiency',          // moatEligible: false
+    'Customer Concentration Risk',
+    'Risk Tolerance',
+    'ESG Posture',
+    'Scalability',
+    'ROI Projection',
+    'Capital Efficiency',
+    'Team / Founder Strength',
+    'Target Precision',
+    'Execution Speed',
+    'CAC/LTV Ratio',
+    'Market Entry Speed',
 ]);
 
 export const ExecutiveSummaryCard = ({ orgName, moatRationale, dimensions, richDimensions }: ExecutiveSummaryProps) => {

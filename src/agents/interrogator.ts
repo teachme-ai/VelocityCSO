@@ -12,7 +12,7 @@ export interface InterrogatorResult {
     idBreakdown: { specificity: number; completeness: number; moat: number };
 }
 
-// FIX 2.3: Fallback questions if LLM call fails
+// Fallback questions if LLM call fails
 const FALLBACK_QUESTIONS: Record<number, string> = {
     0: "Who are your top 2–3 direct competitors, and what do customers typically choose them over you for? Also, how much leverage do your key suppliers or buyers have over your pricing?",
     1: "Is your primary growth focus on selling more to existing customers, entering new geographies or customer segments, launching new products, or diversifying into a new market entirely?",
@@ -35,7 +35,7 @@ export class InterrogatorAgent {
 
         // After 3 questions, always proceed to audit
         if (turnCount >= 3) {
-            log({ severity: 'INFO', message: '[FIX 2.3] Interrogator: 3 turns complete — proceeding to audit', agent_id: 'interrogator_agent', session_id: sessionId });
+            log({ severity: 'INFO', message: '[INTERROGATOR] 3 turns complete — proceeding to audit', agent_id: 'interrogator_agent', session_id: sessionId });
             return {
                 category: 'Strategic Business',
                 question: '',
@@ -47,12 +47,12 @@ export class InterrogatorAgent {
             };
         }
 
-        // FIX 2.3: Generate adaptive question based on what's missing in the context
+        // Generate adaptive question based on what's missing in the context
         const question = await this.generateAdaptiveQuestion(groundedContext, turnCount, sessionId);
 
         log({
             severity: 'INFO',
-            message: `[FIX 2.3] Interrogator: adaptive question generated (turn ${turnCount + 1}/3)`,
+            message: `[INTERROGATOR] Adaptive question generated (turn ${turnCount + 1}/3)`,
             agent_id: 'interrogator_agent',
             session_id: sessionId,
             turn: turnCount + 1,
@@ -101,7 +101,7 @@ Question:`;
             const question = raw.trim().replace(/^(Question:|Q:|Answer:)/i, '').trim();
             if (question.length > 20) return question;
         } catch (e) {
-            log({ severity: 'WARNING', message: '[FIX 2.3] Adaptive question generation failed — using fallback', session_id: sessionId, error: String(e) });
+            log({ severity: 'WARNING', message: '[INTERROGATOR] Adaptive question generation failed — using fallback', session_id: sessionId, error: String(e) });
         }
 
         return FALLBACK_QUESTIONS[turnCount];

@@ -730,7 +730,7 @@ app.post('/analyze/stress-test', authMiddleware as any, async (req: AuthRequest,
     if (!SCENARIOS[scenarioId as ScenarioId]) {
         return res.status(400).json({ error: `Unknown scenarioId. Valid: ${Object.keys(SCENARIOS).join(', ')}` });
     }
-    // FIX 3.3: Gate scenario by venture scale
+    // Gate scenario by venture scale
     if (ventureScale && !isScenarioValidForScale(scenarioId, ventureScale)) {
         return res.status(400).json({ error: `Scenario '${scenarioId}' is not appropriate for venture scale '${ventureScale}'.` });
     }

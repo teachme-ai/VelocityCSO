@@ -148,7 +148,7 @@ export function runMonteCarlo(input: MonteCarloInput, iterations = 5000): {
     ltv_cac_distribution: MonteCarloResult;
     arr_12m_distribution: MonteCarloResult;
     arr_24m_distribution: MonteCarloResult;
-    // FIX 1.7: dynamically computed variance contributions (sum ≈ 100)
+    // Dynamically computed variance contributions (sum ≈ 100)
     risk_drivers: Array<{ factor: string; variance_contribution: number }>;
 } {
     const ltv_cac_samples: number[] = [];
@@ -200,7 +200,7 @@ export function runMonteCarlo(input: MonteCarloInput, iterations = 5000): {
         })());
     }
 
-    // FIX 1.7: compute real variance contributions
+    // Compute real variance contributions per factor
     const churnVar  = variance(churn_isolated);
     const cacVar    = variance(cac_isolated);
     const arpuVar   = variance(arpu_isolated);

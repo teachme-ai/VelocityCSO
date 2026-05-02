@@ -166,7 +166,7 @@ export function robustParse(agentName: string, raw: string, sessionId?: string):
         parsed.richDimensions = rich;
     }
 
-    // FIX 1.1: Preserve root-level specialist metadata so it is not lost after dimension normalisation
+    // Preserve root-level specialist metadata so it is not lost after dimension normalisation
     parsed.specialistMeta = {
         confidence_score: parsed.confidence_score ?? null,
         data_sources: Array.isArray(parsed.data_sources) ? parsed.data_sources : [],
@@ -502,7 +502,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         Object.assign(finalDimensions, financeResult.dimensions);
         Object.assign(richDimensions, financeResult.richDimensions);
 
-        // S3-G: Post-processing floor for ROI Projection
+        // Post-processing floor for ROI Projection.
         // If unit economics are strong, the dimension score must reflect that.
         // Finance analyst sometimes scores ROI Projection independently of the
         // unitEconomics it computed in the same call — this guard corrects that.
@@ -517,12 +517,12 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
             const currentROI = finalDimensions['ROI Projection'] ?? 0;
             if (ruleOf40 > 40 && ltvCac > 3 && currentROI < 65) {
                 finalDimensions['ROI Projection'] = 65;
-                log({ severity: 'INFO', message: '[S3-G] ROI Projection floored to 65', session_id: sessionId, rule_of_40: ruleOf40, ltv_cac: ltvCac, was: currentROI });
+                log({ severity: 'INFO', message: '[ROI_FLOOR] ROI Projection floored to 65', session_id: sessionId, rule_of_40: ruleOf40, ltv_cac: ltvCac, was: currentROI });
             } else {
-                log({ severity: 'INFO', message: '[S3-G] ROI floor not triggered', session_id: sessionId, rule_of_40: ruleOf40, ltv_cac: ltvCac, current_roi: currentROI, reason: ruleOf40 <= 40 ? 'rule_of_40 <= 40' : ltvCac <= 3 ? 'ltv_cac <= 3' : 'roi already >= 65' });
+                log({ severity: 'INFO', message: '[ROI_FLOOR] Not triggered', session_id: sessionId, rule_of_40: ruleOf40, ltv_cac: ltvCac, current_roi: currentROI, reason: ruleOf40 <= 40 ? 'rule_of_40 <= 40' : ltvCac <= 3 ? 'ltv_cac <= 3' : 'roi already >= 65' });
             }
         } else {
-            log({ severity: 'WARNING', message: '[S3-G] unitEconomics absent from finance_analyst output — ROI floor skipped', session_id: sessionId });
+            log({ severity: 'WARNING', message: '[ROI_FLOOR] unitEconomics absent from finance_analyst output — skipped', session_id: sessionId });
         }
 
         // ── PHASE D: Specialized Frameworks ──────────────────────────────────────
@@ -676,7 +676,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         // ── Synthesis prompt shared context (passed to both parallel calls) ──────
         const sharedContext = `BUSINESS CONTEXT:\n${businessContext}\n\nSPECIALIST DIGEST (scores + key signal per agent):\n${specialistDigest}\n\nMERGED DIMENSION SCORES:\n${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join(', ')}`;
 
-        // ── FIX 2.2: Narrative prompt — Strategic Choice FIRST so it is never truncated ──
+        // Narrative prompt — Strategic Choice FIRST so it is never truncated
         const narrativePrompt = `${sharedContext}
 
 YOUR TASK: Synthesize into a high-end Tier-1 Consulting strategic report in clean markdown.
@@ -708,7 +708,7 @@ ${Object.entries(finalDimensions).map(([k, v]) => `${k}: ${v}/100`).join('\n')}
 
 CRITICAL: Do NOT generate a 90-Day Roadmap here. Do NOT call sub-agents or tools.`.trim();
 
-        // ── FIX 2.1: Run synthesis FIRST, extract posture, THEN run roadmap ────────
+        // Run synthesis FIRST, extract posture, THEN run roadmap
         emitHeartbeat(sessionId, '◆ CSO: synthesizing executive report...');
         const synthesisStartTime = Date.now();
         const phaseE = startPhase('phase_e_synthesis', sessionId);
@@ -725,7 +725,7 @@ CRITICAL: Do NOT generate a 90-Day Roadmap here. Do NOT call sub-agents or tools
         }
         cost.track('cso_narrative', 'gemini-2.5-pro', Math.ceil(narrativePrompt.length / 4), Math.ceil(mainReport.length / 4));
 
-        // FIX 2.1: Extract recommended posture from Strategic Choice section
+        // Extract recommended posture from Strategic Choice section
         const postureMatch = mainReport.match(/Recommended strategic posture:\s*(.+)/i);
         const recommendedPosture = postureMatch ? postureMatch[1].trim() : '';
         const rejectedMoveMatch = mainReport.match(/Rejected move:\s*(.+)/i);
@@ -733,14 +733,14 @@ CRITICAL: Do NOT generate a 90-Day Roadmap here. Do NOT call sub-agents or tools
 
         log({
             severity: 'INFO',
-            message: '[FIX 2.1] Strategic posture extracted for roadmap alignment',
+            message: '[POSTURE_EXTRACT] Strategic posture extracted for roadmap alignment',
             session_id: sessionId,
             recommended_posture: recommendedPosture.slice(0, 200),
             rejected_move: rejectedMove.slice(0, 200),
             strategic_choice_present: mainReport.includes('## Strategic Choice'),
         });
 
-        // ── FIX 2.1: Roadmap runs AFTER synthesis, receives recommended posture ───
+        // Roadmap runs AFTER synthesis, receives recommended posture
         const roadmapPrompt = `${sharedContext}
 
 Strategic context for this roadmap:
@@ -808,7 +808,7 @@ Return only the roadmap markdown. No preamble, no summary, no other sections.`.t
             roadmap_chars: roadmap.length,
         });
 
-        // FIX 1.6: Post-synthesis coherence check
+        // Post-synthesis coherence check
         emitHeartbeat(sessionId, '\u25c6 Coherence: cross-checking synthesis, roadmap and frameworks for contradictions...');
         const coherencePhase = startPhase('phase_f_coherence', sessionId);
         let coherenceResult: { coherent: boolean; contradictions: any[]; score_mismatches: any[] } = { coherent: true, contradictions: [], score_mismatches: [] };
@@ -835,7 +835,7 @@ Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": 
                 score_mismatches: parsed.score_mismatches ?? [],
             };
         } catch (e) {
-            log({ severity: 'WARNING', message: '[FIX 1.6] Coherence check failed — skipping', session_id: sessionId, error: String(e) });
+            log({ severity: 'WARNING', message: '[COHERENCE] Check failed — skipping', session_id: sessionId, error: String(e) });
         }
 
         const criticalContradictions = coherenceResult.contradictions.filter((c: any) => c.severity === 'critical');
@@ -847,16 +847,16 @@ Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": 
         });
 
         if (criticalContradictions.length > 0) {
-            log({ severity: 'WARNING', message: '[FIX 1.6] Critical contradictions detected in synthesis', session_id: sessionId, contradictions: criticalContradictions });
+            log({ severity: 'WARNING', message: '[COHERENCE] Critical contradictions detected in synthesis', session_id: sessionId, contradictions: criticalContradictions });
             emitHeartbeat(sessionId, `\u26a0 Coherence: ${criticalContradictions.length} critical contradiction(s) detected — flagged in report`, 'warning');
         } else {
-            log({ severity: 'INFO', message: '[FIX 1.6] Coherence check passed', session_id: sessionId, coherent: coherenceResult.coherent });
+            log({ severity: 'INFO', message: '[COHERENCE] Check passed', session_id: sessionId, coherent: coherenceResult.coherent });
         }
 
         // 3. Extract Organisation Name
         const orgName = extractOrgName(businessContext);
 
-        // FIX 1.1: Collect specialist metadata array for downstream use (confidence, sources, gaps)
+        // Collect specialist metadata array for downstream use (confidence, sources, gaps)
         const specialistMetadata: SpecialistMeta[] = Object.entries(specialistOutputs)
             .filter(([name]) => !['blue_ocean', 'wardley', 'monte_carlo', 'innovation_frameworks'].includes(name))
             .map(([name, out]) => ({
@@ -868,14 +868,14 @@ Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": 
 
         log({
             severity: 'INFO',
-            message: '[FIX 1.1] Specialist metadata collected',
+            message: '[METADATA] Specialist metadata collected',
             session_id: sessionId,
             specialist_count: specialistMetadata.length,
             confidence_scores: specialistMetadata.map(m => ({ agent: m.agent, confidence: m.confidence_score })),
             total_missing_signals: specialistMetadata.flatMap(m => m.missing_signals).length,
         });
 
-        // FIX 3.2: Compute confidence triad
+        // Compute confidence triad
         const totalMissingSignals = specialistMetadata.flatMap(m => m.missing_signals).length;
         const validConfidences = specialistMetadata.map(m => m.confidence_score).filter((c): c is number => c !== null && c > 0);
         // Evidence confidence: penalise missing signals but floor scales with analytical confidence
@@ -893,7 +893,7 @@ Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": 
         const confidenceTriad = { evidenceConfidence, analyticalConfidence, decisionConfidence };
         log({
             severity: 'INFO',
-            message: '[FIX 3.2] Confidence triad computed',
+            message: '[CONFIDENCE] Triad computed',
             session_id: sessionId,
             evidence_confidence: evidenceConfidence,
             analytical_confidence: analyticalConfidence,
@@ -902,20 +902,20 @@ Return ONLY raw JSON: { "coherent": true/false, "contradictions": [{"sections": 
             has_critical_gap: hasCriticalGap,
         });
 
-        // FIX 1.4: Moat selection — use registry to exclude risk-absence dimensions
+        // Moat selection — use registry to exclude risk-absence dimensions
         const moatCandidates = getMoatEligibleDimensions(finalDimensions);
         const topDimension = moatCandidates.length > 0 ? moatCandidates[0] : ['N/A', 0] as [string, number];
         const topThreeMoats = moatCandidates.slice(0, 3);
 
         log({
             severity: 'INFO',
-            message: '[FIX 1.4] Moat-eligible candidates selected',
+            message: '[MOAT_SELECTION] Candidates selected',
             session_id: sessionId,
             top_moat: topDimension[0],
             top_three: topThreeMoats.map(([d, s]) => `${d}: ${s}`),
         });
 
-        // FIX 1.5: Verdict prompt — evaluate, don't justify; prohibit fabrication
+        // Verdict prompt — evaluate, don't justify; prohibit fabrication
         const moatPrompt = `Evaluate these moat candidates for ${orgName}:
 ${topThreeMoats.map(([dim, score]) => `- ${dim}: ${score}/100`).join('\n')}
 
@@ -928,7 +928,7 @@ Rules:
 3. Valid moat types: proprietary data corpus, regulatory certification, network effects, switching costs, patented technology, exclusive partnerships, platform lock-in.
 4. If the business is pre-revenue or pre-launch, acknowledge that moats are aspirational, not established.
 5. Do not claim 'sustained competitive advantage' unless evidence of 2+ year inimitability is present in the context.
-6. Reference specific evidence from the business context — name the actual asset (e.g. "EMIR pre-certification", "6-year calibration corpus", "CA workflow integration").
+6. Reference specific evidence from the business context — name the actual asset (e.g. "proprietary certification", "exclusive data corpus", "embedded workflow integration").
 
 Write 2-3 sentences identifying the strongest genuine structural moat, or stating that the business has not yet established a defensible moat.`;
 
@@ -1115,10 +1115,8 @@ Write 2-3 sentences identifying the strongest genuine structural moat, or statin
 
 }
 
-// ─── Generic attack vector extraction ───────────────────────────────────────
-// Reads threat signals from Wardley warnings and synthesis report.
-// Returns generic AttackVector objects — no hardcoded competitor or product names.
-// Works for any audit input, not just Halcyon.
+// Generic attack vector extraction — reads threat signals from Wardley warnings
+// and synthesis report. Works for any audit input.
 function extractAttackVectorsFromReport(
     report: string,
     frameworks: any
