@@ -117,14 +117,23 @@ export function runRunwaySimulation(
     const p50idx = Math.floor(iterations * 0.5);
     const p90idx = Math.floor(iterations * 0.9);
 
+    const p10 = runwayMonths[p10idx] ?? 0;
+    const p50 = runwayMonths[p50idx] ?? 0;
+    const p90 = runwayMonths[p90idx] ?? HORIZON;
+
+    // Degenerate result detection — log if all iterations hit zero immediately
+    if (p50 === 0) {
+        console.warn(`[SIM 3.1] Degenerate result: P50=0 months. Inputs may be invalid. current_cash=${input.current_cash} monthly_burn=${input.monthly_burn} current_arr_monthly=${input.current_arr_monthly}`);
+    }
+
     const trackP10 = Math.floor(TRACK_PATHS * 0.1);
     const trackP50 = Math.floor(TRACK_PATHS * 0.5);
     const trackP90 = Math.floor(TRACK_PATHS * 0.9);
 
     return {
-        p10_months:       runwayMonths[p10idx] ?? 0,
-        p50_months:       runwayMonths[p50idx] ?? 0,
-        p90_months:       runwayMonths[p90idx] ?? HORIZON,
+        p10_months:       p10,
+        p50_months:       p50,
+        p90_months:       p90,
         probability_18m:  runwayMonths.filter(r => r >= 18).length / iterations,
         probability_24m:  runwayMonths.filter(r => r >= 24).length / iterations,
         probability_36m:  runwayMonths.filter(r => r >= 36).length / iterations,

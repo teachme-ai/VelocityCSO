@@ -303,7 +303,10 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
 
     sseWrite(res, { type: 'SESSION_INIT', sessionId });
     emitHeartbeat(sessionId, 'Connection established. Initialization sequence started.');
-    tlog({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, user_id: userId, phase: 'discovery' });
+    tlog({ severity: 'INFO', message: 'Audit request received', session_id: sessionId, user_id: userId, phase: 'discovery',
+        sector: sector || null, org_scale: org_scale || null,
+        url_source: url_source || null, document_filename: document_filename || null,
+        stress_test: !!stress_test, context_length: business_context.length });
 
     try {
         // ── Phase 0: Interrogator (ID Scoring) ───────────────────────
@@ -550,7 +553,9 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
         unregisterConnection(sessionId);
     });
 
-    tlog({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId, user_id: userId });
+    tlog({ severity: 'INFO', message: 'Clarification received — re-grounding context', session_id: sessionId, user_id: userId,
+        turn: (session.turnCount || 0) + 1, answer_length: clarification.length,
+        question_answered: session.gaps?.[session.gaps.length - 1]?.slice(0, 100) || 'unknown' });
     emitHeartbeat(sessionId, 'Clarification received. Deepening strategic analysis...');
 
     try {

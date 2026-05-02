@@ -517,8 +517,12 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
             const currentROI = finalDimensions['ROI Projection'] ?? 0;
             if (ruleOf40 > 40 && ltvCac > 3 && currentROI < 65) {
                 finalDimensions['ROI Projection'] = 65;
-                log({ severity: 'INFO', message: '[S3-G] ROI Projection floored to 65 — Rule of 40 and LTV:CAC confirm strong unit economics', session_id: sessionId, rule_of_40: ruleOf40, ltv_cac: ltvCac, was: currentROI });
+                log({ severity: 'INFO', message: '[S3-G] ROI Projection floored to 65', session_id: sessionId, rule_of_40: ruleOf40, ltv_cac: ltvCac, was: currentROI });
+            } else {
+                log({ severity: 'INFO', message: '[S3-G] ROI floor not triggered', session_id: sessionId, rule_of_40: ruleOf40, ltv_cac: ltvCac, current_roi: currentROI, reason: ruleOf40 <= 40 ? 'rule_of_40 <= 40' : ltvCac <= 3 ? 'ltv_cac <= 3' : 'roi already >= 65' });
             }
+        } else {
+            log({ severity: 'WARNING', message: '[S3-G] unitEconomics absent from finance_analyst output — ROI floor skipped', session_id: sessionId });
         }
 
         // ── PHASE D: Specialized Frameworks ──────────────────────────────────────
@@ -579,6 +583,10 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
             } catch (e) {
                 log({ severity: 'WARNING', message: '[SIM 3.1] Runway simulation failed', error: String(e), session_id: sessionId });
             }
+        } else {
+            log({ severity: 'INFO', message: '[SIM 3.1] Runway simulation skipped', session_id: sessionId,
+                reason: !ri ? 'runwayInputs absent from finance_analyst output' : 'current_cash and monthly_burn both zero',
+                ri_present: !!ri, current_cash: ri?.current_cash ?? 0, monthly_burn: ri?.monthly_burn ?? 0 });
         }
 
         // NOTE: pdfService reads fw.porter / fw.ansoff / fw.vrio — keys must match exactly.
@@ -1054,6 +1062,8 @@ Write 2-3 sentences identifying the strongest genuine structural moat, or statin
             if (forks.length >= 2) {
                 forkProbabilities = computeForkProbabilities(forks, finalDimensions as Record<string, number>, sessionId);
                 log({ severity: 'INFO', message: '[SIM 3.2] Fork probabilities computed', session_id: sessionId, fork_count: forks.length, results: forkProbabilities.map(f => `${f.forkName}: ${f.adjustedProbability}%`) });
+            } else {
+                log({ severity: 'INFO', message: '[SIM 3.2] No forks detected in synthesis — skipping fork probability', session_id: sessionId, forks_found: forks.length, report_length: finalReport.length });
             }
         } catch (e) {
             log({ severity: 'WARNING', message: '[SIM 3.2] Fork probability failed', session_id: sessionId, error: String(e) });

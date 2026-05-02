@@ -102,6 +102,10 @@ export function computeMoatDecay(input: MoatDecayInput): MoatDecayResult {
         ? input.replicationMonthsEstimate
         : estimateReplicationTime(input.inimitabilityScore, input.competitiveRivalryScore);
 
+    // Log inputs so we can verify the model is receiving sensible values
+    const inputSource = input.replicationMonthsEstimate > 0 ? 'clarifier_stated' : 'estimated_from_scores';
+    // Use console for service-level logging (no logger import needed in pure math service)
+    console.log(`[SIM 3.3] computeMoatDecay | moat=${input.moatName} | inimitability=${input.inimitabilityScore} | rivalry=${input.competitiveRivalryScore} | replication_months=${replicationMonths} (${inputSource}) | attack_vectors=${input.attackVectors.length}`);
     const baselineCurve = computeDecayCurve(input.inimitabilityScore, replicationMonths, 36);
 
     // Accelerated scenario: top attack vector compresses the replication clock

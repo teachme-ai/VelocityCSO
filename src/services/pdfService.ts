@@ -996,6 +996,7 @@ function _buildPDF(
     // ── SIM 3.1: Runway Simulation ────────────────────────────────────────────────────
     const runway = (memory as any).runwayResult as any | null;
     if (runway && runway.p50_months > 0) {
+        log({ severity: 'INFO', message: 'PDF | SIM 3.1 runway section rendering', p10: runway.p10_months, p50: runway.p50_months, p90: runway.p90_months, estimated: runway.estimated });
         y = addPage(doc, orgName);
         y = sectionTitle(doc, 'Financial Runway Simulation (10,000 Iterations)', y);
 
@@ -1057,12 +1058,15 @@ function _buildPDF(
         y = doc.y + 8;
         drawFooter(doc, page++);
     } else if (!(memory as any).runwayResult) {
-        // Graceful absence — no error text shown
+        log({ severity: 'INFO', message: 'PDF | SIM 3.1 runway section skipped — no runwayResult in memory' });
+    } else {
+        log({ severity: 'INFO', message: 'PDF | SIM 3.1 runway section skipped — p50_months is 0 (degenerate inputs)' });
     }
 
     // ── SIM 3.2: Strategic Fork Probabilities ─────────────────────────────────
     const forkProbs = (memory as any).forkProbabilities as any[] | null;
     if (forkProbs && forkProbs.length >= 2) {
+        log({ severity: 'INFO', message: 'PDF | SIM 3.2 fork probability section rendering', fork_count: forkProbs.length, forks: forkProbs.map((f: any) => `${f.forkName}: ${f.adjustedProbability}%`) });
         y = addPage(doc, orgName);
         y = sectionTitle(doc, 'Strategic Fork Probability Analysis', y);
 
@@ -1113,11 +1117,14 @@ function _buildPDF(
             .text('Note: Probabilities reflect success likelihood given current dimension scores, not market timing or external conditions.', 40, y, { width: doc.page.width - 80 });
         y = doc.y + 8;
         drawFooter(doc, page++);
+    } else {
+        log({ severity: 'INFO', message: 'PDF | SIM 3.2 fork probability section skipped', reason: !forkProbs ? 'no forkProbabilities in memory' : 'fewer than 2 forks' });
     }
 
     // ── SIM 3.3: Moat Decay Curve ─────────────────────────────────────────────
     const moatDecay = (memory as any).moatDecayResult as any | null;
     if (moatDecay) {
+        log({ severity: 'INFO', message: 'PDF | SIM 3.3 moat decay section rendering', baseline_months: moatDecay.baseline_months_to_parity, accelerated_months: moatDecay.accelerated_months_to_parity, strength_at_24m: moatDecay.strength_at_24m, interventions: moatDecay.intervention_points?.length ?? 0 });
         y = addPage(doc, orgName);
         y = sectionTitle(doc, 'Moat Durability Projection (36-Month)', y);
 
