@@ -18,6 +18,123 @@ function percentile(arr: number[], p: number): number {
     return sorted[Math.floor((p / 100) * sorted.length)] ?? 0;
 }
 
+// ── SIM 3.1: Runway Simulation ────────────────────────────────────────────────
+
+export interface RunwayInput {
+    current_arr_monthly: number;                        // MRR at audit time
+    monthly_burn: number;                               // total monthly spend
+    current_cash: number;                               // cash on hand
+    growth_rate_dist: [number, number, number];         // monthly MRR growth (low/base/high)
+    churn_rate_dist:  [number, number, number];         // monthly churn rate (low/base/high)
+}
+
+export interface RunwayResult {
+    p10_months: number;
+    p50_months: number;
+    p90_months: number;
+    probability_18m: number;
+    probability_24m: number;
+    probability_36m: number;
+    zero_cash_distribution: number[];   // histogram: count per month bucket [0..36]
+    monthly_trajectories: {
+        p10: number[];
+        p50: number[];
+        p90: number[];
+    };
+    estimated: boolean;                 // true if inputs were derived, not stated
+}
+
+function buildHistogram(months: number[], buckets: number): number[] {
+    const hist = new Array(buckets + 1).fill(0);
+    for (const m of months) hist[Math.min(m, buckets)]++;
+    return hist;
+}
+
+function buildPercentilePaths(
+    allPaths: number[][],
+    p10idx: number,
+    p50idx: number,
+    p90idx: number
+): { p10: number[]; p50: number[]; p90: number[] } {
+    // Sort paths by final balance at month 36 to pick representative trajectories
+    const sorted = [...allPaths].sort((a, b) => (a[36] ?? 0) - (b[36] ?? 0));
+    return {
+        p10: sorted[p10idx] ?? new Array(37).fill(0),
+        p50: sorted[p50idx] ?? new Array(37).fill(0),
+        p90: sorted[p90idx] ?? new Array(37).fill(0),
+    };
+}
+
+export function runRunwaySimulation(
+    input: RunwayInput,
+    iterations = 10000
+): RunwayResult {
+    // Guard: if inputs are all zero, return a graceful empty result
+    if (input.current_cash <= 0 && input.monthly_burn <= 0) {
+        return {
+            p10_months: 0, p50_months: 0, p90_months: 0,
+            probability_18m: 0, probability_24m: 0, probability_36m: 0,
+            zero_cash_distribution: new Array(37).fill(0),
+            monthly_trajectories: { p10: new Array(37).fill(0), p50: new Array(37).fill(0), p90: new Array(37).fill(0) },
+            estimated: true,
+        };
+    }
+
+    const runwayMonths: number[] = [];
+    const samplePaths: number[][] = [];
+    const HORIZON = 36;
+
+    // Sample a subset of paths for trajectory rendering (memory-efficient)
+    const TRACK_PATHS = 200;
+
+    for (let i = 0; i < iterations; i++) {
+        const g = triangular(...input.growth_rate_dist);
+        const c = triangular(...input.churn_rate_dist);
+
+        let balance = input.current_cash;
+        let mrr = input.current_arr_monthly;
+        let month = 0;
+        const path: number[] = i < TRACK_PATHS ? [balance] : [];
+
+        while (balance > 0 && month < HORIZON) {
+            mrr = Math.max(0, mrr * (1 + g) * (1 - c));
+            balance = balance - input.monthly_burn + mrr;
+            month++;
+            if (i < TRACK_PATHS) path.push(balance);
+        }
+
+        // Pad path to full horizon
+        if (i < TRACK_PATHS) {
+            while (path.length <= HORIZON) path.push(Math.min(0, path[path.length - 1] ?? 0));
+            samplePaths.push(path);
+        }
+
+        runwayMonths.push(month);
+    }
+
+    runwayMonths.sort((a, b) => a - b);
+    const p10idx = Math.floor(iterations * 0.1);
+    const p50idx = Math.floor(iterations * 0.5);
+    const p90idx = Math.floor(iterations * 0.9);
+
+    const trackP10 = Math.floor(TRACK_PATHS * 0.1);
+    const trackP50 = Math.floor(TRACK_PATHS * 0.5);
+    const trackP90 = Math.floor(TRACK_PATHS * 0.9);
+
+    return {
+        p10_months:       runwayMonths[p10idx] ?? 0,
+        p50_months:       runwayMonths[p50idx] ?? 0,
+        p90_months:       runwayMonths[p90idx] ?? HORIZON,
+        probability_18m:  runwayMonths.filter(r => r >= 18).length / iterations,
+        probability_24m:  runwayMonths.filter(r => r >= 24).length / iterations,
+        probability_36m:  runwayMonths.filter(r => r >= 36).length / iterations,
+        zero_cash_distribution: buildHistogram(runwayMonths, HORIZON),
+        monthly_trajectories:   buildPercentilePaths(samplePaths, trackP10, trackP50, trackP90),
+        estimated: true,
+    };
+}
+
+
 export function runMonteCarlo(input: MonteCarloInput, iterations = 5000): {
     ltv_cac_distribution: MonteCarloResult;
     arr_12m_distribution: MonteCarloResult;

@@ -993,6 +993,73 @@ function _buildPDF(
         // Unit Economics — removed per product decision
     }
 
+    // ── SIM 3.1: Runway Simulation ────────────────────────────────────────────────────
+    const runway = (memory as any).runwayResult as any | null;
+    if (runway && runway.p50_months > 0) {
+        y = addPage(doc, orgName);
+        y = sectionTitle(doc, 'Financial Runway Simulation (10,000 Iterations)', y);
+
+        doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+            .text('Month-by-month cash balance simulation using triangular distributions for growth rate and churn. Inputs derived from financial context.', 40, y, { width: doc.page.width - 80 });
+        if (runway.estimated) {
+            doc.fontSize(7.5).fillColor(ORANGE).font('Helvetica-Oblique')
+                .text('Note: Financial inputs were estimated from context — not explicitly stated. Treat as directional, not precise.', 40, doc.y + 2, { width: doc.page.width - 80 });
+        }
+        y = doc.y + 14;
+
+        // P10/P50/P90 table
+        const runwayCols = [
+            { label: 'P10 Pessimistic', val: `${runway.p10_months}m`, color: RED },
+            { label: 'P50 Base Case',   val: `${runway.p50_months}m`, color: BLUE },
+            { label: 'P90 Optimistic',  val: `${runway.p90_months >= 36 ? '36m+' : runway.p90_months + 'm'}`, color: GREEN },
+            { label: 'P(24m runway)',   val: `${Math.round((runway.probability_24m ?? 0) * 100)}%`, color: runway.probability_24m >= 0.7 ? GREEN : runway.probability_24m >= 0.4 ? ORANGE : RED },
+        ];
+        const rcW = (doc.page.width - 80) / runwayCols.length;
+        for (let ci = 0; ci < runwayCols.length; ci++) {
+            const cx = 40 + ci * rcW;
+            doc.rect(cx, y, rcW - 4, 44).fill('#F8FAFC');
+            doc.fontSize(7).fillColor(GRAY).font('Helvetica').text(runwayCols[ci].label, cx + 6, y + 6, { width: rcW - 12 });
+            doc.fontSize(16).fillColor(runwayCols[ci].color).font('Helvetica-Bold').text(runwayCols[ci].val, cx + 6, y + 16, { width: rcW - 12 });
+        }
+        y += 56;
+
+        // Milestone probabilities
+        if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+        const milestones = [
+            { label: 'P(18-month runway)', val: runway.probability_18m },
+            { label: 'P(24-month runway)', val: runway.probability_24m },
+            { label: 'P(36-month runway)', val: runway.probability_36m },
+        ];
+        doc.fontSize(8).fillColor(ACCENT).font('Helvetica-Bold').text('Milestone Probabilities', 40, y); y += 12;
+        for (const m of milestones) {
+            const pct = Math.round((m.val ?? 0) * 100);
+            const barW = doc.page.width - 200;
+            const filled = Math.round((pct / 100) * barW);
+            const col = pct >= 70 ? GREEN : pct >= 40 ? ORANGE : RED;
+            doc.fontSize(8).fillColor(NAVY).font('Helvetica').text(m.label, 40, y, { width: 150 });
+            doc.rect(200, y + 2, barW, 8).fill('#E5E7EB');
+            doc.rect(200, y + 2, filled, 8).fill(col);
+            doc.fontSize(8).fillColor(col).font('Helvetica-Bold').text(`${pct}%`, 200 + barW + 6, y);
+            y += 18;
+        }
+
+        // Interpretation
+        y += 6;
+        if (y > pageBottom - 40) { drawFooter(doc, page++); y = addPage(doc, orgName); }
+        const p50 = runway.p50_months;
+        const interpretation = p50 >= 24
+            ? `Base case runway of ${p50} months provides adequate strategic flexibility. The P10 scenario of ${runway.p10_months} months warrants monitoring but does not represent an immediate liquidity risk.`
+            : p50 >= 12
+            ? `Base case runway of ${p50} months is tight. The P10 scenario of ${runway.p10_months} months represents a near-term liquidity risk. Burn reduction or fundraising should be initiated within 90 days.`
+            : `Base case runway of ${p50} months is critically short. Immediate action required: reduce burn, accelerate revenue, or initiate emergency fundraising.`;
+        doc.fontSize(8).fillColor('#374151').font('Helvetica')
+            .text(interpretation, 40, y, { width: doc.page.width - 80, lineGap: 1.5 });
+        y = doc.y + 8;
+        drawFooter(doc, page++);
+    } else if (!(memory as any).runwayResult) {
+        // Graceful absence — no error text shown
+    }
+
     // ── SIM 3.2: Strategic Fork Probabilities ─────────────────────────────────
     const forkProbs = (memory as any).forkProbabilities as any[] | null;
     if (forkProbs && forkProbs.length >= 2) {

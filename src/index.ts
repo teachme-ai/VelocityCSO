@@ -432,7 +432,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
             ? enrichedContext + '\n\nCRITICAL DIRECTIVE: STRESS TEST mode enabled. Lower ROI projections by 30%, assume 10% market dip, score all dimensions conservatively.'
             : enrichedContext;
 
-        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, confidenceTriad, frameworks, orgName, moatRationale, forkProbabilities, moatDecayResult } = await cso.analyze(finalContext, sessionId);
+        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, confidenceTriad, frameworks, orgName, moatRationale, forkProbabilities, moatDecayResult, runwayResult } = await cso.analyze(finalContext, sessionId);
         if (discoveryResult.pestle) {
             frameworks.pestle = discoveryResult.pestle;
             tlog({ severity: 'INFO', message: 'PESTLE injected into frameworks', session_id: sessionId, pestle_dims: Object.keys(discoveryResult.pestle) });
@@ -466,6 +466,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
                 moat_rationale: moatRationale,
                 fork_probabilities: forkProbabilities || null,
                 moat_decay_result: moatDecayResult || null,
+                runway_result: runwayResult || null,
                 user_id: userId,
                 org_id: orgId,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -495,6 +496,7 @@ app.post('/analyze', authMiddleware as any, async (req: AuthRequest, res) => {
                 confidenceTriad,
                 forkProbabilities: forkProbabilities || null,
                 moatDecayResult: moatDecayResult || null,
+                runwayResult: runwayResult || null,
             });
         } catch (dbErr: any) {
             tlog({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });
@@ -619,7 +621,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
             }
         }, 10000);
 
-        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, confidenceTriad, frameworks, orgName, moatRationale, forkProbabilities, moatDecayResult } = await analysisPromise;
+        const { report, roadmap, dimensions, richDimensions, specialistOutputs, specialistMetadata, confidenceTriad, frameworks, orgName, moatRationale, forkProbabilities, moatDecayResult, runwayResult } = await analysisPromise;
         clearTimeout(safetyReceipt);
         const csoCost = estimateCost('gemini-1.5-pro-001', finalContext.length, report.length);
         tlog({ severity: 'INFO', message: 'Analysis complete (clarify)', session_id: sessionId, dimension_count: Object.keys(dimensions).length });
@@ -651,6 +653,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
                 moat_rationale: moatRationale,
                 fork_probabilities: forkProbabilities || null,
                 moat_decay_result: moatDecayResult || null,
+                runway_result: runwayResult || null,
                 user_id: userId,
                 created_at: admin.firestore.FieldValue.serverTimestamp(),
                 expires_at: expiresAt,
@@ -675,6 +678,7 @@ app.post('/analyze/clarify', authMiddleware as any, async (req: AuthRequest, res
                 confidenceTriad,
                 forkProbabilities: forkProbabilities || null,
                 moatDecayResult: moatDecayResult || null,
+                runwayResult: runwayResult || null,
             });
         } catch (dbErr: any) {
             tlog({ severity: 'WARNING', message: 'Firestore write skipped', error: dbErr.message, session_id: sessionId });

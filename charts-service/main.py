@@ -42,6 +42,8 @@ def _load_renderers():
         ('monte_carlo',    'charts.monte_carlo',     'render'),
         ('pestle',         'charts.pestle',          'render'),
         ('unit_economics', 'charts.unit_economics',  'render'),
+        ('runway',         'charts.runway',           'render'),
+        ('moat_decay',     'charts.moat_decay',       'render'),
     ]
     for name, module_path, fn_name in modules:
         try:

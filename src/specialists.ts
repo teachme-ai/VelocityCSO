@@ -348,6 +348,18 @@ export const financeAnalyst = new LlmAgent({
       "gross_margin_low": 0.0,
       "gross_margin_base": 0.0,
       "gross_margin_high": 0.0
+    },
+    "runwayInputs": {
+      "current_arr_monthly": 0.0,
+      "monthly_burn": 0.0,
+      "current_cash": 0.0,
+      "growth_rate_monthly_low": 0.0,
+      "growth_rate_monthly_base": 0.0,
+      "growth_rate_monthly_high": 0.0,
+      "churn_rate_monthly_low": 0.0,
+      "churn_rate_monthly_base": 0.0,
+      "churn_rate_monthly_high": 0.0,
+      "estimated": true
     }
     
     ${jsonInstruction}
@@ -550,6 +562,7 @@ OUTPUT SCHEMA (fill every field with real values — do not output placeholder t
   - assumptions: array of strings
   - metrics: object with keys ltv_cac, cac_payback_months, gross_margin_pct, rule_of_40, burn_multiple, magic_number — each having value (string or null), benchmark (string), status (GREEN|AMBER|RED or empty string), note (string)
 - monteCarloInputs: object with numeric keys arpu_low, arpu_base, arpu_high, churn_low, churn_base, churn_high, cac_low, cac_base, cac_high, growth_rate_low, growth_rate_base, growth_rate_high, gross_margin_low, gross_margin_base, gross_margin_high (use 0 for any you cannot estimate)
+- runwayInputs: object with numeric keys current_arr_monthly (ARR/12 or MRR if stated), monthly_burn (total monthly operating spend — derive from EBITDA margin if not stated), current_cash (cash on hand — use runway months * monthly_burn if stated), growth_rate_monthly_low, growth_rate_monthly_base, growth_rate_monthly_high (monthly MRR growth rate as decimal e.g. 0.03), churn_rate_monthly_low, churn_rate_monthly_base, churn_rate_monthly_high (monthly churn as decimal e.g. 0.01). Mark estimated:true if derived. Use 0 for any you cannot estimate.
 
 CRITICAL: Your response MUST begin with { and end with }. No markdown fences, no explanation, no preamble — raw JSON only.
 `;

@@ -4,7 +4,7 @@ import { specialistInstructions } from './specialists.js';
 import { specialists } from './specialists.js';
 import { blueOceanAgent } from './agents/blueOceanAgent.js';
 import { wardleyAgent } from './agents/wardleyAgent.js';
-import { runMonteCarlo } from './services/monteCarloService.js';
+import { runMonteCarlo, runRunwaySimulation } from './services/monteCarloService.js';
 import { DiscoveryResult } from './agents/discovery.js';
 import { log, estimateCost, createCostTracker, startPhase, guardContext } from './services/logger.js';
 import { SCENARIOS, ScenarioId, MitigationCard } from './scenarios.js';
@@ -417,7 +417,7 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
         return result;
     }
 
-    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; specialistMetadata: SpecialistMeta[]; confidenceTriad: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number }; frameworks: any; orgName: string; moatRationale: string; forkProbabilities: any; moatDecayResult: any }> {
+    async analyze(businessContext: string, sessionId: string): Promise<{ report: string; roadmap: string; dimensions: Record<string, number | null>; richDimensions: Record<string, any>; specialistOutputs: Record<string, any>; specialistMetadata: SpecialistMeta[]; confidenceTriad: { evidenceConfidence: number; analyticalConfidence: number; decisionConfidence: number }; frameworks: any; orgName: string; moatRationale: string; forkProbabilities: any; moatDecayResult: any; runwayResult: any }> {
         log({
             severity: 'INFO',
             message: 'CSO analysis started (Parallel Specialist Mode)',
@@ -542,6 +542,42 @@ ${Object.entries(specialistOutputs).map(([name, out]) => `${name}: ${JSON.string
                 specialistOutputs['monte_carlo'] = monteCarloResult;
             } catch (e) {
                 log({ severity: 'WARNING', message: 'Monte Carlo failed', error: String(e), session_id: sessionId });
+            }
+        }
+
+        // ── SIM 3.1: Runway Simulation ────────────────────────────────────────────────
+        let runwayResult = null;
+        const ri = financeResult?.runwayInputs;
+        if (ri && (ri.current_cash > 0 || ri.monthly_burn > 0)) {
+            emitHeartbeat(sessionId, '◆ Quant: Running 10,000 iteration runway simulation...');
+            try {
+                runwayResult = runRunwaySimulation({
+                    current_arr_monthly:  ri.current_arr_monthly  || 0,
+                    monthly_burn:         ri.monthly_burn         || 0,
+                    current_cash:         ri.current_cash         || 0,
+                    growth_rate_dist: [
+                        ri.growth_rate_monthly_low  || 0.01,
+                        ri.growth_rate_monthly_base || 0.03,
+                        ri.growth_rate_monthly_high || 0.06,
+                    ],
+                    churn_rate_dist: [
+                        ri.churn_rate_monthly_low  || 0.005,
+                        ri.churn_rate_monthly_base || 0.01,
+                        ri.churn_rate_monthly_high || 0.02,
+                    ],
+                }, 10000);
+                log({
+                    severity: 'INFO',
+                    message: '[SIM 3.1] Runway simulation complete',
+                    session_id: sessionId,
+                    p10_months: runwayResult.p10_months,
+                    p50_months: runwayResult.p50_months,
+                    p90_months: runwayResult.p90_months,
+                    probability_24m: runwayResult.probability_24m,
+                    estimated: runwayResult.estimated,
+                });
+            } catch (e) {
+                log({ severity: 'WARNING', message: '[SIM 3.1] Runway simulation failed', error: String(e), session_id: sessionId });
             }
         }
 
@@ -1067,6 +1103,7 @@ Write 2-3 sentences identifying the strongest genuine structural moat, or statin
             moatRationale,
             forkProbabilities,
             moatDecayResult,
+            runwayResult,
         };
     }
 
